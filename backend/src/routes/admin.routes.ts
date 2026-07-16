@@ -2,10 +2,19 @@ import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../utils/prisma'
-import { requireAuth } from '../middleware/auth'
+import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
+import { audit } from '../utils/audit'
 import type { Response, NextFunction } from 'express'
+
+/**
+ * Роли (ТЗ §2) — один список на оба маршрута.
+ *
+ * Раньше перечень дублировался в двух zod-схемах, и при добавлении TECHNOLOG
+ * в enum БД они разошлись: назначить новую роль было невозможно.
+ */
+const ROLES = ['ADMIN', 'MANAGER', 'ENGINEER', 'TECHNOLOG', 'BUYER', 'VIEWER'] as const
 
 export const adminRouter = Router()
 adminRouter.use('/', requireAuth)
@@ -25,7 +34,7 @@ adminRouter.get('/users', async (_req, res: Response, next: NextFunction) => {
 const createUserSchema = z.object({
   email:    z.string().email(),
   name:     z.string().min(1),
-  role:     z.enum(['ADMIN', 'MANAGER', 'ENGINEER', 'BUYER', 'VIEWER']),
+  role:     z.enum(ROLES),
   password: z.string().min(6),
 })
 
@@ -38,13 +47,17 @@ adminRouter.post('/users', validate(createUserSchema), async (req, res: Response
       data: { email, name, role, passwordHash },
       select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
     })
+    await audit((req as AuthRequest).userId, 'user.create', 'User', user.id, {
+      email: user.email,
+      role: user.role,
+    })
     res.status(201).json(user)
   } catch (e) { next(e) }
 })
 
 const patchUserSchema = z.object({
   name:     z.string().min(1).optional(),
-  role:     z.enum(['ADMIN', 'MANAGER', 'ENGINEER', 'BUYER', 'VIEWER']).optional(),
+  role:     z.enum(ROLES).optional(),
   isActive: z.boolean().optional(),
 })
 

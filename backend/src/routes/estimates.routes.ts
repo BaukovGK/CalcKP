@@ -4,10 +4,28 @@ import { prisma } from '../utils/prisma'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
+import { audit } from '../utils/audit'
+import { rowsWithoutPrice } from '../utils/estimate-tree'
 import type { Response, NextFunction } from 'express'
 
 export const estimatesRouter = Router()
 estimatesRouter.use('/', requireAuth)
+
+/**
+ * Доступ к расчёту (ТЗ §2).
+ *
+ * ADMIN — все расчёты; MANAGER — расчёты команды (проверяет и утверждает);
+ * остальные — только свои.
+ *
+ * Раньше здесь стояло `role !== 'ADMIN' && authorId !== userId`, то есть
+ * MANAGER не имел доступа к чужим расчётам. Это делало НЕВОЗМОЖНЫМИ переходы
+ * CALC→REVIEW и REVIEW→APPROVED, которые по §4.3 выполняет именно MANAGER:
+ * расчёт инженера он открыть не мог. Сценарий приёмки №2 был неисполним.
+ */
+function canAccessEstimate(role: string | undefined, authorId: string, userId: string | undefined): boolean {
+  if (role === 'ADMIN' || role === 'MANAGER') return true
+  return authorId === userId
+}
 
 const createSchema = z.object({
   title:      z.string().min(1),
@@ -19,7 +37,10 @@ const createSchema = z.object({
 estimatesRouter.get('/', async (req, res: Response, next: NextFunction) => {
   try {
     const auth  = req as AuthRequest
-    const where = auth.userRole === 'ADMIN' ? {} : { authorId: auth.userId }
+    // MANAGER проверяет и утверждает чужие расчёты (§2, §4.3) — значит должен
+    // их видеть. Раньше список был ограничен своими для всех, кроме ADMIN.
+    const seesAll = auth.userRole === 'ADMIN' || auth.userRole === 'MANAGER'
+    const where = seesAll ? {} : { authorId: auth.userId }
     const estimates = await prisma.estimate.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
@@ -36,9 +57,14 @@ estimatesRouter.get('/', async (req, res: Response, next: NextFunction) => {
 // POST /api/estimates
 estimatesRouter.post('/', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), validate(createSchema), async (req, res: Response, next: NextFunction) => {
   try {
+    const auth = req as AuthRequest
     const estimate = await prisma.estimate.create({
-      data:    { ...req.body, authorId: (req as AuthRequest).userId! },
+      data:    { ...req.body, authorId: auth.userId! },
       include: { author: { select: { name: true } } },
+    })
+    await audit(auth.userId, 'estimate.create', 'Estimate', estimate.id, {
+      title: estimate.title,
+      deviceType: estimate.deviceType,
     })
     res.status(201).json(estimate)
   } catch (e) { next(e) }
@@ -54,7 +80,7 @@ estimatesRouter.get('/:id', async (req, res: Response, next: NextFunction) => {
       include: { snapshots: { orderBy: { version: 'desc' }, take: 1 } },
     })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
-    if (auth.userRole !== 'ADMIN' && estimate.authorId !== auth.userId) {
+    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
     res.json(estimate)
@@ -74,7 +100,7 @@ estimatesRouter.patch('/:id/status', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
 
     const estimate = await prisma.estimate.findUnique({ where: { id } })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
-    if (auth.userRole !== 'ADMIN' && estimate.authorId !== auth.userId) {
+    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
 
@@ -94,10 +120,79 @@ estimatesRouter.patch('/:id/status', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
       res.status(422).json({ message: `Переход ${from}→${to} недопустим для роли ${role}` }); return
     }
 
-    const updated = await prisma.estimate.update({ where: { id }, data: { status: to as 'DRAFT' | 'CALC' | 'REVIEW' | 'APPROVED' | 'REJECTED' } })
-    res.json(updated)
+    // Красные строки (нет цены) блокируют переход CALC → REVIEW (Механика §10).
+    // Проверка обязана быть на бэке: гейт на фронте — это подсказка, а не контроль.
+    if (from === 'CALC' && to === 'REVIEW') {
+      const unpriced = rowsWithoutPrice(estimate.surveyData)
+      if (unpriced.length > 0) {
+        res.status(422).json({
+          message: `Нельзя отправить на проверку: ${unpriced.length} ${plural(unpriced.length)} без цены`,
+          code: 'ROWS_WITHOUT_PRICE',
+          rows: unpriced.slice(0, 20).map((r) => ({ id: r.id, name: r.name, unit: r.unit })),
+          count: unpriced.length,
+        })
+        return
+      }
+    }
+
+    const updated = await prisma.estimate.update({
+      where: { id },
+      data: { status: to as 'DRAFT' | 'CALC' | 'REVIEW' | 'APPROVED' | 'REJECTED' },
+    })
+
+    // APPROVED замораживает расчёт: снапшот создаётся автоматически
+    // (ТЗ §3, Механика §10).
+    let snapshotVersion: number | undefined
+    if (to === 'APPROVED') {
+      snapshotVersion = (await createSnapshot(id, updated.surveyData, updated.totalRub ?? 0)).version
+    }
+
+    await audit(auth.userId, 'estimate.status_change', 'Estimate', id, {
+      from,
+      to,
+      ...(snapshotVersion != null ? { snapshotVersion } : {}),
+    })
+
+    res.json({ ...updated, ...(snapshotVersion != null ? { snapshotVersion } : {}) })
   } catch (e) { next(e) }
 })
+
+function plural(n: number): string {
+  const d = n % 10
+  const dd = n % 100
+  if (dd >= 11 && dd <= 14) return 'строк'
+  if (d === 1) return 'строка'
+  if (d >= 2 && d <= 4) return 'строки'
+  return 'строк'
+}
+
+/**
+ * Создаёт снапшот расчёта. Версия = MAX(version) + 1 для данного расчёта
+ * (ТЗ §7).
+ *
+ * Версию берём внутри транзакции: параллельные запросы иначе получили бы
+ * одинаковый MAX и упали на @@unique([estimateId, version]).
+ */
+async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub: number) {
+  return prisma.$transaction(async (tx) => {
+    const last = await tx.estimateSnapshot.findFirst({
+      where: { estimateId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    const priceList = await tx.priceListVersion.findFirst({ orderBy: { version: 'desc' } })
+
+    return tx.estimateSnapshot.create({
+      data: {
+        estimateId,
+        version: (last?.version ?? 0) + 1,
+        priceListVersion: priceList?.version ?? 1,
+        totalRub,
+        bundlesJson: bundlesJson as never,
+      },
+    })
+  })
+}
 
 // DELETE /api/estimates/:id
 estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) => {
@@ -107,6 +202,8 @@ estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) =>
 
     const estimate = await prisma.estimate.findUnique({ where: { id } })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+    // Удаление строже чтения: по ТЗ §4.2 — только автор или ADMIN.
+    // MANAGER видит и проверяет чужие расчёты, но удалять их не может.
     if (auth.userRole !== 'ADMIN' && estimate.authorId !== auth.userId) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
@@ -119,9 +216,62 @@ estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) =>
   } catch (e) { next(e) }
 })
 
-// TODO: POST /api/estimates/:id/snapshot — сохранить версию расчёта.
-//       Данные: { bundlesJson, totalRub, priceListVersion }.
-//       Версию брать как MAX(version)+1 для данного estimateId.
+// POST /api/estimates/:id/snapshot — ручное версионирование (ТЗ §7).
+const snapshotSchema = z.object({
+  bundlesJson: z.unknown().optional(),
+  totalRub: z.number().optional(),
+})
+
+estimatesRouter.post(
+  '/:id/snapshot',
+  requireRole('ADMIN', 'MANAGER', 'ENGINEER'),
+  validate(snapshotSchema),
+  async (req, res: Response, next: NextFunction) => {
+    try {
+      const auth = req as AuthRequest
+      const id = String(req.params.id)
+
+      const estimate = await prisma.estimate.findUnique({ where: { id } })
+      if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+      if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+        res.status(403).json({ message: 'Нет доступа' }); return
+      }
+
+      // Тело необязательно: по умолчанию снимаем текущее состояние расчёта.
+      const snapshot = await createSnapshot(
+        id,
+        req.body.bundlesJson ?? estimate.surveyData,
+        req.body.totalRub ?? estimate.totalRub ?? 0,
+      )
+
+      await audit(auth.userId, 'estimate.snapshot', 'Estimate', id, { version: snapshot.version })
+      res.status(201).json(snapshot)
+    } catch (e) { next(e) }
+  },
+)
+
+// GET /api/estimates/:id/snapshots — история версий (ТЗ §7).
+estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const id = String(req.params.id)
+
+    const estimate = await prisma.estimate.findUnique({ where: { id }, select: { authorId: true } })
+    if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+      res.status(403).json({ message: 'Нет доступа' }); return
+    }
+
+    const snapshots = await prisma.estimateSnapshot.findMany({
+      where: { estimateId: id },
+      orderBy: { version: 'desc' },
+      // bundlesJson не отдаём в списке: снимок дерева на 300–450 строк
+      // раздул бы ответ. Полное содержимое — отдельным запросом при need.
+      select: { id: true, version: true, priceListVersion: true, totalRub: true, createdAt: true },
+    })
+    res.json(snapshots)
+  } catch (e) { next(e) }
+})
 
 // PATCH /api/estimates/:id/survey
 estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), async (req, res: Response, next: NextFunction) => {
@@ -130,13 +280,35 @@ estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
     const id   = String(req.params.id)
     const estimate = await prisma.estimate.findUnique({ where: { id } })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
-    if (auth.userRole !== 'ADMIN' && estimate.authorId !== auth.userId) {
+    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
+    // APPROVED замораживает расчёт: редактирование блокируется, «Новая версия»
+    // возвращает в CALC отдельным переходом (Механика §10, README хендоффа).
+    // Раньше здесь безусловно писался status:'CALC' — это давало обход таблицы
+    // переходов §4.3 и правку утверждённого расчёта в обход снапшота.
+    if (estimate.status === 'APPROVED') {
+      res.status(422).json({
+        message: 'Расчёт утверждён и заморожен. Верните его в расчёт («Новая версия»), чтобы редактировать',
+        code: 'ESTIMATE_FROZEN',
+      })
+      return
+    }
+    if (estimate.status === 'REJECTED') {
+      res.status(422).json({ message: 'Отклонённый расчёт редактировать нельзя', code: 'ESTIMATE_REJECTED' })
+      return
+    }
+
     const merged = { ...(estimate.surveyData as object ?? {}), ...req.body }
     const updated = await prisma.estimate.update({
       where: { id },
-      data:  { surveyData: merged, status: 'CALC' },
+      data: {
+        surveyData: merged,
+        // DRAFT → CALC при первом сохранении — легальный переход (§4.3);
+        // из REVIEW статус не трогаем, иначе правка молча откатывала бы
+        // расчёт с проверки.
+        ...(estimate.status === 'DRAFT' ? { status: 'CALC' as const } : {}),
+      },
     })
     res.json(updated)
   } catch (e) { next(e) }
