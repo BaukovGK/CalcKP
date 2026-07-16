@@ -319,6 +319,51 @@ estimatesRouter.post(
   },
 )
 
+/**
+ * GET /api/estimates/:id/kp/export?format=docx|pdf — печатная форма КП.
+ *
+ * ⚠️ ЗАГЛУШКА. Состав формы не специфицирован: образец КП заказчик предоставит
+ * позже (решение 2026-07-16). Ни ТЗ, ни хендофф его не описывают — ТЗ §7
+ * говорит про «экспорт в PDF/Excel» и описывает СМЕТУ, а не коммерческое
+ * предложение; README хендоффа относит КП к непроработанным экранам.
+ *
+ * Гадать нельзя: документ уходит заказчику, и по нему идёт согласование
+ * (ТЗ §4.3 v1.5).
+ *
+ * Реализовано и работает уже сейчас — то, что специфицировано однозначно:
+ * `POST /api/estimates/:id/kp` (гейт по красным строкам + снапшот).
+ *
+ * Осталось при получении образца:
+ *  - вёрстка документа по образцу;
+ *  - генерация docx (напр. пакет `docx`) и PDF — форматы согласованы;
+ *  - шрифты с кириллицей для PDF.
+ */
+estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const id = String(req.params.id)
+    const format = String(req.query.format ?? 'docx')
+
+    const estimate = await prisma.estimate.findUnique({ where: { id }, select: { authorId: true } })
+    if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+      res.status(403).json({ message: 'Нет доступа' }); return
+    }
+    if (!['docx', 'pdf'].includes(format)) {
+      res.status(400).json({ message: 'format должен быть docx или pdf' })
+      return
+    }
+
+    res.status(501).json({
+      message: 'Печатная форма КП не реализована: ожидается образец от заказчика',
+      code: 'KP_TEMPLATE_PENDING',
+      format,
+      note: 'Механика выпуска КП работает: POST /api/estimates/:id/kp — гейт по строкам без цены и снапшот. Не хватает только вёрстки документа.',
+      formats: ['docx', 'pdf'],
+    })
+  } catch (e) { next(e) }
+})
+
 // GET /api/estimates/:id/snapshots — история версий (ТЗ §7).
 estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunction) => {
   try {
