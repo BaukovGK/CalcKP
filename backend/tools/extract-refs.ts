@@ -131,10 +131,12 @@ export interface PipeWeightSeed {
   kgPerM: number
 }
 
+/// Ключ ПЭ-трубы — наружный диаметр `odMm`, а не `dn`: колонка «DN» листа
+/// не уникальна (DN 125 указан и для ⌀125, и для ⌀140) и нерегулярна.
 export interface PePipeSeed {
   dn: number
   name: string
-  odMm: number | null
+  odMm: number
   wallMm: string | null
   kgPerM: number
 }
@@ -157,11 +159,12 @@ function extractPipeWeights(ws: ExcelJS.Worksheet): { grp: PipeWeightSeed[]; pe:
     const peDn = num(row.getCell(19))
     const peName = str(row.getCell(20))
     const peKg = num(row.getCell(23))
-    if (peDn != null && peName && peKg != null) {
+    const peOd = num(row.getCell(21))
+    if (peDn != null && peName && peKg != null && peOd != null) {
       pe.push({
         dn: peDn,
         name: peName,
-        odMm: num(row.getCell(21)),
+        odMm: peOd,
         wallMm: str(row.getCell(22)) || null,
         kgPerM: peKg,
       })
@@ -225,7 +228,15 @@ async function main() {
 
   if (prices.length < 900) errors.push(`прайс: ожидалось ~1044 позиции, получено ${prices.length}`)
   if (grp.length !== 162) errors.push(`GRP-трубы: ожидалось 162 строки (Реверс §9.2), получено ${grp.length}`)
+  if (pe.length !== 26) errors.push(`ПЭ-трубы: ожидалось 26 позиций (Реверс §9.2), получено ${pe.length}`)
   if (lists.categories.length !== 16) errors.push(`категории: ожидалось 16, получено ${lists.categories.length}`)
+
+  // Ключи, на которых стоят @unique в схеме, обязаны быть уникальными и здесь —
+  // иначе createMany({skipDuplicates}) молча потеряет строки при сиде.
+  const uniq = (arr: unknown[]) => new Set(arr).size
+  if (uniq(pe.map((p) => p.odMm)) !== pe.length) errors.push('ПЭ-трубы: наружный диаметр odMm не уникален')
+  if (uniq(pe.map((p) => p.name)) !== pe.length) errors.push('ПЭ-трубы: наименование не уникально')
+  if (uniq(grp.map((g) => `${g.dn};${g.pn};${g.sn}`)) !== grp.length) errors.push('GRP-трубы: ключ (DN;PN;SN) не уникален')
 
   // Ставка ФОТ обязана находиться по тройному ключу — на ней стоит вся экономика.
   const fot = prices.find((p) => p.category === 'ФОТ' && p.name === 'ФОТ' && p.unit === 'чел. ч')

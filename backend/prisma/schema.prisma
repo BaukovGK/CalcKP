@@ -12,14 +12,15 @@ enum Role {
   ADMIN
   MANAGER
   ENGINEER
+  TECHNOLOG // Редактор каталога компонентов и шаблонов (ТЗ §2, Библиотека §6.2)
   BUYER
   VIEWER
 }
 
 enum DeviceType {
-  KNS  // Канализационная насосная станция
-  EMK  // Ёмкость
-  KOL  // Колодец
+  KNS // Канализационная насосная станция
+  EMK // Ёмкость
+  KOL // Колодец
 }
 
 enum Status {
@@ -33,27 +34,29 @@ enum Status {
 // ── Users ──────────────────────────────────────────────────────────────────
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
+  id           String   @id @default(uuid())
+  email        String   @unique
   name         String
-  role         Role       @default(VIEWER)
+  role         Role     @default(VIEWER)
   passwordHash String
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  projects     Project[]
-  estimates    Estimate[]
-  auditLogs    AuditLog[]
+  projects      Project[]
+  estimates     Estimate[]
+  auditLogs     AuditLog[]
+  priceChanges  PriceHistory[]
+  priceVersions PriceListVersion[]
 }
 
 // ── Projects ───────────────────────────────────────────────────────────────
 
 model Project {
   id        String     @id @default(uuid())
-  title     String                        // Название объекта
-  address   String?                       // Адрес объекта
-  customer  String?                       // Заказчик
+  title     String // Название объекта
+  address   String? // Адрес объекта
+  customer  String? // Заказчик
   notes     String?
   authorId  String
   author    User       @relation(fields: [authorId], references: [id])
@@ -65,52 +68,82 @@ model Project {
 // ── Estimates ──────────────────────────────────────────────────────────────
 
 model Estimate {
-  id          String      @id @default(uuid())
-  title       String                        // Обозначение единицы, напр. «КНС DN3000»
-  deviceType  DeviceType
-  status      Status      @default(DRAFT)
-  surveyData  Json        // технические параметры + bundles
-  totalRub    Float?
-  projectId   String?
-  project     Project?    @relation(fields: [projectId], references: [id])
-  authorId    String
-  author      User        @relation(fields: [authorId], references: [id])
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id         String     @id @default(uuid())
+  title      String // Обозначение единицы, напр. «КНС DN3000»
+  deviceType DeviceType
+  status     Status     @default(DRAFT)
+  /// Параметры опросного листа + материализованное дерево расчёта
+  /// (сборки -> компоненты -> строки с зафиксированными значениями и
+  /// overrides). ТЗ §3, §9; Библиотека §4, §6.3 — дерево хранится
+  /// JSON-документом, реляционно только разделяемое.
+  surveyData Json
+  totalRub   Float?
+  projectId  String?
+  project    Project?   @relation(fields: [projectId], references: [id])
+  authorId   String
+  author     User       @relation(fields: [authorId], references: [id])
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
-  snapshots   EstimateSnapshot[]
+  snapshots EstimateSnapshot[]
 }
 
 // ── Snapshots (версионирование расчётов) ──────────────────────────────────
-// TODO: реализовать POST /api/estimates/:id/snapshot и GET /api/estimates/:id/snapshots
-//       Снапшот создаётся при смене статуса на APPROVED или вручную («Сохранить версию»).
 
 model EstimateSnapshot {
-  id               String    @id @default(uuid())
+  id               String   @id @default(uuid())
   estimateId       String
-  estimate         Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  estimate         Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
   version          Int
   priceListVersion Int
   totalRub         Float
-  bundlesJson      Json      // полный CalcBundle[] snapshot
-  createdAt        DateTime  @default(now())
+  bundlesJson      Json // полный CalcBundle[] snapshot
+  createdAt        DateTime @default(now())
 
   @@unique([estimateId, version])
 }
 
 // ── Price list ─────────────────────────────────────────────────────────────
 
-model PriceItem {
-  id         String   @id @default(uuid())
-  lookupKey  String   @unique  // category:name — уникальный ключ поиска
-  category   String
-  name       String
-  unit       String
-  priceRub   Float?
-  supplier   String?
-  updatedAt  DateTime @updatedAt
+/// Версия прайса целиком (ТЗ §3: «Прайс версионируется целиком… Активная
+/// версия фиксируется в snapshot расчёта»). Реальные файлы содержат два
+/// поколения НН (ФОТ 1002 -> 1207,8; накладные 1089,56 -> 1584,73).
+/// Текущая версия = MAX(version); импорт прайса создаёт новую.
+model PriceListVersion {
+  id          String   @id @default(uuid())
+  version     Int      @unique
+  label       String? // напр. «НН v2 от 20.05» — показывается в топбаре калькулятора
+  note        String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+}
 
-  history    PriceHistory[]
+model PriceItem {
+  id        String @id @default(uuid())
+  /// Производный от тройки ключ «category:name:unit» — сохранён для
+  /// совместимости и отладки; источник истины уникальности — @@unique ниже.
+  lookupKey String @unique
+
+  category String
+  name     String
+  unit     String
+
+  priceBaseRub Float? // Цена без скидки (НН, кол. G)
+  discountPct  Float? // Скидка % (НН, кол. I — в текущих файлах не заполнена)
+  currency     String  @default("руб") // НН, кол. H (мультивалютность заложена, не активна)
+  priceRub     Float? // Итоговая цена (НН, кол. J) — именно её тянет VLOOKUP
+  supplier     String? // В листе НН отсутствует: при импорте не заполняется
+  comment      String? // НН, кол. K
+
+  updatedAt DateTime @updatedAt
+
+  history PriceHistory[]
+
+  /// Реальный ключ прайса — тройка (категория, наименование, ЕИ):
+  /// VLOOKUP(C&D&K, НН!A:J, 10). Одно наименование существует с разными ЕИ.
+  @@unique([category, name, unit])
+  @@index([category])
 }
 
 model PriceHistory {
@@ -120,21 +153,54 @@ model PriceHistory {
   oldPrice    Float?
   newPrice    Float?
   changedById String?
+  changedBy   User?     @relation(fields: [changedById], references: [id], onDelete: SetNull)
   changedAt   DateTime  @default(now())
+
+  @@index([priceItemId, changedAt])
+}
+
+// ── Справочники (извлекаются из «Шаблон 3.0.xlsx», tools/extract-refs.ts) ──
+
+/// Веса GRP-труб: ключ (DN; PN; SN) -> кг/пм. 162 позиции, DN 300…3000.
+/// ВНИМАНИЕ (ТЗ §9.4): PN здесь — это PN_трубы (автоподбор, ячейка F7),
+/// а НЕ PN опросного листа. Домены: PN {0,6; 1; 1,6}, SN {2500; 5000; 10000}.
+model PipeWeight {
+  id     String @id @default(uuid())
+  dn     Int
+  pn     Float
+  sn     Int
+  wallMm Float?
+  kgPerM Float
+
+  @@unique([dn, pn, sn])
+}
+
+/// ПЭ-трубы ПЭ-100 SDR17, 26 позиций.
+/// Ключ — наружный диаметр `odMm`, а НЕ `dn`: в листе колонка «DN» — условный
+/// проход, и она не уникальна (DN 125 указан и для ⌀125, и для ⌀140), к тому же
+/// нерегулярна (DN 25 -> ⌀32, DN 45 -> ⌀50).
+model PePipe {
+  id     String  @id @default(uuid())
+  dn     Int
+  name   String  @unique
+  odMm   Float   @unique
+  wallMm String?
+  kgPerM Float
+
+  @@index([dn])
 }
 
 // ── Audit log ──────────────────────────────────────────────────────────────
-// TODO: добавить запись в AuditLog при ключевых событиях:
-//       estimate.create, estimate.status_change, prices.update, prices.import, user.create
-//       Писать через вспомогательную функцию audit(prisma, userId, action, entityType, entityId, meta)
 
 model AuditLog {
   id         String   @id @default(uuid())
   userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
-  action     String   // e.g. "estimate.create", "prices.import"
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String // напр. «estimate.create», «prices.import»
   entityType String?
   entityId   String?
   meta       Json?
   createdAt  DateTime @default(now())
+
+  @@index([createdAt])
 }
