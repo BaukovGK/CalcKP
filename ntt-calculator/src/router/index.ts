@@ -41,6 +41,13 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Опросный лист КНС — вход в процесс: ОЛ → материализация → калькулятор.
+      path: '/survey/kns',
+      name: 'survey-kns',
+      component: () => import('@/views/SurveyKnsView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
+    },
+    {
       path: '/calculator/:id?',
       name: 'calculator',
       component: CalculatorView,
