@@ -17,6 +17,8 @@ export type AuditAction =
   | 'estimate.create'
   | 'estimate.status_change'
   | 'estimate.snapshot'
+  /** Выпуск КП — точка фиксации процесса (ТЗ §4.3 v1.5). */
+  | 'estimate.kp'
   | 'prices.update'
   | 'prices.import'
   | 'user.create'

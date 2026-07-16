@@ -250,6 +250,75 @@ estimatesRouter.post(
   },
 )
 
+/**
+ * POST /api/estimates/:id/kp — выпуск коммерческого предложения.
+ *
+ * Точка фиксации реального процесса (ТЗ §4.3 v1.5, Механика §10):
+ *
+ * ```
+ * Предварительный расчёт → КП → согласование в коммерческом отделе (вне системы)
+ *    → дальнейшая проработка инженером → сметы/спецификации/ERP
+ * ```
+ *
+ * Здесь, а НЕ при смене статуса:
+ *  1. гейт по красным строкам — их сумма равна нулю, то есть такая строка
+ *     молча занижает итог; в документ заказчику это попасть не должно;
+ *  2. снапшот — фиксирует, из каких цен и какой версии прайса родилась цифра
+ *     в согласуемом документе.
+ *
+ * Расчёт НЕ замораживается: инженер продолжает править его после выпуска КП —
+ * это следующий шаг процесса.
+ */
+estimatesRouter.post(
+  '/:id/kp',
+  requireRole('ADMIN', 'MANAGER', 'ENGINEER'),
+  async (req, res: Response, next: NextFunction) => {
+    try {
+      const auth = req as AuthRequest
+      const id = String(req.params.id)
+
+      const estimate = await prisma.estimate.findUnique({
+        where: { id },
+        include: { project: { select: { title: true, customer: true, address: true } } },
+      })
+      if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+      if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+        res.status(403).json({ message: 'Нет доступа' }); return
+      }
+
+      const unpriced = rowsWithoutPrice(estimate.surveyData)
+      if (unpriced.length > 0) {
+        res.status(422).json({
+          message: `Нельзя выпустить КП: ${unpriced.length} ${plural(unpriced.length)} без цены — итог занижен`,
+          code: 'ROWS_WITHOUT_PRICE',
+          rows: unpriced.slice(0, 20).map((r) => ({ id: r.id, name: r.name, unit: r.unit })),
+          count: unpriced.length,
+        })
+        return
+      }
+
+      const snapshot = await createSnapshot(id, estimate.surveyData, estimate.totalRub ?? 0)
+
+      await audit(auth.userId, 'estimate.kp', 'Estimate', id, { snapshotVersion: snapshot.version })
+
+      res.status(201).json({
+        estimate: {
+          id: estimate.id,
+          title: estimate.title,
+          deviceType: estimate.deviceType,
+          totalRub: estimate.totalRub,
+        },
+        project: estimate.project,
+        snapshot: {
+          version: snapshot.version,
+          priceListVersion: snapshot.priceListVersion,
+          createdAt: snapshot.createdAt,
+        },
+      })
+    } catch (e) { next(e) }
+  },
+)
+
 // GET /api/estimates/:id/snapshots — история версий (ТЗ §7).
 estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunction) => {
   try {
