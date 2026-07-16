@@ -54,6 +54,10 @@
       </template>
       <span v-else-if="res.missingPrice" class="note-red">указать цену</span>
       <span v-else class="note" :title="row.note ?? ''">{{ row.note ?? '' }}</span>
+
+      <!-- Удалять можно только строки, добавленные вручную: строки шаблона
+           лишь выключаются (Механика §12.5). -->
+      <button v-if="row.isCustom" class="rm" title="удалить строку" @click="emit('remove', row.id)">✕</button>
     </div>
   </div>
 </template>
@@ -88,6 +92,7 @@ const emit = defineEmits<{
   keep: [id: string]
   drop: [id: string]
   nav: [e: KeyboardEvent, id: string, col: 'qty' | 'price']
+  remove: [id: string]
 }>()
 
 const isSatellite = computed(() => props.row.kind === 'ФОТ' && props.row.parentId != null)
@@ -190,6 +195,8 @@ function onPrice(e: Event) {
 .c-note { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--faint); min-width: 0; }
 .note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-red { color: var(--acc); }
+.rm { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 12px; padding: 0 3px; }
+.rm:hover { color: var(--acc); }
 .was { color: var(--amber); white-space: nowrap; }
 .btn-amber { border: 1px solid var(--amber); color: var(--amber); background: transparent; font-size: 9.5px; padding: 1px 6px; white-space: nowrap; }
 .btn-plain { border: 1px solid var(--line2); color: var(--muted); background: transparent; font-size: 9.5px; padding: 1px 6px; white-space: nowrap; }

@@ -75,6 +75,11 @@ export interface KnsSurveyParams {
 export interface CalcRowNode extends EngineRow {
   /** Явная корзина итогов, если по ЕИ неотличима (труба/муфта). */
   bucket?: CostBucket
+  /**
+   * Строка добавлена инженером вручную. Строки шаблона удалять нельзя —
+   * только выключать; удалять можно лишь добавленные (Механика §12.5).
+   */
+  isCustom?: boolean
 }
 
 export interface CalcComponent {

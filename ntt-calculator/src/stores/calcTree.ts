@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type Rates } from '@/engines/economics'
 import { recalcFotSatellites, resolveFotK } from '@/engines/fot'
 import { computeRow } from '@/engines/row'
+import type { CalcComponent } from '@/engines/template-kns'
 import {
   flattenRows,
   materializeKns,
@@ -40,6 +41,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   const tree = ref<CalcTree | null>(null)
   const rates = ref<Rates>({ ...FALLBACK_RATES })
   const priceListVersion = ref(1)
+  /** Плоский прайс — источник для модала «Компонент из каталога». */
+  const catalog = ref<Array<{ category: string; name: string; unit: string; priceRub: number | null }>>([])
 
   const markup = ref(DEFAULT_MARKUP)
   const tirage = ref(1)
@@ -71,9 +74,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       // Индексы справочников: поиск по тройке (категория, наименование, ЕИ)
       // и по (DN; PN_трубы; SN) — ровно как VLOOKUP эталона.
       const priceIdx = new Map<string, number | null>()
+      const flat: typeof catalog.value = []
       for (const [category, items] of Object.entries(prices)) {
-        for (const p of items) priceIdx.set(`${category}|${p.name}|${p.unit}`, p.priceRub)
+        for (const p of items) {
+          priceIdx.set(`${category}|${p.name}|${p.unit}`, p.priceRub)
+          flat.push({ category, name: p.name, unit: p.unit, priceRub: p.priceRub })
+        }
       }
+      catalog.value = flat
       const weightIdx = new Map<string, number>()
       for (const w of weights.grp) weightIdx.set(`${w.dn}|${w.pn}|${w.sn}`, w.kgPerM)
 
@@ -258,6 +266,57 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     prevQtyCalc.value[id] = rows.value.find((r) => r.id === id)?.qtyCalc ?? null
   }
 
+  /**
+   * Компонент для строк, добавленных инженером вручную.
+   *
+   * Строки шаблона удалять нельзя — только выключать (Механика §12.5);
+   * удалять можно лишь добавленные вручную, поэтому они живут отдельно
+   * и помечены `isCustom`.
+   */
+  function customComponentOf(sectionCode: string): CalcComponent | null {
+    const sec = tree.value?.sections.find((s) => s.code === sectionCode)
+    if (!sec) return null
+    let c = sec.components.find((x) => x.id.startsWith('custom-'))
+    if (!c) {
+      c = { id: `custom-${sectionCode}`, title: 'Добавлено вручную', enabled: true, rows: [] }
+      sec.components.push(c)
+    }
+    return c
+  }
+
+  let customSeq = 0
+  function addRow(sectionCode: string, spec: Partial<CalcRowNode>): string | null {
+    const c = customComponentOf(sectionCode)
+    if (!c) return null
+    const id = `cu-${++customSeq}-${Date.now().toString(36)}`
+    c.rows.push({
+      id,
+      kind: 'МАТЕРИАЛ',
+      category: 'Прочие материалы',
+      name: '',
+      unit: 'шт',
+      qtyCalc: null,
+      qtyManual: null,
+      priceCatalog: null,
+      priceManual: null,
+      enabled: true,
+      isCustom: true,
+      ...spec,
+    } as CalcRowNode)
+    return id
+  }
+
+  /** Удалять можно только строки, добавленные вручную (Механика §12.5). */
+  function removeRow(id: string) {
+    if (!tree.value) return
+    for (const s of tree.value.sections) {
+      for (const c of s.components) {
+        const i = c.rows.findIndex((r) => r.id === id && r.isCustom)
+        if (i >= 0) { c.rows.splice(i, 1); return }
+      }
+    }
+  }
+
   /** Коэффициент ФОТ строки-спутника — для метки «ФОТ · k=0,28». */
   function fotKOf(row: CalcRowNode): number | null {
     if (row.kind !== 'ФОТ' || !row.parentId) return null
@@ -286,10 +345,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   }
 
   return {
-    estimate, tree, rates, markup, tirage, loading, error,
+    estimate, tree, rates, markup, tirage, loading, error, catalog,
     rows, results, economics, missingPriceIds, conflictIds, overrideIds, enabledFor,
     load, save, clear, recalcAll,
     setQtyManual, setPriceManual, resetQty, resetPrice,
     toggleSection, toggleComponent, keepOverride, dropOverride, fotKOf,
+    addRow, removeRow,
   }
 })
