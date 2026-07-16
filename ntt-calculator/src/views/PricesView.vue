@@ -207,7 +207,7 @@ onMounted(load)
 
 .pr-cat-hdr {
   font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--accent); font-family: 'IBM Plex Mono', monospace;
+  color: var(--accent); font-family: Archivo, system-ui, sans-serif;
   padding: 10px 14px 4px; border-bottom: 1px solid var(--border);
 }
 
@@ -224,14 +224,14 @@ onMounted(load)
 }
 .pr-table tr:hover td { background: var(--bg3); }
 
-.pr-unit     { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--tx3); white-space: nowrap; width: 40px; }
+.pr-unit     { font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--tx3); white-space: nowrap; width: 40px; }
 .pr-price    { width: 110px; }
-.pr-price-val { cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: var(--accent); }
+.pr-price-val { cursor: pointer; font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 600; color: var(--accent); }
 .pr-price-val:hover { text-decoration: underline; }
 .pr-supplier  { width: 160px; }
 .pr-sup-val   { cursor: pointer; }
 .pr-sup-val:hover { text-decoration: underline; color: var(--tx1); }
-.pr-date      { font-size: 9px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; width: 70px; white-space: nowrap; }
+.pr-date      { font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; width: 70px; white-space: nowrap; }
 .pr-actions   { width: 70px; white-space: nowrap; }
 
 .pr-inp      { padding: 2px 5px; font-size: 11px; height: 24px; width: 100%; }

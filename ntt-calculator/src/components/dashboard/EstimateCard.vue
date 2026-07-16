@@ -64,7 +64,7 @@ function fmtDate(iso: string) {
 
 .ec-top  { display: flex; align-items: center; gap: 6px; }
 .ec-type {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: Archivo, system-ui, sans-serif;
   font-size: 9px; font-weight: 700; letter-spacing: .04em;
   padding: 2px 5px; border-radius: 3px;
   background: var(--accent); color: #fff;
@@ -80,12 +80,12 @@ function fmtDate(iso: string) {
 .ec-status--approved { color: #10b981; border-color: #10b981; }
 .ec-status--review   { color: #f59e0b; border-color: #f59e0b; }
 
-.ec-date   { margin-left: auto; font-size: 9px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; }
+.ec-date   { margin-left: auto; font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 .ec-title  { font-size: 12px; font-weight: 600; color: var(--tx1); line-height: 1.3; margin-top: 2px; }
 
 .ec-info-row { display: flex; gap: 6px; align-items: baseline; }
 .ec-info-lbl {
-  font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif;
   text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
 }
 .ec-info-val { font-size: 10px; color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -93,7 +93,7 @@ function fmtDate(iso: string) {
 .ec-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 2px; }
 .ec-author { font-size: 10px; color: var(--tx3); }
 .ec-total  {
-  font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 700;
   color: var(--accent);
 }
 </style>

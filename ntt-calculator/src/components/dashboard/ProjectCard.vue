@@ -62,16 +62,16 @@ function fmtDate(iso: string) {
 
 .pc-head  { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .pc-title { font-size: 13px; font-weight: 600; color: var(--tx1); line-height: 1.3; }
-.pc-date  { font-size: 9px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; white-space: nowrap; flex-shrink: 0; }
+.pc-date  { font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; flex-shrink: 0; }
 
 .pc-row  { display: flex; gap: 6px; align-items: baseline; }
-.pc-lbl  { font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.pc-lbl  { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
 .pc-val  { font-size: 10px; color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pc-units { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
 .pc-unit  { display: flex; align-items: center; gap: 5px; padding: 3px 5px; background: var(--bg1); border-radius: 3px; }
 .pc-unit-type {
-  font-family: 'IBM Plex Mono', monospace; font-size: 8px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 8px; font-weight: 700;
   padding: 1px 4px; border-radius: 2px; background: var(--accent); color: #fff; flex-shrink: 0;
 }
 .pc-unit-type--emk { background: #8b5cf6; }
@@ -80,12 +80,12 @@ function fmtDate(iso: string) {
 .pc-unit-status { font-size: 9px; color: var(--tx3); white-space: nowrap; }
 .pc-unit-status--approved { color: #10b981; }
 .pc-unit-status--review   { color: #f59e0b; }
-.pc-unit-total  { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.pc-unit-total  { font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--accent); font-weight: 600; white-space: nowrap; }
 .pc-empty { font-size: 10px; color: var(--tx3); font-style: italic; padding: 2px 4px; }
 
 .pc-footer { display: flex; justify-content: space-between; margin-top: 1px; }
 .pc-author { font-size: 9px; color: var(--tx3); }
-.pc-count  { font-size: 9px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; }
+.pc-count  { font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 .pc-del {
   background: transparent; border: none; color: var(--tx3); font-size: 15px;
   line-height: 1; cursor: pointer; padding: 0 2px; transition: color .12s; flex-shrink: 0;

@@ -34,7 +34,7 @@
           class="sg-auto"
           title="Содержит строки с авто-пересчётом"
         >⟳ авто</span>
-        <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;color:var(--tl2)">
+        <span style="font-family:Archivo, system-ui, sans-serif;font-size:9px;font-weight:600;color:var(--tl2)">
           {{ fmt(store.sgSum(sg)) }} ₽
         </span>
       </div>

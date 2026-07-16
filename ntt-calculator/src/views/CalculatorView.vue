@@ -92,8 +92,8 @@
           <template v-for="b in store.bundles" :key="b.id">
             <div style="display:flex;align-items:center;gap:4px">
               <div style="width:7px;height:7px;border-radius:2px" :style="{ background: b.color }"></div>
-              <span style="font-size:8px;color:var(--tx3);font-family:'IBM Plex Mono',monospace">{{ b.title }}</span>
-              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600" :style="{ color: b.color }">{{ fmt(store.bSum(b)) }} ₽</span>
+              <span style="font-size:8px;color:var(--tx3);font-family:Archivo, system-ui, sans-serif">{{ b.title }}</span>
+              <span style="font-family:Archivo, system-ui, sans-serif;font-size:11px;font-weight:600" :style="{ color: b.color }">{{ fmt(store.bSum(b)) }} ₽</span>
             </div>
             <div class="gt-sep"></div>
           </template>
@@ -331,7 +331,7 @@ onUnmounted(() => document.removeEventListener('click', hideCtx))
 
 <style scoped>
 .tb-status {
-  font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 9px; font-weight: 700;
   padding: 2px 7px; border-radius: 3px; letter-spacing: .04em; text-transform: uppercase;
   background: var(--bg3); color: var(--tx3); border: 1px solid var(--border);
 }

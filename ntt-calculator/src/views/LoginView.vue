@@ -47,7 +47,7 @@
       </button>
 
       <div class="auth-footer">
-        Backend подключается в Sprint 4 · v0.2.0
+        НТТ Калькулятор · v{{ version }}
       </div>
     </div>
   </div>
@@ -63,6 +63,7 @@ const auth   = useAuthStore()
 
 const form    = reactive({ email: '', password: '' })
 const loading = ref(false)
+const version = import.meta.env.VITE_APP_VERSION ?? '0.0.0'
 const error   = ref('')
 
 async function onSubmit() {

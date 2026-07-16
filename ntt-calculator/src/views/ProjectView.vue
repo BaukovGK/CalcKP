@@ -276,7 +276,7 @@ onMounted(() => projects.fetchOne(projectId))
 }
 .pv-unit-link:hover { background: var(--bg3); }
 .pv-unit-badge {
-  font-family: 'IBM Plex Mono', monospace; font-size: 8px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 8px; font-weight: 700;
   padding: 1px 4px; border-radius: 2px; background: var(--accent); color: #fff; flex-shrink: 0;
 }
 .pv-unit-badge--emk { background: #8b5cf6; }
@@ -290,7 +290,7 @@ onMounted(() => projects.fetchOne(projectId))
   display: flex; flex-wrap: wrap; gap: 6px 20px;
 }
 .pv-meta-row   { display: flex; gap: 6px; align-items: baseline; }
-.pv-meta-lbl   { font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: .04em; }
+.pv-meta-lbl   { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 .pv-meta-val   { font-size: 11px; color: var(--tx1); }
 
 .pv-units-grid {
@@ -306,7 +306,7 @@ onMounted(() => projects.fetchOne(projectId))
 
 .pv-uc-top  { display: flex; align-items: center; gap: 6px; }
 .pv-uc-type {
-  font-family: 'IBM Plex Mono', monospace; font-size: 8px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 8px; font-weight: 700;
   padding: 1px 5px; border-radius: 2px; background: var(--accent); color: #fff;
 }
 .pv-uc-type--emk { background: #8b5cf6; }
@@ -314,16 +314,16 @@ onMounted(() => projects.fetchOne(projectId))
 .pv-uc-status { font-size: 9px; color: var(--tx3); }
 .pv-uc-status--approved { color: #10b981; }
 .pv-uc-status--review   { color: #f59e0b; }
-.pv-uc-date   { margin-left: auto; font-size: 9px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; }
+.pv-uc-date   { margin-left: auto; font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 
 .pv-uc-title  { font-size: 12px; font-weight: 600; color: var(--tx1); }
 .pv-uc-params { display: flex; flex-wrap: wrap; gap: 4px; }
 .pv-uc-param  {
-  font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--tx3);
+  font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--tx3);
   background: var(--bg1); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px;
 }
 .pv-uc-total  {
-  font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 700;
   color: var(--accent); text-align: right;
 }
 .dash-state     { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }

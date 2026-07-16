@@ -1,95 +1,126 @@
-/* src/assets/main.css */
+/* src/assets/main.css
+ *
+ * Токены дизайн-хендоффа (design_handoff_ntt_calculator/README.md).
+ * Значения взяты из прототипов `*.dc.html` — в том числе подложки состояний
+ * (--acc-bg / --blue-bg / --amber-bg / --green-bg), которых в README нет.
+ *
+ * Правила ДС (Modernist): шрифт Archivo · радиус углов 0 всюду ·
+ * цифры tabular-nums · разряды пробелами · обе темы WCAG AA.
+ *
+ * Семантика акцентов:
+ *   --acc   акцент И ошибки (строка без цены)
+ *   --blue  override (ручной ввод перекрыл расчётное)
+ *   --amber конфликт (ОЛ изменился после тюнинга)
+ *   --green успех
+ */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Тёмная тема (по умолчанию) ── */
 :root {
-  --bg:  #0b0e18;
-  --bg2: #10141f;
-  --bg3: #161c2e;
-  --bg4: #1b2236;
-  --bg5: #202840;
-  --bd:  #1e2840;
-  --bd2: #283258;
-  --bd3: #354068;
-  --tx:  #d0d8f0;
-  --tx2: #6070a0;
-  --tx3: #364060;
-  --tx4: #1c2540;
-  --am:  #eeaa28;
-  --am2: #ffca50;
-  --amd: #161208;
-  --amg: rgba(238,170,40,.07);
-  --tl:  #16c8b0;
-  --tl2: #38e8d0;
-  --tld: #071816;
-  --pp:  #9068f8;
-  --pp2: #b898ff;
-  --ppd: #0e0a28;
-  --gn:  #30d468;
-  --gn2: #54f088;
-  --gnd: #071608;
-  --rd:  #ee6868;
-  --rdd: #160d0d;
+  --bg:     #1d1c1b;
+  --panel:  #242220;
+  --panel2: #2b2927;
+  --cellbg: #201f1e;
+  --line:   #3a3733;
+  --line2:  #4c4841;
+  --text:   #f3f2f2;
+  --muted:  #a8a29a;
+  --faint:  #736e66;
 
-  font-family: 'IBM Plex Sans', sans-serif;
-  font-size: 12px;
+  --acc:      #ec3013;
+  --acc-bg:   rgba(236, 48, 19, .12);
+  --blue:     #5f9ae8;
+  --blue-bg:  rgba(95, 154, 232, .12);
+  --amber:    #d9a544;
+  --amber-bg: rgba(217, 165, 68, .12);
+  --green:    #5fb87a;
+  --green-bg: rgba(95, 184, 122, .12);
+
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: 13px;
   color-scheme: dark;
 
-  /* ── Алиасы для scoped-стилей компонентов ── */
-  --tx1:    var(--tx);
+  /* ── Слой совместимости ────────────────────────────────────────────────
+   * Экраны вне хендоффа (Dashboard, Проект, Прайс, Админ) написаны на старых
+   * именах — 335 обращений var(--*). Отображаем их на палитру хендоффа, а не
+   * правим каждое место: имена семантичны, и так весь интерфейс получает
+   * новый вид одним шагом. Экраны, пересобираемые по прототипу (Калькулятор,
+   * ОЛ), используют новые имена напрямую.
+   *
+   * Прежний акцент был янтарный (--am), теперь он красно-оранжевый (--acc) —
+   * это и есть пере-скин, а не регрессия.
+   */
+  --bg2: var(--panel);
+  --bg3: var(--panel2);
+  --bg4: var(--panel2);
+  --bg5: var(--line);
+  --bd:  var(--line);
+  --bd2: var(--line2);
+  --bd3: var(--line2);
+  --tx:  var(--text);
+  --tx2: var(--muted);
+  --tx3: var(--faint);
+  --tx4: var(--faint);
+  --am:  var(--acc);
+  --am2: var(--acc);
+  --amd: var(--acc-bg);
+  --amg: var(--acc-bg);
+  --tl:  var(--blue);
+  --tl2: var(--blue);
+  --tld: var(--blue-bg);
+  --pp:  var(--blue);
+  --pp2: var(--blue);
+  --ppd: var(--blue-bg);
+  --gn:  var(--green);
+  --gn2: var(--green);
+  --gnd: var(--green-bg);
+  --rd:  var(--acc);
+  --rdd: var(--acc-bg);
+
+  --tx1:    var(--text);
   --bg1:    var(--bg);
-  --border: var(--bd);
-  --accent: var(--am);
-  --danger: var(--rd);
+  --border: var(--line);
+  --accent: var(--acc);
+  --danger: var(--acc);
 }
 
-/* ── СВЕТЛАЯ ТЕМА ── */
+/* ── Светлая тема ──
+ * Переопределяем ТОЛЬКО базовые токены: слой совместимости построен на них
+ * через var(), поэтому подхватится автоматически. */
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg:  #f4f6fb;
-  --bg2: #ffffff;
-  --bg3: #eef1f8;
-  --bg4: #e5e9f4;
-  --bg5: #dce1ee;
-  --bd:  #d0d5e8;
-  --bd2: #b8bfd8;
-  --bd3: #a0a9c8;
-  --tx:  #1a2040;
-  --tx2: #4a5478;
-  --tx3: #8a94b0;
-  --tx4: #c0c6d8;
-  --am:  #c47c08;
-  --am2: #d98f10;
-  --amd: #fffae8;
-  --amg: rgba(196,124,8,0.09);
-  --tl:  #0a9080;
-  --tl2: #0ba898;
-  --tld: #e4f8f5;
-  --pp:  #6040c8;
-  --pp2: #7452d8;
-  --ppd: #ede8fd;
-  --gn:  #14a044;
-  --gn2: #18b84e;
-  --gnd: #e4f8ec;
-  --rd:  #c03838;
-  --rdd: #fdf0f0;
+  --bg:     #f3f2f2;
+  --panel:  #fbfaf9;
+  --panel2: #eceae8;
+  --cellbg: #ffffff;
+  --line:   #d9d6d2;
+  --line2:  #b9b5af;
+  --text:   #201e1d;
+  --muted:  #6b6660;
+  --faint:  #98938c;
 
-  --tx1:    #1a2040;
-  --bg1:    #f4f6fb;
-  --border: #d0d5e8;
-  --accent: #c47c08;
-  --danger: #c03838;
+  --acc:      #ec3013;
+  --acc-bg:   rgba(236, 48, 19, .07);
+  --blue:     #2f6fce;
+  --blue-bg:  rgba(47, 111, 206, .08);
+  --amber:    #9a6f14;
+  --amber-bg: rgba(190, 145, 40, .14);
+  --green:    #2e8b57;
+  --green-bg: rgba(46, 139, 87, .10);
 }
 
-/* Светлая тема: хардкод-цвета что не берутся из переменных */
+/* Светлая тема: точечные патчи.
+ * Захардкоженные цвета старой (тёмно-синей/янтарной) палитры заменены на
+ * токены — иначе в светлой теме проступал бы прежний скин. */
 [data-theme="light"] body { background: var(--bg); color: var(--tx); }
-[data-theme="light"] .sg-hd { background: rgba(229,233,244,0.85); }
+[data-theme="light"] .sg-hd { background: var(--panel2); }
 [data-theme="light"] .dr:hover { background: rgba(0,0,0,.03); }
-[data-theme="light"] .dr.auto-r { background: rgba(10,168,152,.06); }
-[data-theme="light"] .dr.auto-r:hover { background: rgba(10,168,152,.1); }
+[data-theme="light"] .dr.auto-r { background: var(--blue-bg); }
+[data-theme="light"] .dr.auto-r:hover { background: var(--blue-bg); }
 [data-theme="light"] .drag-handle:hover { background: rgba(0,0,0,.05); }
 [data-theme="light"] .drag-handle:active { color: var(--tl); }
 [data-theme="light"] .name-dropdown { box-shadow: 0 4px 18px rgba(0,0,0,.14); }
@@ -98,16 +129,28 @@
 [data-theme="light"] .csel { background: var(--bg4); color: var(--tx2); }
 [data-theme="light"] .csel:focus { background: var(--amd); color: var(--tx); }
 [data-theme="light"] .csel:hover { background: var(--bg5); }
-[data-theme="light"] .ci:focus { background: rgba(196,124,8,.05); }
-[data-theme="light"] .name-input:focus { background: rgba(196,124,8,.05); }
+[data-theme="light"] .ci:focus { background: var(--acc-bg); }
+[data-theme="light"] .name-input:focus { background: var(--acc-bg); }
 [data-theme="light"] .nd-item:hover,
 [data-theme="light"] .nd-item.active { background: var(--bg5); }
 [data-theme="light"] .nd-item.active { background: var(--amd); color: var(--am); }
 [data-theme="light"] .auth-page { background: var(--bg3); }
 
 html, body, #app { height: 100%; overflow: hidden; }
-body { background: var(--bg); color: var(--tx); }
+body { background: var(--bg); color: var(--text); font-family: Archivo, system-ui, sans-serif; }
 button { font-family: inherit; cursor: pointer; }
+
+/* ── Правила ДС Modernist (README хендоффа) ──────────────────────────────── */
+
+/* Радиус углов — 0 всюду. Прежний скин скруглял карточки, кнопки и поля;
+ * перечислять каждый селектор бессмысленно, поэтому глушим глобально. */
+*, *::before, *::after { border-radius: 0 !important; }
+
+/* Цифры всегда моноширинные по ширине: колонки чисел не «пляшут» при вводе. */
+body, input, select, textarea, button, table { font-variant-numeric: tabular-nums; }
+
+/* Фокус-ринг — акцентом (README: outline 2px solid var(--acc)). */
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
 input, select { font-family: inherit; }
 
 /* ── LAYOUT ── */
@@ -117,8 +160,8 @@ input, select { font-family: inherit; }
 /* ── SIDEBAR ── */
 .sidebar { width: 212px; background: var(--bg2); border-right: 1px solid var(--bd); display: flex; flex-direction: column; flex-shrink: 0; }
 .sidebar-top { padding: 12px 10px 10px; border-bottom: 1px solid var(--bd); }
-.logo     { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; color: var(--am); letter-spacing: 2px; }
-.logo-sub { font-size: 8px; color: var(--tx3); margin-top: 2px; font-family: 'IBM Plex Mono', monospace; }
+.logo     { font-family: Archivo, system-ui, sans-serif; font-size: 9px; font-weight: 600; color: var(--am); letter-spacing: 2px; }
+.logo-sub { font-size: 8px; color: var(--tx3); margin-top: 2px; font-family: Archivo, system-ui, sans-serif; }
 .sidebar-scroll { flex: 1; overflow-y: auto; padding: 5px 4px 12px; }
 .sidebar-scroll::-webkit-scrollbar { width: 2px; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--bd2); }
@@ -129,7 +172,7 @@ input, select { font-family: inherit; }
 .nb-h:hover { background: var(--bg3); border-color: var(--bd); }
 .nb-dot { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
 .nb-lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nb-sm  { font-family: 'IBM Plex Mono', monospace; font-size: 8px; color: var(--tx3); }
+.nb-sm  { font-family: Archivo, system-ui, sans-serif; font-size: 8px; color: var(--tx3); }
 .ng-list { padding-left: 10px; }
 .ng-row  { display: flex; align-items: center; gap: 5px; padding: 3px 7px; border-radius: 3px; cursor: pointer; color: var(--tx2); font-size: 10px; transition: all .1s; }
 .ng-row:hover { background: var(--bg3); color: var(--tx); }
@@ -139,11 +182,11 @@ input, select { font-family: inherit; }
 
 /* ── TOPBAR ── */
 .topbar { height: 46px; background: var(--bg2); border-bottom: 1px solid var(--bd); display: flex; align-items: center; gap: 8px; padding: 0 14px; flex-shrink: 0; }
-.tb-title { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: var(--am); letter-spacing: 1px; }
-.tb-sub   { font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; }
+.tb-title { font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 600; color: var(--am); letter-spacing: 1px; }
+.tb-sub   { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 .tb-spacer { flex: 1; }
-.tb-total-label { font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 1px; }
-.tb-total { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--am); }
+.tb-total-label { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+.tb-total { font-family: Archivo, system-ui, sans-serif; font-size: 14px; font-weight: 600; color: var(--am); }
 
 /* ── BUTTONS ── */
 .btn { padding: 4px 10px; border-radius: 3px; font-size: 10px; font-weight: 500; border: 1px solid var(--bd2); background: var(--bg3); color: var(--tx); transition: all .1s; white-space: nowrap; }
@@ -171,8 +214,8 @@ input, select { font-family: inherit; }
 .bnd-swatch { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
 .bnd-name { flex: 1; background: transparent; border: none; outline: none; color: var(--tx); font-size: 11px; font-weight: 500; min-width: 0; }
 .bnd-name:focus { border-bottom: 1px solid var(--am); color: var(--am); }
-.bnd-tot-l { font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; }
-.bnd-tot   { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: var(--am); margin: 0 4px 0 2px; }
+.bnd-tot-l { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
+.bnd-tot   { font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 600; color: var(--am); margin: 0 4px 0 2px; }
 
 .bnd-drag { cursor: grab; color: var(--tx3); font-size: 14px; flex-shrink: 0; padding: 0 2px; border-radius: 3px; transition: all .1s; line-height: 1; }
 .bnd-drag:hover { color: var(--tx2); background: var(--bg4); }
@@ -185,11 +228,11 @@ input, select { font-family: inherit; }
 .grp-drag { cursor: grab; color: var(--tx3); font-size: 13px; flex-shrink: 0; padding: 0 2px; border-radius: 3px; transition: all .1s; }
 .grp-drag:hover { color: var(--tx2); background: var(--bg5); }
 .grp-drag:active { cursor: grabbing; }
-.grp-num  { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; flex-shrink: 0; min-width: 14px; }
+.grp-num  { font-family: Archivo, system-ui, sans-serif; font-size: 9px; font-weight: 600; flex-shrink: 0; min-width: 14px; }
 .grp-name { flex: 1; background: transparent; border: none; outline: none; color: var(--tx); font-size: 10px; font-weight: 500; min-width: 0; }
 .grp-name:focus { border-bottom: 1px solid var(--am); }
-.grp-cnt  { font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; padding: 1px 4px; border-radius: 2px; background: var(--bg5); flex-shrink: 0; }
-.grp-tot  { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; color: var(--am); margin: 0 3px; flex-shrink: 0; }
+.grp-cnt  { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; padding: 1px 4px; border-radius: 2px; background: var(--bg5); flex-shrink: 0; }
+.grp-tot  { font-family: Archivo, system-ui, sans-serif; font-size: 9px; font-weight: 600; color: var(--am); margin: 0 3px; flex-shrink: 0; }
 
 /* ── SUBGROUP ── */
 .sgw { margin: 4px 8px 5px; border: 1px solid var(--bd2); border-radius: 5px; overflow: visible; }
@@ -200,8 +243,8 @@ input, select { font-family: inherit; }
 .sg-drag:active { cursor: grabbing; }
 .sg-name { flex: 1; background: transparent; border: none; outline: none; color: var(--tx); font-size: 10px; font-weight: 500; min-width: 0; }
 .sg-name:focus { border-bottom: 1px solid var(--tl); }
-.sg-auto { font-size: 8px; font-family: 'IBM Plex Mono', monospace; padding: 1px 4px; border-radius: 2px; background: rgba(22,200,176,.1); color: var(--tl2); border: 1px solid rgba(22,200,176,.18); flex-shrink: 0; }
-.sg-tot  { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; color: var(--tl2); margin: 0 3px; flex-shrink: 0; }
+.sg-auto { font-size: 8px; font-family: Archivo, system-ui, sans-serif; padding: 1px 4px; border-radius: 2px; background: rgba(22,200,176,.1); color: var(--tl2); border: 1px solid rgba(22,200,176,.18); flex-shrink: 0; }
+.sg-tot  { font-family: Archivo, system-ui, sans-serif; font-size: 9px; font-weight: 600; color: var(--tl2); margin: 0 3px; flex-shrink: 0; }
 
 /* ── TABLE ── */
 .rows-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -217,7 +260,7 @@ input, select { font-family: inherit; }
 .rows-tbl colgroup .c-nt  { width: 90px; }
 .rows-tbl colgroup .c-ac  { width: 50px; }
 
-thead th { background: var(--bg5); padding: 4px 6px; font-size: 8px; color: var(--tx3); letter-spacing: .8px; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--bd); font-family: 'IBM Plex Mono', monospace; white-space: nowrap; font-weight: 500; }
+thead th { background: var(--bg5); padding: 4px 6px; font-size: 8px; color: var(--tx3); letter-spacing: .8px; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--bd); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; font-weight: 500; }
 thead th.r { text-align: right; }
 .rows-tbl td { border-bottom: 1px solid rgba(30,40,64,.7); padding: 0; vertical-align: middle; }
 
@@ -243,12 +286,12 @@ thead th.r { text-align: right; }
 .ci { width: 100%; background: transparent; border: none; outline: none; font-size: 11px; color: var(--tx); padding: 0 7px; height: 32px; display: block; transition: background .1s; }
 .ci:focus { background: rgba(238,170,40,.04); }
 .ci::placeholder { color: var(--tx4); }
-.ci.mono  { text-align: right; font-family: 'IBM Plex Mono', monospace; }
-.ci.auto-v { color: var(--tl2); font-family: 'IBM Plex Mono', monospace; text-align: right; opacity: .75; }
+.ci.mono  { text-align: right; font-family: Archivo, system-ui, sans-serif; }
+.ci.auto-v { color: var(--tl2); font-family: Archivo, system-ui, sans-serif; text-align: right; opacity: .75; }
 .ci.auto-v:focus { opacity: 1; background: rgba(22,200,176,.05); }
-.ci.fot-p  { color: var(--pp2); font-family: 'IBM Plex Mono', monospace; text-align: right; opacity: .7; }
+.ci.fot-p  { color: var(--pp2); font-family: Archivo, system-ui, sans-serif; text-align: right; opacity: .7; }
 
-.csel { width: 100%; background: var(--bg4); border: none; outline: none; font-size: 9px; color: var(--tx2); font-family: 'IBM Plex Mono', monospace; padding: 0 5px; height: 32px; cursor: pointer; -webkit-appearance: none; transition: background .1s; }
+.csel { width: 100%; background: var(--bg4); border: none; outline: none; font-size: 9px; color: var(--tx2); font-family: Archivo, system-ui, sans-serif; padding: 0 5px; height: 32px; cursor: pointer; -webkit-appearance: none; transition: background .1s; }
 .csel:focus { background: rgba(238,170,40,.05); color: var(--tx); }
 .csel:hover { background: var(--bg5); }
 
@@ -266,24 +309,24 @@ thead th.r { text-align: right; }
 .nd-item:hover, .nd-item.active { background: var(--bg5); }
 .nd-item.active { background: var(--amg); color: var(--am); }
 .nd-text  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nd-price { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--tx3); flex-shrink: 0; }
+.nd-price { font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--tx3); flex-shrink: 0; }
 .nd-empty { padding: 10px; font-size: 10px; color: var(--tx3); text-align: center; }
 mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 
 /* ── BUY / TYPE BADGES ── */
-.buy-b { display: inline-flex; padding: 2px 6px; border-radius: 2px; font-size: 8px; font-family: 'IBM Plex Mono', monospace; cursor: pointer; user-select: none; border: 1px solid transparent; transition: all .1s; white-space: nowrap; }
+.buy-b { display: inline-flex; padding: 2px 6px; border-radius: 2px; font-size: 8px; font-family: Archivo, system-ui, sans-serif; cursor: pointer; user-select: none; border: 1px solid transparent; transition: all .1s; white-space: nowrap; }
 .by-y { background: var(--gnd); color: var(--gn2); border-color: rgba(48,212,104,.2); }
 .by-n { background: var(--bg5); color: var(--tx3); border-color: var(--bd); }
 .by-d { color: var(--tx4); }
 
-.rt-b { display: inline-flex; padding: 2px 5px; border-radius: 2px; font-size: 8px; font-family: 'IBM Plex Mono', monospace; font-weight: 600; letter-spacing: .5px; cursor: pointer; user-select: none; border: 1px solid transparent; white-space: nowrap; }
+.rt-b { display: inline-flex; padding: 2px 5px; border-radius: 2px; font-size: 8px; font-family: Archivo, system-ui, sans-serif; font-weight: 600; letter-spacing: .5px; cursor: pointer; user-select: none; border: 1px solid transparent; white-space: nowrap; }
 .rt-M { background: rgba(238,170,40,.13); color: var(--am2); border-color: rgba(238,170,40,.2); }
 .rt-W { background: rgba(22,200,176,.1);  color: var(--tl2); border-color: rgba(22,200,176,.18); }
 .rt-F { background: rgba(144,104,248,.1); color: var(--pp2); border-color: rgba(144,104,248,.18); }
 .rt-P { background: rgba(48,212,104,.09); color: var(--gn2); border-color: rgba(48,212,104,.16); }
 
 /* ── SUM ── */
-.sum-c { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-align: right; padding: 0 8px; height: 32px; display: flex; align-items: center; justify-content: flex-end; white-space: nowrap; color: var(--tx3); }
+.sum-c { font-family: Archivo, system-ui, sans-serif; font-size: 11px; text-align: right; padding: 0 8px; height: 32px; display: flex; align-items: center; justify-content: flex-end; white-space: nowrap; color: var(--tx3); }
 .sum-c.v { color: var(--am); }
 
 .r-acts { opacity: 0; display: flex; gap: 1px; padding: 0 3px; transition: opacity .1s; }
@@ -298,7 +341,7 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 .bft { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-top: 1px solid var(--bd); background: var(--bg3); }
 .bft-add { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--tx3); cursor: pointer; background: none; border: none; padding: 2px 6px; border-radius: 3px; transition: all .1s; }
 .bft-add:hover { color: var(--am); background: var(--amg); }
-.bft-sum { font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; color: var(--am); }
+.bft-sum { font-family: Archivo, system-ui, sans-serif; font-size: 12px; font-weight: 600; color: var(--am); }
 
 /* ── ADD BUNDLE ── */
 .add-bnd { width: 100%; background: transparent; border: 1px dashed var(--bd); border-radius: 8px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; color: var(--tx3); font-size: 10px; transition: all .12s; margin-bottom: 12px; }
@@ -307,8 +350,8 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 /* ── GRAND TOTAL ── */
 .gt { background: var(--bg2); border: 1px solid var(--bd); border-radius: 6px; padding: 8px 14px; margin-top: 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .gt-sep { width: 1px; height: 14px; background: var(--bd2); }
-.gt-ml  { font-size: 9px; color: var(--tx2); margin-left: auto; font-family: 'IBM Plex Mono', monospace; }
-.gt-mv  { font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 600; color: var(--am); }
+.gt-ml  { font-size: 9px; color: var(--tx2); margin-left: auto; font-family: Archivo, system-ui, sans-serif; }
+.gt-mv  { font-family: Archivo, system-ui, sans-serif; font-size: 16px; font-weight: 600; color: var(--am); }
 
 /* ── CONTEXT MENU ── */
 .ctx { position: fixed; background: var(--bg3); border: 1px solid var(--bd3); border-radius: 5px; padding: 3px; z-index: 3000; min-width: 154px; box-shadow: 0 6px 20px rgba(0,0,0,.55); }
@@ -317,7 +360,7 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 .ctx-i.d  { color: var(--rd); }
 .ctx-i.d:hover { background: var(--rdd); }
 .ctx-sep  { height: 1px; background: var(--bd); margin: 3px 0; }
-.ctx-hd   { font-size: 8px; color: var(--tx3); padding: 3px 10px; font-family: 'IBM Plex Mono', monospace; letter-spacing: .8px; text-transform: uppercase; }
+.ctx-hd   { font-size: 8px; color: var(--tx3); padding: 3px 10px; font-family: Archivo, system-ui, sans-serif; letter-spacing: .8px; text-transform: uppercase; }
 
 /* ── MODAL ── */
 .mo { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 500; display: flex; align-items: center; justify-content: center; }
@@ -326,7 +369,7 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 .mo-tt  { font-size: 12px; font-weight: 500; }
 .mo-bd  { padding: 16px; overflow-y: auto; flex: 1; }
 .mo-ft  { padding: 10px 16px; border-top: 1px solid var(--bd); display: flex; gap: 6px; justify-content: flex-end; flex-shrink: 0; }
-.fl { font-size: 8px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; letter-spacing: .5px; margin-bottom: 4px; display: block; text-transform: uppercase; }
+.fl { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; letter-spacing: .5px; margin-bottom: 4px; display: block; text-transform: uppercase; }
 .fi { width: 100%; background: var(--bg3); border: 1px solid var(--bd); color: var(--tx); padding: 6px 9px; border-radius: 3px; font-size: 11px; outline: none; }
 .fi:focus { border-color: var(--am); }
 .ff { margin-bottom: 10px; }
@@ -340,16 +383,16 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 /* ── AUTH / LOGIN ── */
 .auth-page  { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
 .auth-card  { width: 340px; background: var(--bg2); border: 1px solid var(--bd3); border-radius: 10px; padding: 28px; }
-.auth-logo  { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: var(--am); letter-spacing: 2px; margin-bottom: 3px; }
-.auth-sub   { font-size: 9px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; margin-bottom: 22px; }
+.auth-logo  { font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 600; color: var(--am); letter-spacing: 2px; margin-bottom: 3px; }
+.auth-sub   { font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; margin-bottom: 22px; }
 .auth-err   { background: var(--rdd); border: 1px solid rgba(238,104,104,.25); border-radius: 4px; padding: 8px 10px; font-size: 11px; color: var(--rd); margin-bottom: 12px; }
 .auth-sep   { height: 1px; background: var(--bd); margin: 12px 0; }
-.auth-footer{ margin-top: 12px; text-align: center; font-size: 9px; color: var(--tx4); font-family: 'IBM Plex Mono', monospace; }
+.auth-footer{ margin-top: 12px; text-align: center; font-size: 9px; color: var(--tx4); font-family: Archivo, system-ui, sans-serif; }
 .btn-full   { width: 100%; justify-content: center; padding: 8px 12px; font-size: 11px; }
 
 /* ── SIDEBAR FOOTER ── */
 .sidebar-footer { padding: 8px; border-top: 3px solid var(--bd); flex-shrink: 0; }
 
 /* ── CALCULATOR: back-link ── */
-.back-link { background: transparent; border: none; color: var(--tx3); font-size: 9px; font-family: 'IBM Plex Mono', monospace; cursor: pointer; padding: 0 0 4px; letter-spacing: .03em; transition: color .12s; }
+.back-link { background: transparent; border: none; color: var(--tx3); font-size: 9px; font-family: Archivo, system-ui, sans-serif; cursor: pointer; padding: 0 0 4px; letter-spacing: .03em; transition: color .12s; }
 .back-link:hover { color: var(--am); }

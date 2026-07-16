@@ -220,10 +220,10 @@ onMounted(loadUsers)
 .adm-table td { padding: 6px 12px; border-bottom: 1px solid var(--border); color: var(--tx2); vertical-align: middle; }
 .adm-table tr:hover td { background: var(--bg3); }
 
-.adm-email  { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--tx3); }
-.adm-date   { font-size: 9px; color: var(--tx3); font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
-.adm-entity { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--tx3); }
-.adm-action { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--accent); }
+.adm-email  { font-family: Archivo, system-ui, sans-serif; font-size: 10px; color: var(--tx3); }
+.adm-date   { font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; }
+.adm-entity { font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--tx3); }
+.adm-action { font-family: Archivo, system-ui, sans-serif; font-size: 10px; color: var(--accent); }
 
 .adm-role-sel { padding: 2px 5px; height: 24px; font-size: 10px; width: 140px; }
 

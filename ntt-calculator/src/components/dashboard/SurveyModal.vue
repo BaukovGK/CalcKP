@@ -341,7 +341,7 @@ function resetForm() {
 .sv-section        { margin-bottom: 14px; }
 .sv-section-title  {
   font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--accent); font-family: 'IBM Plex Mono', monospace;
+  color: var(--accent); font-family: Archivo, system-ui, sans-serif;
   margin-bottom: 8px; padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
 }
@@ -359,7 +359,7 @@ function resetForm() {
 .sv-type-btn:hover  { border-color: var(--accent); }
 .sv-type-btn.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .sv-type-code  {
-  font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 700;
   color: var(--accent);
 }
 .sv-type-label { font-size: 8px; color: var(--tx3); text-align: center; line-height: 1.2; }
