@@ -33,6 +33,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
     "@types/pg": "^8.18.0",
+    "exceljs": "^4.4.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   },
