@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/modernist-0176f9c8-9b4a-4f1e-9f23-217c44f1625c/styles.css">
+<script src="_ds/modernist-0176f9c8-9b4a-4f1e-9f23-217c44f1625c/_ds_bundle.js"></script>
+<style>
+html{--bg:#1d1c1b;--panel:#242220;--panel2:#2b2927;--cellbg:#201f1e;--line:#3a3733;--line2:#4c4841;
+--text:#f3f2f2;--muted:#a8a29a;--faint:#736e66;
+--acc:#ec3013;--acc-bg:rgba(236,48,19,.12);--blue:#5f9ae8;--blue-bg:rgba(95,154,232,.12);
+--amber:#d9a544;--amber-bg:rgba(217,165,68,.12);--green:#5fb87a;--green-bg:rgba(95,184,122,.12)}
+html[data-theme="light"]{--bg:#f3f2f2;--panel:#fbfaf9;--panel2:#eceae8;--cellbg:#ffffff;--line:#d9d6d2;--line2:#b9b5af;
+--text:#201e1d;--muted:#6b6660;--faint:#98938c;
+--acc:#ec3013;--acc-bg:rgba(236,48,19,.07);--blue:#2f6fce;--blue-bg:rgba(47,111,206,.08);
+--amber:#9a6f14;--amber-bg:rgba(190,145,40,.14);--green:#2e8b57;--green-bg:rgba(46,139,87,.10)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-body,Archivo,system-ui,sans-serif)}
+a{color:var(--blue)}a:hover{color:var(--text)}
+input,button{font:inherit;color:inherit}
+button{cursor:pointer;text-align:left;border-radius:0}
+input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line2)}
+@keyframes tot-pulse{from{color:var(--acc)}}
+</style>
+</helmet>
+
+<div data-screen-label="Конфигуратор расчёта" style="height:100vh;min-width:1000px;display:flex;flex-direction:column;font-size:12.5px;overflow:hidden">
+
+  <!-- ================= TOPBAR ================= -->
+  <div style="display:flex;align-items:center;gap:12px;padding:9px 16px;background:var(--panel);border-bottom:2px solid var(--line2);flex:none">
+    <div style="min-width:0">
+      <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:430px">Расчёт: КНС 3000×11900 <span style="color:var(--faint);font-weight:400">· Заказчик АО «ГК «ЕКС»</span></div>
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap"><a href="Опросный лист v2.dc.html">← Опросный лист</a> · заявка 2406-118</div>
+    </div>
+    <span style="{{ statusStyle }}">{{ statusText }}</span>
+    <sc-if value="{{ hasProblems }}" hint-placeholder-val="{{ false }}">
+      <button onClick="{{ onProblemsClick }}" title="показать только проблемные строки" style="display:flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line2);padding:4px 10px;color:var(--muted);font-size:11.5px" style-hover="border-color:var(--amber);color:var(--text)">{{ problemsText }}</button>
+    </sc-if>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <span style="font-size:11px;color:var(--faint)">прайс НН v2 от 20.05</span>
+      <button onClick="{{ onExport }}" style="background:transparent;border:1px solid var(--line2);padding:5px 11px;color:var(--muted);font-size:11.5px" style-hover="color:var(--text)">Экспорт ▾</button>
+      <button onClick="{{ onTheme }}" title="переключить тему" style="background:transparent;border:1px solid var(--line2);padding:5px 9px;color:var(--muted);font-size:11.5px" style-hover="color:var(--text)">{{ themeIcon }}</button>
+      <sc-if value="{{ isCalc }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ onSubmit }}" title="{{ submitTitle }}" style="{{ submitStyle }}">На проверку</button>
+      </sc-if>
+      <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ onReturn }}" style="background:transparent;border:1px solid var(--line2);padding:5px 11px;color:var(--muted);font-size:11.5px" style-hover="color:var(--text)">↩ Вернуть в CALC</button>
+        <button onClick="{{ onApprove }}" style="background:var(--green);border:1px solid var(--green);padding:5px 13px;color:#10160f;font-weight:700;font-size:11.5px">Утвердить</button>
+      </sc-if>
+      <sc-if value="{{ isApproved }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ onReopen }}" style="background:transparent;border:1px solid var(--line2);padding:5px 11px;color:var(--muted);font-size:11.5px" style-hover="color:var(--text)">Новая версия</button>
+      </sc-if>
+    </div>
+  </div>
+
+  <sc-if value="{{ isApproved }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--green-bg);border-bottom:1px solid var(--line);color:var(--green);font-size:11.5px">
+      <span style="font-weight:700">Расчёт утверждён — снапшот создан</span><span style="color:var(--muted)">таблица заморожена, редактирование недоступно</span>
+    </div>
+  </sc-if>
+
+  <!-- ================= FILTER BAR ================= -->
+  <div style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap">
+    <input value="{{ searchVal }}" onChange="{{ onSearch }}" placeholder="Поиск по наименованию…" style="width:200px;max-width:200px;flex:none;background:var(--cellbg);border:1px solid var(--line2);padding:4px 10px;font-size:11.5px;color:var(--text)">
+    <span style="width:1px;height:18px;background:var(--line2);margin:0 4px"></span>
+    <sc-for list="{{ stateChips }}" as="c" hint-placeholder-count="3">
+      <button onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button>
+    </sc-for>
+    <sc-if value="{{ filtersActive }}" hint-placeholder-val="{{ false }}">
+      <button onClick="{{ onClearFilters }}" style="background:transparent;border:none;color:var(--blue);font-size:11px;padding:2px 6px;text-decoration:underline">сбросить ✕</button>
+    </sc-if>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted)">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" checked="{{ showGhosts }}" onChange="{{ onGhostsToggle }}">выключенные</label>
+      <span>показано <b style="color:var(--text);font-variant-numeric:tabular-nums">{{ shownCount }}</b> из <span style="font-variant-numeric:tabular-nums">{{ totalCount }}</span></span>
+    </div>
+  </div>
+
+  <!-- ================= MAIN GRID ================= -->
+  <div style="flex:1;display:grid;grid-template-columns:224px minmax(0,1fr) 264px;min-height:0">
+
+    <!-- ===== TREE ===== -->
+    <div style="background:var(--panel);border-right:2px solid var(--line2);overflow:auto;padding:6px 0">
+      <div style="padding:4px 12px 6px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Сборки</div>
+      <sc-for list="{{ treeGroups }}" as="t" hint-placeholder-count="7">
+        <div onClick="{{ t.onNav }}" style="{{ t.style }}" style-hover="background:var(--panel2)">
+          <span onClick="{{ t.onToggle }}" title="включить / выключить сборку" style="{{ t.chkStyle }}"></span>
+          <span style="{{ t.nameStyle }}">{{ t.name }}</span>
+          <sc-if value="{{ t.badgeRed }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;font-weight:700;color:var(--acc);border:1px solid var(--acc);padding:0 5px">{{ t.badgeRed }}</span></sc-if>
+          <sc-if value="{{ t.badgeAmb }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;font-weight:700;color:var(--amber);border:1px solid var(--amber);padding:0 5px">{{ t.badgeAmb }}</span></sc-if>
+          <span style="margin-left:auto;font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;text-decoration:{{ t.sumDecor }}">{{ t.sumShort }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- ===== ESTIMATE ===== -->
+    <div style="display:flex;flex-direction:column;min-width:0;min-height:0">
+      <div ref="{{ listRef }}" onScroll="{{ onListScroll }}" style="flex:1;overflow:auto;position:relative">
+        <div style="min-width:820px">
+        <div style="position:sticky;top:0;z-index:4;display:grid;grid-template-columns:104px minmax(180px,1fr) 96px 52px 96px 100px 168px;gap:8px;padding:5px 12px;border-bottom:2px solid var(--line2);background:var(--panel);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)">
+          <span>Категория</span><span>Наименование</span><span style="text-align:right">Кол-во</span><span>ЕИ</span><span style="text-align:right">Цена ₽</span><span style="text-align:right">Сумма ₽</span><span></span>
+        </div>
+        <sc-for list="{{ visGroups }}" as="g" hint-placeholder-count="4">
+          <div>
+            <div ref="{{ g.headerRef }}" style="{{ g.headerStyle }}">
+              <span onClick="{{ g.onCollapse }}" style="cursor:pointer;color:var(--faint);width:14px;text-align:center">{{ g.caret }}</span>
+              <span onClick="{{ g.onToggle }}" title="включить / выключить сборку" style="{{ g.chkStyle }}"></span>
+              <b style="{{ g.nameStyle }}">{{ g.name }}</b>
+              <sc-if value="{{ g.badgeRed }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:700;color:var(--acc);background:var(--acc-bg);border:1px solid var(--acc);padding:0 6px">● {{ g.badgeRed }} без цены</span></sc-if>
+              <sc-if value="{{ g.badgeAmb }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:700;color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber);padding:0 6px">⚠ {{ g.badgeAmb }} конфликт</span></sc-if>
+              <sc-if value="{{ g.offNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;color:var(--faint)">выключена — не входит в итог</span></sc-if>
+              <span style="margin-left:auto;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;text-decoration:{{ g.sumDecor }}">{{ g.sumText }}</span>
+            </div>
+            <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                  <div>
+                    <sc-if value="{{ r.isSub }}" hint-placeholder-val="{{ false }}">
+                      <div ref="{{ r.subRef }}" style="display:flex;align-items:center;gap:6px;padding:3px 12px 3px 30px;background:var(--panel);border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)"><span style="color:var(--faint)">└</span>{{ r.label }}<span style="margin-left:auto;font-variant-numeric:tabular-nums;font-size:10.5px">{{ r.sumText }}</span></div>
+                    </sc-if>
+                    <sc-if value="{{ r.isRow }}" hint-placeholder-val="{{ true }}">
+                      <div><div style="{{ r.rowStyle }}">
+                        <span title="{{ r.cat }}" style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid var(--line2);padding:1px 6px;justify-self:start;max-width:100%">{{ r.catShort }}</span>
+                        <span style="display:block;min-width:0">
+                          <span title="{{ r.nameTitle }}" style="{{ r.nameStyle }}">{{ r.name }}</span>
+                        </span>
+                        <span style="display:flex;align-items:center;justify-content:flex-end;gap:1px;min-width:0">
+                          <sc-if value="{{ r.qtyOvr }}" hint-placeholder-val="{{ false }}">
+                            <button onClick="{{ r.qtyReset }}" title="{{ r.qtyResetTitle }}" style="flex:none;background:transparent;border:none;color:var(--blue);font-size:12px;padding:0 2px;line-height:1" style-hover="color:var(--text)">↺</button>
+                          </sc-if>
+                          <input data-cell="{{ r.qtyCell }}" value="{{ r.qtyVal }}" onChange="{{ r.qtyChange }}" onFocus="{{ r.qtyFocus }}" onBlur="{{ r.qtyBlur }}" onKeyDown="{{ r.qtyKey }}" disabled="{{ r.locked }}" title="{{ r.qtyTitle }}" style="{{ r.qtyStyle }}">
+                        </span>
+                        <span style="color:var(--muted);font-size:11px">{{ r.unit }}</span>
+                        <span style="display:flex;align-items:center;justify-content:flex-end;gap:1px;min-width:0">
+                          <sc-if value="{{ r.priceOvr }}" hint-placeholder-val="{{ false }}">
+                            <button onClick="{{ r.priceReset }}" title="{{ r.priceResetTitle }}" style="flex:none;background:transparent;border:none;color:var(--blue);font-size:12px;padding:0 2px;line-height:1" style-hover="color:var(--text)">↺</button>
+                          </sc-if>
+                          <input data-cell="{{ r.priceCell }}" value="{{ r.priceVal }}" onChange="{{ r.priceChange }}" onFocus="{{ r.priceFocus }}" onBlur="{{ r.priceBlur }}" onKeyDown="{{ r.priceKey }}" disabled="{{ r.locked }}" placeholder="{{ r.pricePlaceholder }}" title="{{ r.priceTitle }}" style="{{ r.priceStyle }}">
+                        </span>
+                        <span style="{{ r.sumStyle }}">{{ r.sumText }}</span>
+                        <span style="display:flex;align-items:center;gap:6px;min-width:0">
+                          <sc-if value="{{ r.isConflict }}" hint-placeholder-val="{{ false }}">
+                            <span style="font-size:10px;color:var(--amber);white-space:nowrap" title="ОЛ изменился: расчётное значение уехало из-под override">было {{ r.conflictCalc }}</span>
+                            <button onClick="{{ r.onKeep }}" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-size:10px;padding:1px 7px" style-hover="background:var(--amber-bg)">Оставить моё</button>
+                            <button onClick="{{ r.onDrop }}" style="background:transparent;border:1px solid var(--line2);color:var(--muted);font-size:10px;padding:1px 7px" style-hover="color:var(--text)">Принять новое</button>
+                          </sc-if>
+                          <sc-if value="{{ r.noteText }}" hint-placeholder-val="{{ false }}">
+                            <span style="{{ r.noteStyle }}">{{ r.noteText }}</span>
+                          </sc-if>
+                          <sc-if value="{{ r.isCustom }}" hint-placeholder-val="{{ false }}">
+                            <button onClick="{{ r.onRemove }}" title="удалить строку" style="margin-left:auto;background:transparent;border:none;color:var(--faint);font-size:13px;padding:0 4px" style-hover="color:var(--acc)">✕</button>
+                          </sc-if>
+                        </span>
+                      </div></div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+        </div>
+        <div style="padding:8px 12px;display:flex;gap:8px">
+          <button onClick="{{ onAddCatalog }}" style="background:transparent;border:1px dashed var(--line2);padding:5px 12px;color:var(--muted);font-size:11.5px" style-hover="color:var(--text)">+ Компонент из каталога…</button>
+          <button onClick="{{ onAddFree }}" style="background:transparent;border:1px dashed var(--line2);padding:5px 12px;color:var(--muted);font-size:11.5px" style-hover="color:var(--text)">+ Свободная строка</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== TOTALS ===== -->
+    <div style="background:var(--panel);border-left:2px solid var(--line2);overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:2px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">Итоги</span>
+        <span style="display:flex;gap:4px;align-items:center;font-size:10.5px;color:var(--muted)">корпусов
+          <input value="{{ tirageVal }}" onChange="{{ onTirage }}" style="width:36px;text-align:right;font-variant-numeric:tabular-nums;background:var(--cellbg);border:1px solid var(--line2);padding:1px 6px;font-size:11px;color:var(--text)">
+        </span>
+      </div>
+      <sc-for list="{{ buckets }}" as="b" hint-placeholder-count="5">
+        <div style="display:flex;justify-content:space-between;gap:8px;padding:2.5px 0;font-size:12px">
+          <span style="color:var(--muted)">{{ b.label }}</span>
+          <span style="font-variant-numeric:tabular-nums">{{ b.val }}</span>
+        </div>
+      </sc-for>
+      <div style="border-top:2px solid var(--line2);margin-top:6px;padding-top:8px;display:flex;justify-content:space-between;gap:8px;font-weight:700">
+        <span>Себестоимость</span>
+        <span style="font-variant-numeric:tabular-nums">{{ costEl }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0">
+        <span style="color:var(--muted)">Наценка ✎</span>
+        <input value="{{ markupVal }}" onChange="{{ onMarkup }}" disabled="{{ locked }}" style="width:60px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;background:var(--cellbg);border:1px solid var(--line2);padding:2px 7px;color:var(--text)">
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:2px 0">
+        <span style="font-weight:700;font-size:13px">ЦЕНА ПРОДАЖИ</span>
+        <span style="font-variant-numeric:tabular-nums;font-weight:700;font-size:15px">{{ saleEl }}</span>
+      </div>
+      <sc-if value="{{ multiTirage }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)"><span>{{ perNLabel }}</span><span style="font-variant-numeric:tabular-nums">{{ saleNText }}</span></div>
+      </sc-if>
+      <div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px">
+        <span style="color:var(--muted)">Рентабельность</span>
+        <span style="{{ rentStyle }}">{{ rentText }}</span>
+      </div>
+      <div style="margin-top:auto;padding-top:12px;font-size:10.5px;color:var(--faint);line-height:1.6">Синее значение — override, ↺ возвращает расчётное. ФОТ-спутники пересчитываются от массы родителя.
+        <div style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px;display:grid;grid-template-columns:auto 1fr;gap:2px 8px">
+          <span style="color:var(--muted)">↑ ↓</span><span>по строкам</span>
+          <span style="color:var(--muted)">← →</span><span>кол-во ⇄ цена</span>
+          <span style="color:var(--muted)">Enter</span><span>применить и вниз</span>
+          <span style="color:var(--muted)">Esc</span><span>отменить</span>
+          <span style="color:var(--muted)">1,55*2+2,88*2</span><span>арифметика</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- catalog modal -->
+  <sc-if value="{{ catalogOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ onCatalogClose }}" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh">
+      <div onClick="{{ stop }}" style="width:640px;max-height:70vh;display:flex;flex-direction:column;background:var(--panel);border:2px solid var(--line2);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:2px solid var(--line2)">
+          <span style="font-weight:700;font-size:13px">Компонент из каталога</span>
+          <span style="font-size:11px;color:var(--faint)">→ в сборку «{{ catalogGrpName }}»</span>
+          <button onClick="{{ onCatalogClose }}" style="margin-left:auto;background:transparent;border:none;color:var(--faint);font-size:15px" style-hover="color:var(--text)">✕</button>
+        </div>
+        <div style="padding:10px 16px;border-bottom:1px solid var(--line)">
+          <input value="{{ catalogQ }}" onChange="{{ onCatalogQ }}" placeholder="Поиск по прайсу НН v2…" style="width:100%;background:var(--cellbg);border:1px solid var(--line2);padding:6px 12px;font-size:12.5px;color:var(--text)">
+        </div>
+        <div style="flex:1;overflow:auto">
+          <sc-for list="{{ catalogItems }}" as="c" hint-placeholder-count="6">
+            <div onClick="{{ c.onAdd }}" style="display:grid;grid-template-columns:120px minmax(0,1fr) 44px 100px;gap:10px;align-items:center;padding:6px 16px;border-bottom:1px solid var(--line);cursor:pointer" style-hover="background:var(--panel2)">
+              <span style="font-size:10.5px;color:var(--faint);white-space:nowrap;overflow:hidden">{{ c.cat }}</span>
+              <span style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</span>
+              <span style="font-size:11px;color:var(--muted)">{{ c.unit }}</span>
+              <span style="text-align:right;font-variant-numeric:tabular-nums;font-size:11.5px">{{ c.price }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;font-size:12.5px;z-index:50">{{ toast }}</div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    theme: 'dark',
+    status: 'CALC',
+    overrides: { gilza: { qty: '0,5' }, izofom: { qty: '18,85' } },
+    conflictsOpen: { izofom: true },
+    groupsOff: {},
+    collapsed: {},
+    drafts: {},
+    focus: null,
+    search: '',
+    fStates: {},
+    showGhosts: true,
+    markup: '0,43',
+    tirage: '1',
+    activeGrp: 'korpus',
+    toast: null,
+    customRows: [],
+    catalogOpen: false, catalogQ: ''
+  };
+
+  GROUPS = [
+    { k: 'korpus', name: '1 · Корпус' },
+    { k: 'lestnica', name: '2 · Лестница' },
+    { k: 'perekrytie', name: '3 · Перекрытие и площадка' },
+    { k: 'vent', name: '4 · Вентиляционный стояк' },
+    { k: 'naporny', name: '5 · Напорный трубопровод' },
+    { k: 'krepezh', name: '6 · Крепёж' },
+    { k: 'oborud', name: '7 · Оборудование и арматура' }
+  ];
+
+  ROWS = [
+    { id: 'truba', g: 'korpus', s: 'Обечайка корпуса', cat: 'Собственное производство', name: 'Труба СК/НПС-К 3000-0,1-10000', unit: 'м', q: 11.6, p: null, note: 'указать цену' },
+    { id: 'tvv', g: 'korpus', s: 'Обечайка корпуса', cat: 'Собственное производство', name: 'Придание изделию товарного вида', unit: 'чел. ч', q: 26.8, p: 1207.8 },
+    { id: 'dno', g: 'korpus', s: 'Днище', cat: 'Собственное производство', name: 'Механическое формованное дно', unit: 'кг', q: 262.8, p: 214.4 },
+    { id: 'fot_dno', g: 'korpus', s: 'Днище', cat: 'ФОТ', name: 'ФОТ', unit: 'чел. ч', p: 1207.8, sat: true, parent: 'dno', k: 0.28 },
+    { id: 'lamin', g: 'korpus', s: 'Днище', cat: 'Собственное производство', name: 'Ламинирование дна к фальшполу', unit: 'кг', q: 78.9, p: 310.2 },
+    { id: 'fot_lamin', g: 'korpus', s: 'Днище', cat: 'ФОТ', name: 'ФОТ', unit: 'чел. ч', p: 1207.8, sat: true, parent: 'lamin', k: 0.56 },
+    { id: 'gilza', g: 'korpus', s: 'Патрубок входящий Ø400', cat: 'Собственное производство', name: 'Стеклокомпозитная гильза Ø400', unit: 'шт', q: 1, p: 12400 },
+    { id: 'bolt', g: 'korpus', s: 'Патрубок входящий Ø400', cat: 'Метизы', name: 'Болт М16-6gх80.58.12Х18Н10Т ГОСТ 7798-70', unit: 'шт', q: 32, p: 96 },
+    { id: 'izofom', g: 'korpus', s: 'Теплоизоляция', cat: 'Прочие материалы', name: 'Изофом ППЭ ОР 15 1,5х40', unit: 'м²', q: 17.2, p: 890 },
+
+    { id: 'lest', g: 'lestnica', cat: 'Собственное производство', name: 'Лестница стеклопластиковая Л-11,6', unit: 'шт', q: 1, p: 68400 },
+    { id: 'lest_krep', g: 'lestnica', cat: 'Метизы', name: 'Крепление лестницы, комплект', unit: 'шт', q: 6, p: 1240 },
+    { id: 'fot_lest', g: 'lestnica', cat: 'ФОТ', name: 'ФОТ монтажа лестницы', unit: 'чел. ч', q: 4.2, p: 1207.8 },
+
+    { id: 'perekr', g: 'perekrytie', cat: 'Собственное производство', name: 'Перекрытие формованное', unit: 'кг', q: 184.6, p: 214.4 },
+    { id: 'plosch', g: 'perekrytie', cat: 'Собственное производство', name: 'Площадка обслуживания', unit: 'шт', q: 1, p: 112000 },
+    { id: 'luk', g: 'perekrytie', cat: 'Собственное производство', name: 'Крышка люка 1000×1000 с запором', unit: 'шт', q: 2, p: 46800 },
+    { id: 'fot_perekr', g: 'perekrytie', cat: 'ФОТ', name: 'ФОТ монтажа перекрытия', unit: 'чел. ч', q: 8.6, p: 1207.8 },
+
+    { id: 'ventst', g: 'vent', cat: 'Собственное производство', name: 'Вентиляционный стояк DN100 стеклокомпозит', unit: 'м', q: 2.4, p: 3840 },
+    { id: 'zont', g: 'vent', cat: 'Прочие материалы', name: 'Зонт вентиляционный DN100', unit: 'шт', q: 1, p: 2150 },
+    { id: 'fot_vent', g: 'vent', cat: 'ФОТ', name: 'ФОТ монтажа вентстояка', unit: 'чел. ч', q: 2.1, p: 1207.8 },
+
+    { id: 'truboprovod', g: 'naporny', cat: 'Металлопрокат', name: 'Трубопровод напорный DN150 нерж.', unit: 'м', q: 14.2, p: 9640 },
+    { id: 'otvod', g: 'naporny', cat: 'Металлопрокат', name: 'Отвод 90° DN150 нерж.', unit: 'шт', q: 8, p: 4350 },
+    { id: 'flanec', g: 'naporny', cat: 'Метизы', name: 'Фланец 50-10-01-1-В-12Х18Н10Т ГОСТ 33259-2015', unit: 'шт', q: 8, p: 4120 },
+    { id: 'mufta', g: 'naporny', cat: 'Собственное производство', name: 'Муфта соединительная СК', unit: 'шт', q: 2, p: 16500 },
+    { id: 'fot_nap', g: 'naporny', cat: 'ФОТ', name: 'ФОТ обвязки и гидроиспытаний', unit: 'чел. ч', q: 31.2, p: 1207.8 },
+
+    { id: 'shpilka', g: 'krepezh', cat: 'Метизы', name: 'Шпилька М16×80 с гайками, А2', unit: 'шт', q: 64, p: 118 },
+    { id: 'anker', g: 'krepezh', cat: 'Метизы', name: 'Анкер химический М16, комплект', unit: 'шт', q: 24, p: 640 },
+    { id: 'homut', g: 'krepezh', cat: 'Метизы', name: 'Хомут DN150 нерж.', unit: 'шт', q: 12, p: 860 },
+
+    { id: 'pump', g: 'oborud', cat: 'Насосы/АТМ', name: 'Насос VSL.100.55.4.5.0D', unit: 'шт', q: 3, p: 980000 },
+    { id: 'zdv', g: 'oborud', cat: 'Запорная арматура', name: 'Задвижка чугунная клиновая DN150', unit: 'шт', q: 5, p: 25000 },
+    { id: 'popl', g: 'oborud', cat: 'Датчики', name: 'Поплавковый выключатель, кабель 10 м', unit: 'шт', q: 4, p: 6000 },
+    { id: 'shkaf', g: 'oborud', cat: 'Шкафы', name: 'Шкаф управления АШУ40-011-54-21У', unit: 'шт', q: 1, p: 480000 },
+    { id: 'pnr', g: 'oborud', cat: 'Прочие затраты', name: 'Пуско-наладочные работы', unit: 'компл', q: 1, p: 148000 },
+    { id: 'dost', g: 'oborud', cat: 'Прочие затраты', name: 'Доставка до объекта', unit: 'компл', q: 1, p: 96000 }
+  ];
+
+  CATALOG = [
+    { cat: 'Запорная арматура', name: 'Задвижка чугунная клиновая DN100', unit: 'шт', p: 42300 },
+    { cat: 'Запорная арматура', name: 'Затвор дисковый поворотный DN150', unit: 'шт', p: 28400 },
+    { cat: 'Насосы/АТМ', name: 'Насос VSL.80.30.4.2.0D', unit: 'шт', p: 612000 },
+    { cat: 'Насосы/АТМ', name: 'Автоматическая трубная муфта DN150', unit: 'шт', p: 114000 },
+    { cat: 'Датчики', name: 'Датчик гидростатический уровня 0–10 м', unit: 'шт', p: 42600 },
+    { cat: 'Датчики', name: 'Датчик давления 0–16 бар', unit: 'шт', p: 18400 },
+    { cat: 'Метизы', name: 'Болт М20-6gх90.58 ГОСТ 7798-70', unit: 'шт', p: 148 },
+    { cat: 'Металлопрокат', name: 'Лист нерж. 3 мм AISI 304', unit: 'кг', p: 486 },
+    { cat: 'Прочие материалы', name: 'Изофом ППЭ ОР 20 1,5х40', unit: 'м²', p: 1120 },
+    { cat: 'Прочие материалы', name: 'Герметик анаэробный, картридж', unit: 'шт', p: 640 },
+    { cat: 'Шкафы', name: 'Шкаф управления АШУ25-011-54-21У', unit: 'шт', p: 386000 },
+    { cat: 'Прочие затраты', name: 'Шеф-монтаж, смена', unit: 'компл', p: 32000 }
+  ];
+
+  CAT_SHORT = {
+    'Собственное производство': 'Собств. пр-во', 'ФОТ': 'ФОТ', 'Метизы': 'Метизы',
+    'Металлопрокат': 'Металлопрокат', 'Запорная арматура': 'Запорн. арм.', 'Насосы/АТМ': 'Насосы/АТМ',
+    'Датчики': 'Датчики', 'Шкафы': 'Шкафы', 'Прочие материалы': 'Проч. матер.', 'Прочие затраты': 'Проч. затраты'
+  };
+
+  hdrEls = {}; subEls = {}; listEl = null;
+
+  componentDidMount() { document.documentElement.setAttribute('data-theme', this.state.theme); }
+
+  evalNum(s) {
+    s = String(s).replace(/\s|\u00A0|\u202F/g, '').replace(/,/g, '.');
+    if (!s || !/^[0-9+\-*/().]+$/.test(s)) return null;
+    try { const v = Function('"use strict";return(' + s + ')')(); return (typeof v === 'number' && isFinite(v)) ? v : null; } catch (e) { return null; }
+  }
+  fmtI(n) { return Math.round(n).toLocaleString('ru-RU'); }
+  fmtP(n) { return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  fmtQ(n) { return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }); }
+  groupDraft(v) {
+    const s = String(v).replace(/[\s\u00A0\u202F]/g, '');
+    const m = s.match(/^(\d+)([,.]\d*)?$/);
+    if (!m) return v;
+    return Number(m[1]).toLocaleString('ru-RU') + (m[2] || '');
+  }
+
+  calcQty(r, byId) {
+    if (r.sat && r.parent && byId[r.parent]) return byId[r.parent].qty * r.k;
+    return r.q;
+  }
+
+  resolveAll(rows) {
+    const st = this.state;
+    const byId = {};
+    // pass 1: non-satellites
+    rows.filter(r => !r.sat).forEach(r => {
+      const ov = st.overrides[r.id] || {};
+      const qty = ov.qty != null ? (this.evalNum(ov.qty) ?? r.q) : r.q;
+      const price = ov.price != null ? this.evalNum(ov.price) : r.p;
+      byId[r.id] = { r, qty, price, ovQty: ov.qty != null, ovPrice: ov.price != null };
+    });
+    // pass 2: satellites
+    rows.filter(r => r.sat).forEach(r => {
+      const ov = st.overrides[r.id] || {};
+      const calcQ = this.calcQty(r, byId);
+      const qty = ov.qty != null ? (this.evalNum(ov.qty) ?? calcQ) : calcQ;
+      const price = ov.price != null ? this.evalNum(ov.price) : r.p;
+      byId[r.id] = { r, qty, price, ovQty: ov.qty != null, ovPrice: ov.price != null, calcQ };
+    });
+    return rows.map(r => {
+      const x = byId[r.id];
+      const missing = x.price == null;
+      const off = !!st.groupsOff[r.g];
+      return { ...x, missing, off, sum: missing ? 0 : x.qty * x.price, conflict: !!st.conflictsOpen[r.id] };
+    });
+  }
+
+  matches(res) {
+    const st = this.state, r = res.r;
+    if (st.search && !r.name.toLowerCase().includes(st.search.toLowerCase())) return false;
+    const s = st.fStates;
+    if (s.noprice || s.conflict || s.override) {
+      if (res.off) return false;
+      const hit = (s.noprice && res.missing) || (s.conflict && res.conflict) || (s.override && (res.ovQty || res.ovPrice));
+      if (!hit) return false;
+    }
+    if (!st.showGhosts && res.off) return false;
+    return true;
+  }
+
+  commit(id, field, calc) {
+    const st = this.state, key = id + '.' + field;
+    const draft = st.drafts[key];
+    if (draft === undefined) { this.setState({ focus: null }); return; }
+    const v = this.evalNum(draft);
+    const overrides = { ...st.overrides, [id]: { ...(st.overrides[id] || {}) } };
+    if (v == null || (calc != null && Math.abs(v - calc) < 1e-9)) {
+      delete overrides[id][field];
+    } else {
+      overrides[id][field] = draft.trim();
+    }
+    if (!Object.keys(overrides[id]).length) delete overrides[id];
+    const drafts = { ...st.drafts }; delete drafts[key];
+    this.setState({ overrides, drafts, focus: null });
+  }
+
+  toastMsg(m) { clearTimeout(this._tt); this.setState({ toast: m }); this._tt = setTimeout(() => this.setState({ toast: null }), 2400); }
+
+  navTo(el) {
+    if (!el || !this.listEl) return;
+    const c = this.listEl;
+    const top = el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop;
+    c.scrollTo({ top: Math.max(0, top - 26), behavior: 'smooth' });
+  }
+
+  cellStyle(res, field, focused, locked) {
+    const s = {
+      width: field === 'qty' ? '78px' : '86px', flex: '0 1 auto', minWidth: '36px',
+      textAlign: 'right', fontSize: '11.5px',
+      fontVariantNumeric: 'tabular-nums', background: 'var(--cellbg)', border: '1px solid var(--line2)',
+      borderRadius: 0, padding: '2px 7px', color: 'var(--text)'
+    };
+    const ov = field === 'qty' ? res.ovQty : res.ovPrice;
+    if (ov) {
+      s.color = 'var(--blue)'; s.borderColor = 'var(--blue)';
+      s.background = 'radial-gradient(circle at calc(100% - 4px) 4px, var(--blue) 2px, transparent 2.6px), var(--cellbg)';
+    }
+    if (field === 'price' && res.missing) { s.borderColor = 'var(--acc)'; s.color = 'var(--acc)'; s.background = 'var(--cellbg)'; }
+    if (field === 'qty' && res.conflict) { s.borderColor = 'var(--amber)'; s.background = 'var(--amber-bg)'; }
+    if (res.r.sat) { s.borderStyle = 'dashed'; if (!ov) s.color = 'var(--muted)'; }
+    if (focused) s.boxShadow = '0 0 0 2px var(--blue-bg), 0 0 0 1px var(--blue)';
+    if (locked || res.off) s.opacity = .55;
+    return s;
+  }
+
+  renderVals() {
+    const st = this.state;
+    const locked = st.status === 'REVIEW' || st.status === 'APPROVED';
+    const ALL = [...this.ROWS, ...st.customRows];
+    const resolved = this.resolveAll(ALL);
+
+    const reds = resolved.filter(x => !x.off && x.missing);
+    const ambs = resolved.filter(x => !x.off && x.conflict);
+    const ovrs = resolved.filter(x => !x.off && (x.ovQty || x.ovPrice));
+
+    const bucketOf = x => {
+      if (x.r.id === 'truba' || x.r.id === 'mufta') return 'Труба, муфта';
+      if (x.r.cat === 'ФОТ') return 'Работы, ФОТ';
+      if (x.r.cat === 'Собственное производство') return 'Формовка';
+      if (x.r.cat === 'Прочие затраты') return 'Прочие затраты';
+      return 'Материалы на закупку';
+    };
+    const bsum = { 'Материалы на закупку': 0, 'Труба, муфта': 0, 'Формовка': 0, 'Работы, ФОТ': 0, 'Прочие затраты': 0 };
+    resolved.forEach(x => { if (!x.off) bsum[bucketOf(x)] += x.sum; });
+    const cost = Object.values(bsum).reduce((a, b) => a + b, 0);
+    const markup = this.evalNum(st.markup) ?? 0.43;
+    const sale = Math.ceil(cost * (1 + markup) / 100) * 100;
+    const rent = sale > 0 ? (sale - cost) / sale * 100 : 0;
+
+    let shown = 0;
+    const mkRow = (res, idx) => {
+      const r = res.r, id = r.id;
+      const ghost = res.off;
+      const fq = st.focus === id + '.qty', fp = st.focus === id + '.price';
+      const dq = st.drafts[id + '.qty'], dp = st.drafts[id + '.price'];
+      const calcQ = r.sat ? res.calcQ : r.q;
+      const rowStyle = {
+        display: 'grid', gridTemplateColumns: '104px minmax(180px,1fr) 96px 52px 96px 100px 168px',
+        gap: '8px', alignItems: 'center', minHeight: '32px', padding: '0 12px',
+        borderBottom: '1px solid var(--line)',
+        background: res.missing && !ghost ? 'var(--acc-bg)' : (idx % 2 ? 'var(--panel)' : 'transparent'),
+        opacity: ghost ? .38 : 1
+      };
+      if (r.sat) rowStyle.paddingLeft = '30px';
+      const set = (key) => (e) => this.setState({ drafts: { ...this.state.drafts, [key]: this.groupDraft(e.target.value) } });
+      const focus = (key, cur) => () => this.setState({ focus: key, drafts: { ...this.state.drafts, [key]: cur } });
+      const keyNav = (id2, field) => (e) => {
+        const focusCell = (tid, tf) => {
+          const el = document.querySelector('input[data-cell="' + tid + '.' + tf + '"]');
+          if (el) { el.focus(); requestAnimationFrame(() => el.select && el.select()); return true; }
+          return false;
+        };
+        const order = this._navOrder || [];
+        const i = order.indexOf(id2);
+        if (e.key === 'Enter') { e.preventDefault(); if (i >= 0 && i < order.length - 1) focusCell(order[i + 1], field); else e.target.blur(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); if (i >= 0 && i < order.length - 1) focusCell(order[i + 1], field); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) focusCell(order[i - 1], field); }
+        else if (e.key === 'ArrowLeft' && field === 'price') { e.preventDefault(); focusCell(id2, 'qty'); }
+        else if (e.key === 'ArrowRight' && field === 'qty') { e.preventDefault(); focusCell(id2, 'price'); }
+        else if (e.key === 'Escape') { const d = { ...this.state.drafts }; delete d[id2 + '.' + field]; this.setState({ drafts: d, focus: null }); e.target.blur(); }
+      };
+      const ovExpr = (st.overrides[id] || {});
+      const rmOv = (field) => () => { const o = { ...this.state.overrides, [id]: { ...this.state.overrides[id] } }; delete o[id][field]; if (!Object.keys(o[id]).length) delete o[id]; this.setState({ overrides: o }); };
+      return {
+        isRow: true, isSub: false, key: id, rowStyle,
+        cat: r.cat, catShort: this.CAT_SHORT[r.cat] || r.cat,
+        name: r.name,
+        nameTitle: r.name + (r.sat ? ' — спутник: кол-во = масса родителя × ' + r.k : ''),
+        nameStyle: { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '12px', color: r.sat ? 'var(--muted)' : 'var(--text)', paddingLeft: r.sat ? '10px' : 0 },
+        unit: r.unit,
+        locked: locked || ghost,
+        qtyVal: fq ? (dq ?? '') : this.fmtQ(res.qty),
+        qtyChange: set(id + '.qty'),
+        qtyFocus: focus(id + '.qty', ovExpr.qty ?? String(res.qty).replace('.', ',')),
+        qtyBlur: () => this.commit(id, 'qty', calcQ),
+        qtyKey: keyNav(id, 'qty'), qtyCell: id + '.qty',
+        qtyStyle: this.cellStyle(res, 'qty', fq, locked),
+        qtyTitle: res.ovQty
+          ? ('override; расчётное: ' + this.fmtQ(calcQ) + (ovExpr.qty && this.evalNum(ovExpr.qty) != null ? ' · выражение: ' + ovExpr.qty : ''))
+          : ('ƒ расчёт из ОЛ' + (r.sat ? ' · масса × ' + r.k : '') + ': ' + this.fmtQ(calcQ ?? 0)),
+        qtyOvr: res.ovQty && !locked,
+        qtyReset: rmOv('qty'),
+        qtyResetTitle: '↺ вернуть расчётное ' + this.fmtQ(calcQ ?? 0),
+        priceVal: fp ? (dp ?? '') : (res.missing ? '' : this.fmtP(res.price)),
+        priceChange: set(id + '.price'),
+        priceFocus: focus(id + '.price', ovExpr.price ?? (res.missing ? '' : String(res.price).replace('.', ','))),
+        priceBlur: () => this.commit(id, 'price', r.p),
+        priceKey: keyNav(id, 'price'), priceCell: id + '.price',
+        priceStyle: this.cellStyle(res, 'price', fp, locked),
+        pricePlaceholder: res.missing ? 'цена?' : '',
+        priceTitle: res.ovPrice ? 'ручная цена' : (res.missing ? 'нет в прайсе НН v2 — введите договорную цену' : 'цена из прайса НН v2'),
+        priceOvr: res.ovPrice && !locked,
+        priceReset: rmOv('price'),
+        priceResetTitle: r.p == null ? '↺ убрать ручную цену (строка снова красная)' : '↺ вернуть цену прайса',
+        sumText: res.missing ? '—' : this.fmtI(res.sum),
+        sumStyle: { textAlign: 'right', fontSize: '11.5px', fontVariantNumeric: 'tabular-nums', color: res.missing ? 'var(--acc)' : (r.sat ? 'var(--muted)' : 'var(--text)') },
+        isConflict: res.conflict && !locked,
+        conflictCalc: this.fmtQ(r.q),
+        onKeep: () => { const c = { ...this.state.conflictsOpen }; delete c[id]; this.setState({ conflictsOpen: c }); this.toastMsg('Оставлено ваше значение: ' + this.fmtQ(res.qty) + ' ' + r.unit); },
+        onDrop: () => { const c = { ...this.state.conflictsOpen }; delete c[id]; const o = { ...this.state.overrides, [id]: { ...this.state.overrides[id] } }; delete o[id].qty; if (!Object.keys(o[id]).length) delete o[id]; this.setState({ conflictsOpen: c, overrides: o }); this.toastMsg('Принято новое расчётное: ' + this.fmtQ(r.q) + ' ' + r.unit); },
+        noteText: res.conflict ? '' : (res.missing && !ghost ? (r.note || 'указать цену') : (r.sat ? 'ФОТ · k=' + r.k : (r.custom ? 'вручную' : ''))),
+        noteStyle: { fontSize: '10.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: res.missing && !ghost ? 'var(--acc)' : 'var(--faint)' },
+        isCustom: !!r.custom && !locked,
+        onRemove: () => { this.setState({ customRows: this.state.customRows.filter(cr => cr.id !== id) }); this.toastMsg('Строка удалена'); }
+      };
+    };
+
+    const visGroups = [];
+    this._navOrder = [];
+    this.GROUPS.forEach(gr => {
+      const items = resolved.filter(x => x.r.g === gr.k);
+      const vis = items.filter(x => this.matches(x));
+      const anyFilter = st.search || Object.values(st.fStates).some(Boolean);
+      if (!vis.length && anyFilter) return;
+      const off = !!st.groupsOff[gr.k];
+      const gsum = items.reduce((a, x) => a + x.sum, 0);
+      const gRed = items.filter(x => !off && x.missing).length;
+      const gAmb = items.filter(x => !off && x.conflict).length;
+      const collapsed = !!st.collapsed[gr.k];
+      const rows = [];
+      let lastSub = null, idx = 0;
+      vis.forEach(x => {
+        if (x.r.s && x.r.s !== lastSub) {
+          lastSub = x.r.s;
+          const subSum = items.filter(y => y.r.s === x.r.s).reduce((a, y) => a + (off ? 0 : y.sum), 0);
+          rows.push({ isSub: true, isRow: false, key: gr.k + '|' + x.r.s, label: x.r.s, sumText: this.fmtI(subSum), subRef: (el) => { this.subEls[gr.k + '|' + x.r.s] = el; } });
+        }
+        rows.push(mkRow(x, idx++));
+        if (!collapsed && !locked && !x.off) this._navOrder.push(x.r.id);
+        shown++;
+      });
+      visGroups.push({
+        key: gr.k, name: gr.name,
+        headerRef: (el) => { this.hdrEls[gr.k] = el; },
+        headerStyle: {
+          position: 'sticky', top: '25px', zIndex: 2, display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '4px 12px', background: 'var(--panel2)', borderBottom: '1px solid var(--line2)',
+          fontSize: '12px', opacity: off ? .55 : 1
+        },
+        caret: collapsed ? '▸' : '▾',
+        onCollapse: () => this.setState({ collapsed: { ...st.collapsed, [gr.k]: !collapsed } }),
+        chkStyle: {
+          width: '13px', height: '13px', cursor: locked ? 'default' : 'pointer', flex: 'none',
+          border: '1.5px solid ' + (off ? 'var(--faint)' : 'var(--acc)'),
+          background: off ? 'transparent' : 'var(--acc)', boxShadow: off ? 'none' : 'inset 0 0 0 2.5px var(--panel2)'
+        },
+        onToggle: (e) => { e.stopPropagation(); if (locked) return; this.setState({ groupsOff: { ...st.groupsOff, [gr.k]: !off } }); },
+        nameStyle: { fontWeight: 700, color: off ? 'var(--muted)' : 'var(--text)' },
+        badgeRed: gRed || false, badgeAmb: gAmb || false,
+        offNote: off,
+        sumText: this.fmtI(gsum),
+        sumDecor: off ? 'line-through' : 'none',
+        open: !collapsed,
+        rows
+      });
+    });
+
+    const treeGroups = this.GROUPS.map(gr => {
+      const items = resolved.filter(x => x.r.g === gr.k);
+      const off = !!st.groupsOff[gr.k];
+      const gsum = items.reduce((a, x) => a + x.sum, 0);
+      const active = st.activeGrp === gr.k;
+      return {
+        key: gr.k, name: gr.name,
+        style: {
+          display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 12px', cursor: 'pointer',
+          borderLeft: '3px solid ' + (active ? 'var(--acc)' : 'transparent'),
+          background: active ? 'var(--panel2)' : 'transparent', opacity: off ? .5 : 1
+        },
+        nameStyle: { fontSize: '12px', fontWeight: active ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+        chkStyle: {
+          width: '13px', height: '13px', cursor: locked ? 'default' : 'pointer', flex: 'none',
+          border: '1.5px solid ' + (off ? 'var(--faint)' : 'var(--acc)'),
+          background: off ? 'transparent' : 'var(--acc)', boxShadow: off ? 'none' : 'inset 0 0 0 2.5px var(--panel)'
+        },
+        onToggle: (e) => { e.stopPropagation(); if (locked) return; this.setState({ groupsOff: { ...st.groupsOff, [gr.k]: !off } }); },
+        onNav: () => { this.setState({ activeGrp: gr.k, collapsed: { ...st.collapsed, [gr.k]: false } }); requestAnimationFrame(() => this.navTo(this.hdrEls[gr.k])); },
+        badgeRed: items.filter(x => !off && x.missing).length || false,
+        badgeAmb: items.filter(x => !off && x.conflict).length || false,
+        sumShort: gsum >= 1e6 ? (gsum / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' млн' : this.fmtI(gsum / 1000) + ' тыс',
+        sumDecor: off ? 'line-through' : 'none'
+      };
+    });
+
+    const stDefs = [
+      { k: 'noprice', label: '● без цены · ' + reds.length, color: 'var(--acc)', bg: 'var(--acc-bg)' },
+      { k: 'conflict', label: '⚠ конфликты · ' + ambs.length, color: 'var(--amber)', bg: 'var(--amber-bg)' },
+      { k: 'override', label: 'override · ' + ovrs.length, color: 'var(--blue)', bg: 'var(--blue-bg)' }
+    ];
+    const stateChips = stDefs.map(d => ({
+      key: d.k, label: d.label,
+      style: {
+        background: st.fStates[d.k] ? d.bg : 'transparent',
+        border: '1px solid ' + (st.fStates[d.k] ? d.color : 'var(--line2)'),
+        color: st.fStates[d.k] ? d.color : 'var(--muted)',
+        padding: '2.5px 10px', fontSize: '11px', whiteSpace: 'nowrap'
+      },
+      onClick: () => this.setState({ fStates: { ...st.fStates, [d.k]: !st.fStates[d.k] } })
+    }));
+    const filtersActive = !!(st.search || Object.values(st.fStates).some(Boolean));
+
+    const stColors = { DRAFT: 'var(--faint)', CALC: 'var(--blue)', REVIEW: 'var(--amber)', APPROVED: 'var(--green)' };
+    const canSubmit = reds.length === 0 && ambs.length === 0;
+    const problems = [];
+    if (reds.length) problems.push('● ' + reds.length + ' без цены');
+    if (ambs.length) problems.push('⚠ ' + ambs.length + ' конфликт');
+
+    const N = Math.max(1, Math.round(this.evalNum(st.tirage) ?? 1));
+
+    return {
+      statusText: st.status,
+      statusStyle: {
+        flex: 'none', fontSize: '10.5px', fontWeight: 700, letterSpacing: '.06em',
+        color: stColors[st.status], border: '1px solid ' + stColors[st.status], padding: '2px 9px'
+      },
+      hasProblems: problems.length > 0,
+      problemsText: problems.join(' · '),
+      onProblemsClick: () => this.setState({ fStates: { noprice: reds.length > 0, conflict: ambs.length > 0, override: false }, search: '' }),
+      onExport: () => this.toastMsg('Экспорт КП / Заявка — в следующей итерации'),
+      onTheme: () => { const t = st.theme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', t); this.setState({ theme: t }); },
+      themeIcon: st.theme === 'dark' ? '☀' : '☾',
+      isCalc: st.status === 'CALC' || st.status === 'DRAFT',
+      isReview: st.status === 'REVIEW',
+      isApproved: st.status === 'APPROVED',
+      onSubmit: () => {
+        if (!canSubmit) { this.toastMsg('Заблокировано: ' + problems.join(', ')); return; }
+        this.setState({ status: 'REVIEW' }); this.toastMsg('Расчёт отправлен на проверку');
+      },
+      submitTitle: canSubmit ? 'передать менеджеру' : ('заблокировано: ' + problems.join(', ')),
+      submitStyle: {
+        background: canSubmit ? 'var(--acc)' : 'var(--panel2)',
+        border: '1px solid ' + (canSubmit ? 'var(--acc)' : 'var(--line2)'),
+        color: canSubmit ? '#fff' : 'var(--faint)',
+        fontWeight: 700, padding: '5px 14px', fontSize: '11.5px',
+        cursor: canSubmit ? 'pointer' : 'not-allowed'
+      },
+      onReturn: () => { this.setState({ status: 'CALC' }); this.toastMsg('Возвращено инженеру в CALC'); },
+      onApprove: () => { this.setState({ status: 'APPROVED' }); this.toastMsg('Утверждено. Снапшот создан, расчёт заморожен'); },
+      onReopen: () => { this.setState({ status: 'CALC' }); this.toastMsg('Создана новая версия на основе снапшота'); },
+      searchVal: st.search,
+      onSearch: (e) => this.setState({ search: e.target.value }),
+      stateChips, filtersActive,
+      onClearFilters: () => this.setState({ search: '', fStates: {} }),
+      showGhosts: st.showGhosts,
+      onGhostsToggle: () => this.setState({ showGhosts: !st.showGhosts }),
+      shownCount: shown, totalCount: ALL.length,
+      treeGroups, visGroups,
+      listRef: (el) => { this.listEl = el; },
+      onListScroll: () => {
+        if (this._spy) return;
+        this._spy = requestAnimationFrame(() => {
+          this._spy = null;
+          if (!this.listEl) return;
+          const cTop = this.listEl.getBoundingClientRect().top;
+          let act = this.state.activeGrp;
+          for (const gr of this.GROUPS) {
+            const el = this.hdrEls[gr.k];
+            if (el && el.getBoundingClientRect().top - cTop <= 30) act = gr.k;
+          }
+          if (act !== this.state.activeGrp) this.setState({ activeGrp: act });
+        });
+      },
+      onAddCatalog: () => { if (locked) { this.toastMsg('Расчёт заблокирован'); return; } this.setState({ catalogOpen: true, catalogQ: '' }); },
+      onAddFree: () => {
+        if (locked) { this.toastMsg('Расчёт заблокирован'); return; }
+        const id = 'cr' + Date.now();
+        this.setState({ customRows: [...st.customRows, { id, g: st.activeGrp, cat: 'Прочие материалы', name: 'Новая позиция', unit: 'шт', q: 1, p: null, custom: true, note: 'указать цену' }] });
+        this.toastMsg('Строка добавлена в активную сборку — укажите цену');
+      },
+      catalogOpen: st.catalogOpen, catalogQ: st.catalogQ,
+      onCatalogQ: (e) => this.setState({ catalogQ: e.target.value }),
+      onCatalogClose: () => this.setState({ catalogOpen: false }),
+      catalogItems: this.CATALOG
+        .filter(c => !st.catalogQ || c.name.toLowerCase().includes(st.catalogQ.toLowerCase()) || c.cat.toLowerCase().includes(st.catalogQ.toLowerCase()))
+        .map((c, i) => ({
+          key: i, name: c.name, cat: this.CAT_SHORT[c.cat] || c.cat, unit: c.unit, price: this.fmtP(c.p),
+          onAdd: () => {
+            const id = 'cr' + Date.now();
+            this.setState({ customRows: [...this.state.customRows, { id, g: this.state.activeGrp, cat: c.cat, name: c.name, unit: c.unit, q: 1, p: c.p, custom: true }], catalogOpen: false });
+            this.toastMsg('«' + c.name + '» добавлено');
+          }
+        })),
+      catalogGrpName: (this.GROUPS.find(g => g.k === st.activeGrp) || {}).name || '',
+      stop: (e) => e.stopPropagation(),
+      buckets: Object.keys(bsum).map(k => ({ key: k, label: k, val: this.fmtI(bsum[k]) })),
+      costEl: React.createElement('span', { key: 'c' + Math.round(cost), style: { animation: 'tot-pulse .8s ease' } }, this.fmtI(cost)),
+      saleEl: React.createElement('span', { key: 's' + sale, style: { animation: 'tot-pulse .8s ease' } }, this.fmtI(sale)),
+      markupVal: st.markup,
+      onMarkup: (e) => this.setState({ markup: e.target.value }),
+      locked,
+      tirageVal: st.tirage,
+      onTirage: (e) => this.setState({ tirage: e.target.value }),
+      multiTirage: N >= 2,
+      perNLabel: 'за ' + N + ' корп.',
+      saleNText: this.fmtI(sale * N),
+      rentText: rent.toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' %',
+      rentStyle: { fontVariantNumeric: 'tabular-nums', color: rent >= 25 ? 'var(--green)' : (rent >= 15 ? 'var(--amber)' : 'var(--acc)') },
+      toast: st.toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>

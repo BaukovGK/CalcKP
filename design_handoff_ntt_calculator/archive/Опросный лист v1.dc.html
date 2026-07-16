@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/modernist-0176f9c8-9b4a-4f1e-9f23-217c44f1625c/styles.css">
+<script src="_ds/modernist-0176f9c8-9b4a-4f1e-9f23-217c44f1625c/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:var(--color-bg);color:var(--color-text)}
+a{color:var(--color-accent-700)}a:hover{color:var(--color-accent)}
+input:focus-visible,button:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
+::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:var(--color-neutral-300)}
+</style>
+</helmet>
+
+<div data-screen-label="Опросный лист" style="height:100vh;min-width:960px;display:flex;flex-direction:column;font-family:var(--font-body);font-size:13px;overflow:hidden">
+
+  <!-- topbar -->
+  <div style="flex:none;display:flex;align-items:baseline;gap:14px;padding:12px 20px;border-bottom:2px solid var(--color-divider);background:var(--color-bg)">
+    <div style="font-family:var(--font-heading);font-weight:700;font-size:17px">Опросный лист — КНС</div>
+    <div style="font-size:12px;color:var(--color-neutral-600)">Проект ГКБ №52 · АО «ГК «ЕКС»</div>
+    <div style="margin-left:auto;display:flex;align-items:baseline;gap:14px">
+      <span style="font-size:12px;color:var(--color-neutral-600)">обязательных заполнено <b style="color:{{ reqColor }};font-variant-numeric:tabular-nums">{{ reqDone }} из {{ reqTotal }}</b></span>
+      <span style="font-size:11px;color:var(--color-neutral-500)">черновик сохранён {{ draftTime }}</span>
+      <a href="Калькулятор.dc.html" style="font-size:12px">→ Калькулятор</a>
+    </div>
+  </div>
+
+  <div style="flex:1;display:grid;grid-template-columns:200px minmax(0,1fr);min-height:0">
+
+    <!-- section nav -->
+    <div style="border-right:2px solid var(--color-divider);background:var(--color-bg);padding:10px 0;overflow:auto">
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+        <div onClick="{{ n.onNav }}" style="{{ n.style }}">
+          <span style="width:16px;color:{{ n.markColor }}">{{ n.mark }}</span>{{ n.label }}
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- form -->
+    <div ref="{{ formRef }}" style="overflow:auto;padding:0 24px 40px">
+
+      <!-- 1 -->
+      <div ref="{{ sec1Ref }}" style="font-family:var(--font-heading);font-weight:700;font-size:15px;border-bottom:2px solid var(--color-divider);padding:18px 0 6px;margin-bottom:12px">1 · Общие данные</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;max-width:760px">
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Заказчик <span style="color:var(--color-accent)">*</span></div><input value="{{ f.zakazchik.val }}" onChange="{{ f.zakazchik.on }}" class="input" style="width:100%"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Объект <span style="color:var(--color-accent)">*</span></div><input value="{{ f.obekt.val }}" onChange="{{ f.obekt.on }}" class="input" style="width:100%"></div>
+        <div style="display:grid;grid-template-columns:1fr 90px;gap:12px">
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Тип изделия <span style="color:var(--color-accent)">*</span></div><input value="{{ f.tip.val }}" onChange="{{ f.tip.on }}" class="input" style="width:100%"></div>
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Тираж, шт</div><input value="{{ f.tirazh.val }}" onChange="{{ f.tirazh.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px;gap:12px">
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Перекачиваемая среда <span style="color:var(--color-accent)">*</span></div><input value="{{ f.sreda.val }}" onChange="{{ f.sreda.on }}" class="input" style="width:100%"></div>
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Темп., °C</div><input value="{{ f.temp.val }}" onChange="{{ f.temp.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+        </div>
+      </div>
+
+      <!-- 2 -->
+      <div ref="{{ sec2Ref }}" style="font-family:var(--font-heading);font-weight:700;font-size:15px;border-bottom:2px solid var(--color-divider);padding:22px 0 6px;margin-bottom:12px">2 · Корпус</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;max-width:760px">
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Диаметр корпуса, мм <span style="color:var(--color-accent)">*</span></div><input value="{{ f.diametr.val }}" onChange="{{ f.diametr.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Давление PN / жёсткость SN</div><input value="{{ f.pnsn.val }}" onChange="{{ f.pnsn.on }}" class="input" style="width:100%"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Отм. подводящего лотка, м <span style="color:var(--color-accent)">*</span></div><input value="{{ f.lotok.val }}" onChange="{{ f.lotok.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Отм. поверхности земли, м</div><input value="{{ f.zemlya.val }}" onChange="{{ f.zemlya.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+      </div>
+      <!-- live: глубина -->
+      <div style="max-width:760px;margin-top:12px;border:2px solid var(--color-accent);background:var(--color-accent-100);padding:12px 14px">
+        <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-accent-700);margin-bottom:6px">Live-расчёт по введённым отметкам</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span>Рекомендуемая глубина подземной части: <b style="font-size:15px;font-variant-numeric:tabular-nums">Нподз = {{ npodzRec }} мм</b></span>
+          <span style="color:var(--color-neutral-600);font-size:12px">габарит {{ gabarit }}</span>
+          <button onClick="{{ onAcceptNpodz }}" class="btn btn-primary" style="padding:4px 12px;font-size:12px">{{ acceptLabel }}</button>
+          <span style="font-size:12px;color:var(--color-neutral-600)">или своя, мм:</span>
+          <input value="{{ f.npodz.val }}" onChange="{{ f.npodz.on }}" class="input" style="width:100px;text-align:right;font-variant-numeric:tabular-nums">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;max-width:760px;margin-top:12px">
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Уровень грунтовых вод, м</div><input value="{{ f.ugv.val }}" onChange="{{ f.ugv.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Нагрузка на площадке</div><input value="{{ f.nagruzka.val }}" onChange="{{ f.nagruzka.on }}" class="input" style="width:100%"></div>
+        <div style="display:flex;gap:24px">
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Лестница</div><span class="seg"><button onClick="{{ tgLestOn }}" class="seg-opt" aria-pressed="{{ lestYes }}">да</button><button onClick="{{ tgLestOff }}" class="seg-opt" aria-pressed="{{ lestNo }}">нет</button></span></div>
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Площадка обсл.</div><span class="seg"><button onClick="{{ tgPloshOn }}" class="seg-opt" aria-pressed="{{ ploshYes }}">да</button><button onClick="{{ tgPloshOff }}" class="seg-opt" aria-pressed="{{ ploshNo }}">нет</button></span></div>
+        </div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Люки, шт</div><input value="{{ f.lyuki.val }}" onChange="{{ f.lyuki.on }}" class="input" style="width:90px;text-align:right;font-variant-numeric:tabular-nums"></div>
+      </div>
+
+      <!-- 3 -->
+      <div ref="{{ sec3Ref }}" style="font-family:var(--font-heading);font-weight:700;font-size:15px;border-bottom:2px solid var(--color-divider);padding:22px 0 6px;margin-bottom:12px">3 · Смола и ламинат</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;max-width:760px">
+        <div style="grid-column:1/-1"><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Тип смолы <span style="color:var(--color-accent)">*</span></div><input value="{{ f.smola.val }}" onChange="{{ f.smola.on }}" class="input" style="width:100%"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Гелькоут (внутр.)</div><input value="{{ f.gelkout.val }}" onChange="{{ f.gelkout.on }}" class="input" style="width:100%"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Хим. стойкость</div><input value="{{ f.himstoyk.val }}" onChange="{{ f.himstoyk.on }}" class="input" style="width:100%"></div>
+      </div>
+
+      <!-- 4 -->
+      <div ref="{{ sec4Ref }}" style="font-family:var(--font-heading);font-weight:700;font-size:15px;border-bottom:2px solid var(--color-divider);padding:22px 0 6px;margin-bottom:12px">4 · Патрубки</div>
+      <div style="max-width:760px">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 80px 100px 110px 30px;gap:8px;font-size:11px;color:var(--color-neutral-600);padding-bottom:4px;border-bottom:1px solid var(--color-neutral-300)">
+          <span>назначение</span><span>DN</span><span>отметка, м</span><span>фланец</span><span></span>
+        </div>
+        <sc-for list="{{ patrubki }}" as="p" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 80px 100px 110px 30px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--color-neutral-200)">
+            <input value="{{ p.naz }}" onChange="{{ p.onNaz }}" class="input" style="width:100%">
+            <input value="{{ p.dn }}" onChange="{{ p.onDn }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums">
+            <input value="{{ p.otm }}" onChange="{{ p.onOtm }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums">
+            <input value="{{ p.flanec }}" onChange="{{ p.onFlanec }}" class="input" style="width:100%">
+            <button onClick="{{ p.onDel }}" title="удалить" style="background:none;border:none;color:var(--color-neutral-500);cursor:pointer;font-size:14px">✕</button>
+          </div>
+        </sc-for>
+        <button onClick="{{ onAddPatrubok }}" class="btn btn-secondary" style="margin-top:8px;padding:4px 12px;font-size:12px">+ Патрубок</button>
+      </div>
+
+      <!-- 5 -->
+      <div ref="{{ sec5Ref }}" style="font-family:var(--font-heading);font-weight:700;font-size:15px;border-bottom:2px solid var(--color-divider);padding:22px 0 6px;margin-bottom:12px">5 · Насосное оборудование</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;max-width:760px">
+        <div>
+          <div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Расход <span style="color:var(--color-accent)">*</span></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input value="{{ rashodVal }}" onChange="{{ onRashod }}" class="input" style="width:110px;text-align:right;font-variant-numeric:tabular-nums">
+            <span class="seg">
+              <sc-for list="{{ unitBtns }}" as="u" hint-placeholder-count="3"><button onClick="{{ u.onClick }}" class="seg-opt" aria-pressed="{{ u.on }}">{{ u.label }}</button></sc-for>
+            </span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Напор, м <span style="color:var(--color-accent)">*</span></div><input value="{{ f.napor.val }}" onChange="{{ f.napor.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Схема (раб+рез) <span style="color:var(--color-accent)">*</span></div><input value="{{ f.shema.val }}" onChange="{{ f.shema.on }}" class="input" style="width:100%"></div>
+        </div>
+        <div style="grid-column:1/-1"><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Марка насоса</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input value="{{ f.marka.val }}" onChange="{{ f.marka.on }}" class="input" style="flex:1">
+            <span style="font-size:11px;color:var(--color-neutral-500)">подбор в гидравлическом расчёте</span>
+          </div>
+        </div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Уровень включения, м</div><input value="{{ f.urovVkl.val }}" onChange="{{ f.urovVkl.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Уровень отключения, м</div><input value="{{ f.urovOtkl.val }}" onChange="{{ f.urovOtkl.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+      </div>
+      <!-- live: объёмы -->
+      <div style="max-width:760px;margin-top:12px;border:2px solid var(--color-accent);background:var(--color-accent-100);padding:12px 14px">
+        <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-accent-700);margin-bottom:6px">Live-расчёт по расходу и уровням</div>
+        <div style="display:flex;gap:24px;font-variant-numeric:tabular-nums">
+          <span>Vэф <b style="font-size:15px">{{ vef }} м³</b></span>
+          <span>Vмин <b style="font-size:15px">{{ vmin }} м³</b></span>
+          <span>Vраб <b style="font-size:15px">{{ vrab }} м³</b></span>
+        </div>
+      </div>
+
+      <!-- 6 -->
+      <div ref="{{ sec6Ref }}" style="font-family:var(--font-heading);font-weight:700;font-size:15px;border-bottom:2px solid var(--color-divider);padding:22px 0 6px;margin-bottom:12px">6 · Доп. оборудование</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;max-width:760px">
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Задвижки DN150, шт</div><input value="{{ f.zadvizhki.val }}" onChange="{{ f.zadvizhki.on }}" class="input" style="width:90px;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Обратные клапаны, шт</div><input value="{{ f.klapany.val }}" onChange="{{ f.klapany.on }}" class="input" style="width:90px;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Поплавковые выключатели, шт</div><input value="{{ f.poplavki.val }}" onChange="{{ f.poplavki.on }}" class="input" style="width:90px;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Гидростатический датчик, шт</div><input value="{{ f.gidrostat.val }}" onChange="{{ f.gidrostat.on }}" class="input" style="width:90px;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Шкаф управления <span style="color:var(--color-accent)">*</span></div><input value="{{ f.shkaf.val }}" onChange="{{ f.shkaf.on }}" class="input" style="width:100%"></div>
+        <div style="display:flex;gap:24px">
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Корзина для мусора</div><span class="seg"><button onClick="{{ tgKorzOn }}" class="seg-opt" aria-pressed="{{ korzYes }}">да</button><button onClick="{{ tgKorzOff }}" class="seg-opt" aria-pressed="{{ korzNo }}">нет</button></span></div>
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Расходомер</div><span class="seg"><button onClick="{{ tgRashOn }}" class="seg-opt" aria-pressed="{{ rashmYes }}">да</button><button onClick="{{ tgRashOff }}" class="seg-opt" aria-pressed="{{ rashmNo }}">нет</button></span></div>
+        </div>
+      </div>
+
+      <!-- 7 -->
+      <div ref="{{ sec7Ref }}" style="font-family:var(--font-heading);font-weight:700;font-size:15px;border-bottom:2px solid var(--color-divider);padding:22px 0 6px;margin-bottom:12px">7 · Вентиляция / теплоизоляция</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;max-width:760px">
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Вентиляция</div><span class="seg"><button onClick="{{ tgVentEst }}" class="seg-opt" aria-pressed="{{ ventEst }}">естественная</button><button onClick="{{ tgVentPrin }}" class="seg-opt" aria-pressed="{{ ventPrin }}">принудительная</button></span></div>
+        <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">DN вентстояка</div><input value="{{ f.dnVent.val }}" onChange="{{ f.dnVent.on }}" class="input" style="width:90px;text-align:right;font-variant-numeric:tabular-nums"></div>
+        <div style="grid-column:1/-1"><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Теплоизоляция</div><span class="seg"><button onClick="{{ tgTeploOn }}" class="seg-opt" aria-pressed="{{ teploYes }}">да</button><button onClick="{{ tgTeploOff }}" class="seg-opt" aria-pressed="{{ teploNo }}">нет</button></span></div>
+      </div>
+      <sc-if value="{{ teploOn }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 20px;max-width:760px;margin-top:10px;padding:12px 14px;border-left:2px solid var(--color-divider);background:var(--color-neutral-100)">
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Глубина ТИ, мм</div><input value="{{ f.tiGlubina.val }}" onChange="{{ f.tiGlubina.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Материал</div><input value="{{ f.tiMaterial.val }}" onChange="{{ f.tiMaterial.on }}" class="input" style="width:100%"></div>
+          <div><div style="font-size:11px;color:var(--color-neutral-600);margin-bottom:3px">Толщина, мм</div><input value="{{ f.tiTolshina.val }}" onChange="{{ f.tiTolshina.on }}" class="input" style="width:100%;text-align:right;font-variant-numeric:tabular-nums"></div>
+        </div>
+      </sc-if>
+
+      <!-- footer -->
+      <div style="max-width:760px;border-top:2px solid var(--color-divider);margin-top:28px;padding-top:16px;display:flex;gap:12px;align-items:center">
+        <button onClick="{{ onSaveDraft }}" class="btn btn-secondary">Сохранить черновик</button>
+        <button onClick="{{ onCreate }}" class="btn btn-primary" title="{{ createTitle }}" style="{{ createStyle }}">Создать расчёт</button>
+        <span style="font-size:12px;color:var(--color-neutral-600)">{{ createHint }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- preview dialog -->
+  <sc-if value="{{ previewOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="dialog-backdrop" onClick="{{ onPreviewClose }}" style="position:fixed;inset:0;z-index:40;display:flex;align-items:flex-start;justify-content:center;padding-top:12vh">
+      <div class="dialog" onClick="{{ stop }}" style="width:480px">
+        <div class="dialog-title">Проверьте данные</div>
+        <div class="dialog-body">
+          <div style="font-weight:700;font-size:15px">{{ pvTitle }}</div>
+          <div style="font-size:12px;color:var(--color-neutral-600);font-variant-numeric:tabular-nums;margin-top:2px">{{ pvSub }}</div>
+          <div style="border-top:1px solid var(--color-neutral-300);margin:10px 0;padding-top:10px;font-size:13px;line-height:1.9">
+            <sc-for list="{{ pvBlocks }}" as="b" hint-placeholder-count="6"><div style="color:{{ b.color }}">{{ b.text }}</div></sc-for>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button onClick="{{ onPreviewClose }}" class="btn btn-ghost">← Вернуться</button>
+          <button onClick="{{ onConfirm }}" class="btn btn-primary">Создать расчёт → ~350 строк</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--color-text);color:var(--color-bg);padding:10px 18px;font-size:13px;z-index:50">{{ toast }}</div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    f: {
+      zakazchik: 'АО «ГК «ЕКС»', obekt: 'ГКБ №52, ул. Пехотная, 3', tip: 'КНС', tirazh: '1',
+      sreda: 'хозбытовые стоки', temp: '+18',
+      diametr: '3000', pnsn: '0,1 / SN10', lotok: '-7,850', zemlya: '0,000',
+      npodz: '', ugv: '-1,500', nagruzka: 'газон', lyuki: '2',
+      smola: 'полиэфирная Polylite 440-M888', gelkout: 'ISO NPG белый', himstoyk: 'стандарт',
+      napor: '12,9', shema: '2+1', marka: 'VSL.100.55.4.5.0D',
+      urovVkl: '-6,100', urovOtkl: '-7,300',
+      zadvizhki: '5', klapany: '3', poplavki: '4', gidrostat: '1', shkaf: 'НС-3, IP54', dnVent: '100',
+      tiGlubina: '', tiMaterial: 'ППУ', tiTolshina: '50'
+    },
+    rashod: '25,13', unit: 'l/s',
+    tg: { lest: true, plosh: true, korz: true, rashm: false, vent: 'est', teplo: false },
+    activeSec: 1, previewOpen: false, toast: null, draftTime: '14:02'
+  };
+
+  REQ = ['zakazchik', 'obekt', 'tip', 'sreda', 'diametr', 'lotok', 'smola', 'napor', 'shema', 'shkaf'];
+  SECS = [
+    { n: 1, label: 'Общие данные', req: ['zakazchik', 'obekt', 'tip', 'sreda'] },
+    { n: 2, label: 'Корпус', req: ['diametr', 'lotok'] },
+    { n: 3, label: 'Смола', req: ['smola'] },
+    { n: 4, label: 'Патрубки', req: [] },
+    { n: 5, label: 'Насосное обор.', req: ['napor', 'shema'] },
+    { n: 6, label: 'Доп. оборудование', req: ['shkaf'] },
+    { n: 7, label: 'Вентиляция / ТИ', req: [] }
+  ];
+
+  patrubki = [
+    { naz: 'подводящий', dn: '300', otm: '-7,850', flanec: 'сталь' },
+    { naz: 'напорный ×2', dn: '150', otm: '-1,200', flanec: 'нерж' },
+    { naz: 'вентиляция', dn: '100', otm: '+0,300', flanec: '—' },
+    { naz: 'кабельный ввод ×2', dn: '50', otm: '-0,500', flanec: '—' }
+  ];
+
+  secEls = {}; formEl = null;
+
+  num(s) { const v = parseFloat(String(s).replace(/\s/g, '').replace(',', '.')); return isFinite(v) ? v : null; }
+  fmt(n, d) { return n.toLocaleString('ru-RU', { minimumFractionDigits: d ?? 1, maximumFractionDigits: d ?? 1 }); }
+
+  toastMsg(m) { clearTimeout(this._tt); this.setState({ toast: m }); this._tt = setTimeout(() => this.setState({ toast: null }), 2400); }
+
+  setF(k, v) {
+    this.setState({ f: { ...this.state.f, [k]: v }, draftTime: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) });
+  }
+
+  renderVals() {
+    const st = this.state;
+    // field bindings
+    const f = {};
+    Object.keys(st.f).forEach(k => { f[k] = { val: st.f[k], on: (e) => this.setF(k, e.target.value) }; });
+
+    // live calcs
+    const lotok = this.num(st.f.lotok);
+    const npodzRecN = lotok != null ? Math.round((Math.abs(lotok) + 3.75) * 1000 / 50) * 50 : null;
+    const d = this.num(st.f.diametr);
+    const npodzUsed = this.num(st.f.npodz) ?? npodzRecN;
+    const gabarit = (d != null && npodzUsed != null) ? this.fmt(d, 0) + '×' + this.fmt(npodzUsed + 300, 0) + ' мм' : '—';
+
+    const qRaw = this.num(st.rashod);
+    const qLs = qRaw == null ? null : (st.unit === 'l/s' ? qRaw : st.unit === 'm3/h' ? qRaw / 3.6 : qRaw / 86.4);
+    const vef = qLs != null ? this.fmt(qLs * 1.13) : '—';
+    const vmin = qLs != null ? this.fmt(qLs * 0.246) : '—';
+    const vrab = qLs != null ? this.fmt(qLs * 0.784) : '—';
+
+    // required
+    const reqDone = this.REQ.filter(k => String(st.f[k]).trim() !== '').length;
+    const reqTotal = this.REQ.length;
+    const canCreate = reqDone === reqTotal;
+
+    // nav
+    const navItems = this.SECS.map(s => {
+      const done = s.req.length > 0 && s.req.every(k => String(st.f[k]).trim() !== '');
+      const missing = s.req.some(k => String(st.f[k]).trim() === '');
+      const active = st.activeSec === s.n;
+      return {
+        key: s.n, label: s.label,
+        mark: missing ? '●' : (done ? '✓' : String(s.n)),
+        markColor: missing ? 'var(--color-accent)' : (done ? 'var(--color-neutral-600)' : 'var(--color-neutral-500)'),
+        style: {
+          display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 14px', cursor: 'pointer',
+          fontSize: '13px', fontWeight: active ? 700 : 400,
+          borderLeft: '3px solid ' + (active ? 'var(--color-accent)' : 'transparent'),
+          background: active ? 'var(--color-neutral-100)' : 'transparent'
+        },
+        onNav: () => {
+          this.setState({ activeSec: s.n });
+          const el = this.secEls[s.n];
+          if (el && this.formEl) {
+            const c = this.formEl;
+            c.scrollTo({ top: el.getBoundingClientRect().top - c.getBoundingClientRect().top + c.scrollTop - 4, behavior: 'smooth' });
+          }
+        }
+      };
+    });
+
+    // seg toggles
+    const seg = (group, val) => (e) => { e.preventDefault(); this.setState({ tg: { ...st.tg, [group]: val } }); };
+
+    // патрубки
+    const patrubki = this.patrubki.map((p, i) => ({
+      key: i, naz: p.naz, dn: p.dn, otm: p.otm, flanec: p.flanec,
+      onNaz: (e) => { this.patrubki[i].naz = e.target.value; this.forceUpdate(); },
+      onDn: (e) => { this.patrubki[i].dn = e.target.value; this.forceUpdate(); },
+      onOtm: (e) => { this.patrubki[i].otm = e.target.value; this.forceUpdate(); },
+      onFlanec: (e) => { this.patrubki[i].flanec = e.target.value; this.forceUpdate(); },
+      onDel: () => { this.patrubki.splice(i, 1); this.forceUpdate(); }
+    }));
+
+    // units
+    const unitDefs = [{ k: 'l/s', label: 'л/с' }, { k: 'm3/h', label: 'м³/ч' }, { k: 'm3/day', label: 'м³/сут' }];
+    const unitBtns = unitDefs.map(u => ({
+      key: u.k, label: u.label, on: st.unit === u.k,
+      onClick: () => {
+        if (st.unit === u.k || qLs == null) { this.setState({ unit: u.k }); return; }
+        const conv = u.k === 'l/s' ? qLs : u.k === 'm3/h' ? qLs * 3.6 : qLs * 86.4;
+        this.setState({ unit: u.k, rashod: this.fmt(conv, 2).replace(/\u00A0/g, ' ') });
+      }
+    }));
+
+    // preview blocks
+    const pvBlocks = [
+      { text: '☑ Корпус (труба + дно + фальшпол)', on: true },
+      { text: '☑ Патрубки — ' + this.patrubki.length + ' поз.', on: true },
+      { text: '☑ Насосы ' + st.f.marka + ' — схема ' + st.f.shema, on: true },
+      { text: '☑ Запорная арматура — задвижки ' + st.f.zadvizhki + ' шт', on: true },
+      { text: '☑ Автоматика (шкаф ' + st.f.shkaf + ' + датчики)', on: true },
+      { text: (st.tg.teplo ? '☑ Теплоизоляция' : '☐ Теплоизоляция — выключена'), on: st.tg.teplo }
+    ].map((b, i) => ({ key: i, text: b.text, color: b.on ? 'var(--color-text)' : 'var(--color-neutral-500)' }));
+
+    return {
+      f,
+      reqDone, reqTotal,
+      reqColor: canCreate ? 'var(--color-text)' : 'var(--color-accent)',
+      draftTime: st.draftTime,
+      navItems,
+      formRef: (el) => { this.formEl = el; },
+      sec1Ref: (el) => { this.secEls[1] = el; }, sec2Ref: (el) => { this.secEls[2] = el; },
+      sec3Ref: (el) => { this.secEls[3] = el; }, sec4Ref: (el) => { this.secEls[4] = el; },
+      sec5Ref: (el) => { this.secEls[5] = el; }, sec6Ref: (el) => { this.secEls[6] = el; },
+      sec7Ref: (el) => { this.secEls[7] = el; },
+      // live
+      npodzRec: npodzRecN != null ? this.fmt(npodzRecN, 0) : '—',
+      gabarit,
+      acceptLabel: this.num(st.f.npodz) === npodzRecN && npodzRecN != null ? 'Принято ✓' : 'Принять',
+      onAcceptNpodz: () => { if (npodzRecN != null) { this.setF('npodz', this.fmt(npodzRecN, 0)); this.toastMsg('Нподз = ' + this.fmt(npodzRecN, 0) + ' мм принята в расчёт'); } },
+      vef, vmin, vrab,
+      rashodVal: st.rashod,
+      onRashod: (e) => this.setState({ rashod: e.target.value }),
+      unitBtns,
+      // toggles
+      tgLestOn: seg('lest', true), tgLestOff: seg('lest', false), lestYes: st.tg.lest, lestNo: !st.tg.lest,
+      tgPloshOn: seg('plosh', true), tgPloshOff: seg('plosh', false), ploshYes: st.tg.plosh, ploshNo: !st.tg.plosh,
+      tgKorzOn: seg('korz', true), tgKorzOff: seg('korz', false), korzYes: st.tg.korz, korzNo: !st.tg.korz,
+      tgRashOn: seg('rashm', true), tgRashOff: seg('rashm', false), rashmYes: st.tg.rashm, rashmNo: !st.tg.rashm,
+      tgVentEst: seg('vent', 'est'), tgVentPrin: seg('vent', 'prin'), ventEst: st.tg.vent === 'est', ventPrin: st.tg.vent === 'prin',
+      tgTeploOn: seg('teplo', true), tgTeploOff: seg('teplo', false), teploYes: st.tg.teplo, teploNo: !st.tg.teplo,
+      teploOn: st.tg.teplo,
+      // patrubki
+      patrubki,
+      onAddPatrubok: () => { this.patrubki.push({ naz: '', dn: '', otm: '', flanec: '' }); this.forceUpdate(); },
+      // footer
+      onSaveDraft: () => this.toastMsg('Черновик сохранён'),
+      onCreate: () => { if (!canCreate) { this.toastMsg('Заполните обязательные поля: осталось ' + (reqTotal - reqDone)); return; } this.setState({ previewOpen: true }); },
+      createStyle: canCreate ? {} : { opacity: .45, cursor: 'not-allowed' },
+      createTitle: canCreate ? 'превью перед созданием' : 'заполните все обязательные поля',
+      createHint: canCreate ? 'материализуется ~350 строк спецификации' : ('не заполнено обязательных: ' + (reqTotal - reqDone)),
+      // preview
+      previewOpen: st.previewOpen,
+      onPreviewClose: () => this.setState({ previewOpen: false }),
+      stop: (e) => e.stopPropagation(),
+      pvTitle: st.f.tip + ' ' + st.f.diametr + '×' + (npodzUsed != null ? this.fmt(npodzUsed + 300, 0) : '—') + ' мм',
+      pvSub: 'подземная часть ' + (npodzUsed != null ? this.fmt(npodzUsed, 0) : '—') + ' мм · ' + st.rashod + ' ' + (unitDefs.find(u => u.k === st.unit) || {}).label + ' · N=' + st.f.tirazh,
+      pvBlocks,
+      onConfirm: () => { this.setState({ previewOpen: false }); this.toastMsg('Расчёт создан — переходите в Калькулятор'); },
+      toast: st.toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Neucha&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f0eee9;font-family:system-ui,sans-serif}
+a{color:#2a78d6}a:hover{color:#1a5cb0}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+/* wireframe kit */
+.wf{font-family:system-ui,sans-serif;color:#2b2b2b;font-size:11px}
+.wf .hand{font-family:'Neucha',cursive}
+.wf .num{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace;font-size:10.5px}
+.wf-note{font-family:'Neucha',cursive;font-size:13px;color:#7a6a3a;background:#fdf6dc;border:1px dashed #c9b779;padding:2px 8px;border-radius:3px;display:inline-block}
+.wf-top{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:2px solid #2b2b2b;background:#fafafa}
+.wf-badge{border:1.5px solid #2b2b2b;border-radius:10px;padding:1px 8px;font-weight:700;font-size:10px}
+.wf-btn{border:1.5px solid #2b2b2b;background:#fff;border-radius:4px;padding:3px 9px;font-size:10.5px;white-space:nowrap}
+.wf-btn.pri{background:#2b2b2b;color:#fff}
+.wf-th{display:grid;gap:6px;padding:4px 8px;border-bottom:1.5px solid #2b2b2b;font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:#666}
+.wf-r{display:grid;gap:6px;padding:0 8px;align-items:center;min-height:26px;border-bottom:1px solid #e4e4e4}
+.wf-r>.name{white-space:nowrap;overflow:visible}
+.wf-cell{border:1px solid #cfcfcf;border-radius:3px;padding:1px 5px;text-align:right;background:#fff}
+.ovr{border-color:#2a78d6;color:#1a5cb0;position:relative}
+.ovr::after{content:'';position:absolute;top:1px;right:1px;width:5px;height:5px;border-radius:50%;background:#2a78d6}
+.red-r{background:#fdecec}
+.amb{border-color:#c98a1a;color:#8a5c00;background:#fdf3df}
+.ghost{opacity:.38}
+.sat{color:#777}
+.tree-i{display:flex;align-items:center;gap:6px;padding:4px 8px;border-bottom:1px solid #eee}
+.tree-i .sum{margin-left:auto}
+.chk{width:12px;height:12px;border:1.5px solid #2b2b2b;border-radius:2px;display:inline-block;flex:none}
+.chk.on{background:#2b2b2b;box-shadow:inset 0 0 0 2px #fff}
+.pill{border:1px solid #2b2b2b;border-radius:9px;padding:0 6px;font-size:9px}
+.tot-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t4">
+<div class="dv-thd"><a class="dv-tid" href="#t4">4</a><span class="dv-tname">Полный состав полей ОЛ — как в Excel-книге (все секции, ~40 полей)</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="4a">
+  <div class="dv-olabel"><a class="dv-oid" href="#4a">4a</a>Инвентарь анкеты: 7 секций · обязательные <span style="color:#c00">*</span> · зависимые поля с отступом · live-подсказки жёлтым</div>
+  <div class="dv-card wf" style="width:1180px">
+    <div class="wf-top">
+      <span class="hand" style="font-size:15px">Опросный лист · КНС · все поля</span>
+      <span style="margin-left:auto;font-size:9.5px;color:#888">заполнено 31 из 38 обязательных · черновик сохранён</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">
+
+      <!-- col 1 -->
+      <div style="border-right:1px solid #ddd;padding:10px 14px">
+        <div class="hand" style="font-size:13px;border-bottom:1.5px solid #2b2b2b;padding-bottom:4px;margin-bottom:8px">1 · Общие данные</div>
+        <div style="display:grid;gap:7px;font-size:10.5px">
+          <div><div style="font-size:9px;color:#666">Заказчик <span style="color:#c00">*</span></div><span class="wf-cell" style="display:block;text-align:left">АО «ГК «ЕКС»</span></div>
+          <div><div style="font-size:9px;color:#666">Объект <span style="color:#c00">*</span></div><span class="wf-cell" style="display:block;text-align:left">ГКБ №52, ул. Пехотная, 3</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Тип изделия <span style="color:#c00">*</span></div><span class="wf-cell" style="display:block;text-align:left">КНС ▾</span></div>
+            <div><div style="font-size:9px;color:#666">Тираж, шт</div><span class="wf-cell num" style="display:block;text-align:left">1</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Перекачиваемая среда <span style="color:#c00">*</span></div><span class="wf-cell" style="display:block;text-align:left">хозбытовые стоки ▾</span></div>
+            <div><div style="font-size:9px;color:#666">Температура, °C</div><span class="wf-cell num" style="display:block;text-align:left">+18</span></div>
+          </div>
+        </div>
+        <div class="hand" style="font-size:13px;border-bottom:1.5px solid #2b2b2b;padding-bottom:4px;margin:12px 0 8px">2 · Корпус</div>
+        <div style="display:grid;gap:7px;font-size:10.5px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Диаметр, мм <span style="color:#c00">*</span></div><span class="wf-cell num" style="display:block;text-align:left">3000 ▾</span></div>
+            <div><div style="font-size:9px;color:#666">Давление PN / жёсткость SN</div><span class="wf-cell" style="display:block;text-align:left">0,1 / SN10</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Отм. подводящего лотка, м <span style="color:#c00">*</span></div><span class="wf-cell num" style="display:block;text-align:left">−7,850</span></div>
+            <div><div style="font-size:9px;color:#666">Отм. поверхности земли, м</div><span class="wf-cell num" style="display:block;text-align:left">0,000</span></div>
+          </div>
+          <div style="background:#fdf6dc;border:1px dashed #c9b779;border-radius:4px;padding:5px 8px">
+            <span class="hand" style="font-size:11.5px;color:#7a6a3a">→ Нподз = <b>11 600 мм</b> · Ннадз = 300 мм · габарит 3000×11900</span>
+            <span class="wf-btn" style="font-size:9px;padding:1px 6px">Принять</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Уровень грунтовых вод, м</div><span class="wf-cell num" style="display:block;text-align:left">−1,500</span></div>
+            <div><div style="font-size:9px;color:#666">Нагрузка на площадке</div><span class="wf-cell" style="display:block;text-align:left">газон ▾</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Лестница</div><span class="pill" style="background:#2b2b2b;color:#fff">да</span> <span class="pill">нет</span></div>
+            <div><div style="font-size:9px;color:#666">Площадка обсл.</div><span class="pill" style="background:#2b2b2b;color:#fff">да</span> <span class="pill">нет</span></div>
+            <div><div style="font-size:9px;color:#666">Люки, шт</div><span class="wf-cell num" style="display:block;text-align:left">2</span></div>
+          </div>
+        </div>
+        <div class="hand" style="font-size:13px;border-bottom:1.5px solid #2b2b2b;padding-bottom:4px;margin:12px 0 8px">3 · Смола и ламинат</div>
+        <div style="display:grid;gap:7px;font-size:10.5px">
+          <div><div style="font-size:9px;color:#666">Тип смолы <span style="color:#c00">*</span></div><span class="wf-cell" style="display:block;text-align:left">полиэфирная Polylite 440-M888 ▾</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Гелькоут (внутр.)</div><span class="wf-cell" style="display:block;text-align:left">ISO NPG белый ▾</span></div>
+            <div><div style="font-size:9px;color:#666">Хим. стойкость</div><span class="wf-cell" style="display:block;text-align:left">стандарт ▾</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- col 2 -->
+      <div style="border-right:1px solid #ddd;padding:10px 14px">
+        <div class="hand" style="font-size:13px;border-bottom:1.5px solid #2b2b2b;padding-bottom:4px;margin-bottom:8px">4 · Патрубки</div>
+        <div style="font-size:9px;color:#666;margin-bottom:4px">таблица-повторитель: + добавить патрубок</div>
+        <div style="display:grid;grid-template-columns:auto 52px 62px 70px;gap:4px 8px;font-size:10px;align-items:center">
+          <span style="font-size:9px;color:#666">назначение</span><span style="font-size:9px;color:#666">DN</span><span style="font-size:9px;color:#666">отм., м</span><span style="font-size:9px;color:#666">фланец</span>
+          <span>подводящий</span><span class="wf-cell num">300</span><span class="wf-cell num">−7,850</span><span class="wf-cell">ст. ▾</span>
+          <span>напорный ×2</span><span class="wf-cell num">150</span><span class="wf-cell num">−1,200</span><span class="wf-cell">нерж ▾</span>
+          <span>вентиляция</span><span class="wf-cell num">100</span><span class="wf-cell num">+0,300</span><span class="wf-cell">— </span>
+          <span>кабельный ввод ×2</span><span class="wf-cell num">50</span><span class="wf-cell num">−0,500</span><span class="wf-cell">—</span>
+        </div>
+        <span class="wf-btn" style="margin-top:6px;display:inline-block;font-size:9.5px">+ патрубок</span>
+        <div class="hand" style="font-size:13px;border-bottom:1.5px solid #2b2b2b;padding-bottom:4px;margin:12px 0 8px">5 · Насосное оборудование</div>
+        <div style="display:grid;gap:7px;font-size:10.5px">
+          <div><div style="font-size:9px;color:#666">Расход <span style="color:#c00">*</span></div><div style="display:flex;gap:3px"><span class="wf-cell num" style="flex:1;text-align:left">25,13</span><span class="pill" style="background:#2b2b2b;color:#fff">л/с</span><span class="pill">м³/ч</span><span class="pill">м³/сут</span></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Напор, м <span style="color:#c00">*</span></div><span class="wf-cell num" style="display:block;text-align:left">12,9</span></div>
+            <div><div style="font-size:9px;color:#666">Схема (раб+рез) <span style="color:#c00">*</span></div><span class="wf-cell" style="display:block;text-align:left">2+1 ▾</span></div>
+          </div>
+          <div><div style="font-size:9px;color:#666">Марка насоса</div><div style="display:flex;gap:4px"><span class="wf-cell" style="flex:1;text-align:left;color:#1a5cb0">VSL.100.55.4.5.0D — из гидравлики</span><span class="wf-btn" style="font-size:9px">Гидравлика →</span></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">АТМ</div><span class="pill" style="background:#2b2b2b;color:#fff">да</span></div>
+            <div><div style="font-size:9px;color:#666">Направляющие</div><span class="pill" style="background:#2b2b2b;color:#fff">да</span></div>
+            <div><div style="font-size:9px;color:#666">Цепи, м</div><span class="wf-cell num" style="display:block;text-align:left">5</span></div>
+          </div>
+          <div style="background:#fdf6dc;border:1px dashed #c9b779;border-radius:4px;padding:5px 8px"><span class="hand" style="font-size:11.5px;color:#7a6a3a">→ Vэф 28,4 · Vмин 6,2 · Vраб 19,7 м³ — live при вводе расхода и уровней</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Уровень вкл., м</div><span class="wf-cell num" style="display:block;text-align:left">−6,100</span></div>
+            <div><div style="font-size:9px;color:#666">Уровень откл., м</div><span class="wf-cell num" style="display:block;text-align:left">−7,300</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- col 3 -->
+      <div style="padding:10px 14px">
+        <div class="hand" style="font-size:13px;border-bottom:1.5px solid #2b2b2b;padding-bottom:4px;margin-bottom:8px">6 · Доп. оборудование</div>
+        <div style="display:grid;gap:7px;font-size:10.5px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Задвижки DN150, шт</div><span class="wf-cell num" style="display:block;text-align:left">5</span></div>
+            <div><div style="font-size:9px;color:#666">Обратные клапаны, шт</div><span class="wf-cell num" style="display:block;text-align:left">3</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Корзина для мусора</div><span class="pill" style="background:#2b2b2b;color:#fff">да</span> <span class="pill">нет</span></div>
+            <div><div style="font-size:9px;color:#666">Расходомер</div><span class="pill">да</span> <span class="pill" style="background:#2b2b2b;color:#fff">нет</span></div>
+          </div>
+          <div><div style="font-size:9px;color:#666">Датчики уровня</div>
+            <div style="display:grid;grid-template-columns:1fr 60px;gap:4px;margin-top:2px">
+              <span>поплавковые, кабель 10 м</span><span class="wf-cell num">4 шт</span>
+              <span>гидростатический 0–10 м</span><span class="wf-cell num">1 шт</span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Шкаф управления <span style="color:#c00">*</span></div><span class="wf-cell" style="display:block;text-align:left">НС-3, IP54 ▾</span></div>
+            <div><div style="font-size:9px;color:#666">Обогрев шкафа</div><span class="pill" style="background:#2b2b2b;color:#fff">да</span> <span class="pill">нет</span></div>
+          </div>
+        </div>
+        <div class="hand" style="font-size:13px;border-bottom:1.5px solid #2b2b2b;padding-bottom:4px;margin:12px 0 8px">7 · Вентиляция / теплоизоляция</div>
+        <div style="display:grid;gap:7px;font-size:10.5px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div><div style="font-size:9px;color:#666">Вентиляция</div><span class="pill" style="background:#2b2b2b;color:#fff">естеств.</span> <span class="pill">принуд.</span></div>
+            <div><div style="font-size:9px;color:#666">DN вентстояка</div><span class="wf-cell num" style="display:block;text-align:left">100</span></div>
+          </div>
+          <div><div style="font-size:9px;color:#666">Теплоизоляция</div><span class="pill">да</span> <span class="pill" style="background:#2b2b2b;color:#fff">нет</span></div>
+          <div style="margin-left:10px;padding:5px 8px;border-left:2px dashed #bbb;color:#aaa;font-size:9.5px">глубина ТИ · материал · толщина · обогрев кабелем — раскрываются при «да»</div>
+        </div>
+        <div style="border-top:1.5px solid #2b2b2b;margin-top:12px;padding-top:10px">
+          <div style="display:flex;gap:8px"><span class="wf-btn" style="flex:1;text-align:center">Сохранить черновик</span><span class="wf-btn pri" style="flex:1;text-align:center">Создать расчёт →</span></div>
+          <div style="margin-top:6px"><span class="wf-note">кнопка недоступна, пока есть незаполненные <span style="color:#c00">*</span> — счётчик наверху ведёт к первому пустому</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</div>
+<p class="dv-next">Дальше: «интерактивный ОЛ: компоновка <a class="dv-oid" href="#3a">3a</a> или <a class="dv-oid" href="#3b">3b</a> с полями из <a class="dv-oid" href="#4a">4a</a>» · «поправить состав полей»</p>
+</section>
+
+<section class="dv-turn" id="t3">
+<div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">Опросный лист (визард): шаги · live-расчёты · прогрессивное раскрытие · финал</span></div>
+<div class="dv-opts">
+
+<!-- ===================== 3a ===================== -->
+<div class="dv-opt" id="3a">
+  <div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a>Модал-визард — шаги слева · live-расчёт закреплён справа · показан шаг «Корпус» с фирменным моментом</div>
+  <div class="dv-card wf" style="width:940px">
+    <div class="wf-top">
+      <span class="hand" style="font-size:15px">Новая единица оборудования · Проект ГКБ №52</span>
+      <span style="margin-left:auto;color:#888;font-size:9.5px">черновик сохранён 14:02</span>
+      <span style="font-size:13px;color:#999">✕</span>
+    </div>
+    <div style="display:grid;grid-template-columns:190px 1fr 240px">
+      <!-- steps -->
+      <div style="border-right:1.5px solid #2b2b2b;background:#fafafa;padding:8px 0">
+        <div class="tree-i" style="color:#2b7a2b"><b>✓</b> Общие данные</div>
+        <div class="tree-i" style="background:#eee;border-left:3px solid #2b2b2b"><b>2</b> Корпус</div>
+        <div class="tree-i" style="color:#999"><b>3</b> Смола</div>
+        <div class="tree-i" style="color:#999"><b>4</b> Патрубки</div>
+        <div class="tree-i" style="color:#999"><b>5</b> Насосное обор.</div>
+        <div class="tree-i" style="color:#999"><b>6</b> Доп. оборудование</div>
+        <div class="tree-i" style="color:#999"><b>7</b> Вентиляция / ТИ</div>
+        <div style="padding:8px"><span class="wf-note">шаги кликабельны,<br>незаполненные обязательные —<br>значок на шаге</span></div>
+      </div>
+      <!-- form -->
+      <div style="padding:12px 16px">
+        <div class="hand" style="font-size:15px;margin-bottom:10px">Корпус</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
+          <div><div style="font-size:9.5px;color:#666">Диаметр корпуса, мм <span style="color:#c00">*</span></div><span class="wf-cell num" style="display:block;text-align:left">3000</span></div>
+          <div><div style="font-size:9.5px;color:#666">Расход <span style="color:#c00">*</span></div><div style="display:flex;gap:4px"><span class="wf-cell num" style="flex:1;text-align:left">25,13</span><span class="pill" style="background:#2b2b2b;color:#fff">л/с</span><span class="pill">м³/ч</span><span class="pill">м³/сут</span></div></div>
+          <div><div style="font-size:9.5px;color:#666">Отметка подводящего лотка, м <span style="color:#c00">*</span></div><span class="wf-cell num" style="display:block;text-align:left">−7,850</span></div>
+          <div><div style="font-size:9.5px;color:#666">Отметка поверхности земли, м</div><span class="wf-cell num" style="display:block;text-align:left">0,000</span></div>
+        </div>
+        <!-- signature live block -->
+        <div style="margin-top:12px;border:2px solid #2b2b2b;border-radius:6px;background:#fdf6dc;padding:10px 12px">
+          <div style="display:flex;gap:14px;font-size:10.5px"><span>Vэф <b class="num">28,4 м³</b></span><span>Vмин <b class="num">6,2 м³</b></span><span>Vраб <b class="num">19,7 м³</b></span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <span>Рекомендуемая глубина подземной части: <b class="num" style="font-size:13px">Нподз = 11 600 мм</b></span>
+            <span class="wf-btn pri">Принять</span><span class="wf-btn">Ввести свою</span>
+          </div>
+          <div style="margin-top:4px"><span class="wf-note">пересчитывается при каждом вводе — фирменный момент, всегда на виду</span></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:14px">
+          <span class="wf-btn">← Назад</span><span class="wf-btn pri">Далее: Смола →</span>
+        </div>
+      </div>
+      <!-- live panel -->
+      <div style="border-left:1px solid #ccc;background:#fafafa;padding:10px 12px">
+        <div class="hand" style="font-size:13px">Изделие</div>
+        <div style="font-size:10.5px;line-height:1.7;color:#444">КНС <b class="num">3000×11900</b><br>подземная часть <b class="num">11 600</b><br>расход <b class="num">25,13 л/с</b></div>
+        <div style="border-top:1px solid #ccc;margin:8px 0;padding-top:8px;font-size:10px;color:#666">Включённые блоки:<br>☑ корпус ☑ патрубки<br>☑ насосы ☐ теплоизоляция</div>
+        <span class="wf-note">панель растёт по мере заполнения — превью будущего расчёта</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 3b ===================== -->
+<div class="dv-opt" id="3b">
+  <div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a>Одна длинная анкета — секции-якоря, live-подсказки inline у полей, прогрессивное раскрытие «нет» показано на Теплоизоляции</div>
+  <div class="dv-card wf" style="width:700px">
+    <div class="wf-top"><span class="hand" style="font-size:15px">Опросный лист · КНС</span><span style="margin-left:auto;font-size:9.5px;color:#888">заполнено 24 из 31 обязательных</span></div>
+    <div style="display:grid;grid-template-columns:150px 1fr">
+      <div style="border-right:1px solid #ccc;background:#fafafa;padding:6px 0;font-size:10.5px">
+        <div class="tree-i" style="color:#2b7a2b">✓ Общие</div>
+        <div class="tree-i" style="background:#eee;border-left:3px solid #2b2b2b">Корпус</div>
+        <div class="tree-i">Смола</div>
+        <div class="tree-i" style="color:#c00">Патрубки ●</div>
+        <div class="tree-i">Насосы</div>
+        <div class="tree-i">Вентиляция/ТИ</div>
+      </div>
+      <div style="padding:10px 14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px">
+          <div><div style="font-size:9.5px;color:#666">Приток, л/с <span style="color:#c00">*</span></div><span class="wf-cell num" style="display:block;text-align:left">25,13</span></div>
+          <div><div style="font-size:9.5px;color:#666">Уровень min, м</div><span class="wf-cell num" style="display:block;text-align:left">1,200</span></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:4px;font-size:10px;color:#7a6a3a"><span>→</span><span class="hand" style="font-size:12px">Vэф 28,4 · Vраб 19,7 — подсказка живёт прямо под полем</span></div>
+        <div style="border-top:1px solid #ddd;margin:10px 0;padding-top:8px">
+          <div style="display:flex;align-items:center;gap:10px"><b>Теплоизоляция</b><span class="pill">да</span><span class="pill" style="background:#2b2b2b;color:#fff">нет</span></div>
+          <div style="margin:6px 0 0 12px;padding:6px 10px;border-left:2px dashed #bbb;color:#aaa;font-size:10px">глубина ТИ, материал, толщина — свёрнуты флагом «нет»</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px"><b>Насосное оборудование</b><span class="pill" style="background:#2b2b2b;color:#fff">да</span><span class="pill">нет</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-top:6px">
+          <div><div style="font-size:9.5px;color:#666">Кол-во насосов</div><span class="wf-cell num" style="display:block;text-align:left">3 (2 раб + 1 рез)</span></div>
+          <div><div style="font-size:9.5px;color:#666">Марка</div><span class="wf-cell" style="display:block;text-align:left;color:#1a5cb0">из гидравлики: VSL.100.55…</span></div>
+        </div>
+        <div style="margin-top:10px"><span class="wf-note">Excel-привычка: всё на одной странице, скролл вместо шагов; счётчик обязательных сверху</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 3c ===================== -->
+<div class="dv-opt" id="3c">
+  <div class="dv-olabel"><a class="dv-oid" href="#3c">3c</a>Финальный шаг любого варианта — превью перед «Создать расчёт»</div>
+  <div class="dv-card wf" style="width:460px">
+    <div class="wf-top"><span class="hand" style="font-size:15px">Шаг 7 из 7 · Проверьте данные</span></div>
+    <div style="padding:12px 16px">
+      <div style="border:1.5px solid #2b2b2b;border-radius:6px;padding:10px 12px">
+        <div style="font-size:13px"><b>КНС 3000×11900 мм</b></div>
+        <div class="num" style="font-size:10.5px;color:#555;margin-top:2px">подземная часть 11 600 мм · 25,13 л/с · N=1</div>
+        <div style="border-top:1px solid #ddd;margin:8px 0;padding-top:8px;font-size:10.5px;line-height:1.8">
+          ☑ Корпус (труба + дно + фальшпол)<br>☑ Патрубки — 3 шт<br>☑ Насосы VSL.100.55.4.5.0D — 3 шт<br>☑ Запорная арматура<br>☑ Автоматика (шкаф + датчики)<br><span style="color:#aaa">☐ Теплоизоляция — выключена</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <span class="wf-btn">← Вернуться</span>
+        <span class="wf-btn pri" style="flex:1;text-align:center">Создать расчёт → материализуется ~350 строк</span>
+      </div>
+      <div style="margin-top:8px"><span class="wf-note">после создания — сразу в Калькулятор, красная труба уже ждёт цену</span></div>
+    </div>
+  </div>
+</div>
+
+</div>
+<p class="dv-next">Дальше: «интерактивный ОЛ из <a class="dv-oid" href="#3a">3a</a>» или «из <a class="dv-oid" href="#3b">3b</a>» · «поменять состав секций»</p>
+</section>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Развитие <a class="dv-oid" href="#1a">1a</a>: вся смета одной лентой + дерево-навигация + панель фильтров</span></div>
+<div class="dv-opts">
+
+<!-- ===================== 2a ===================== -->
+<div class="dv-opt" id="2a">
+  <div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Полная смета с группами · дерево = scroll-навигация (подсветка следит за прокруткой) · фильтры сверху</div>
+  <div class="dv-card wf" style="width:1160px">
+    <div class="wf-top">
+      <span class="hand" style="font-size:15px">КНС 3000×11900 · АО «ГК «ЕКС» · ГКБ №52, ул. Пехотная, 3</span>
+      <span class="wf-badge">CALC</span>
+      <span style="margin-left:auto;color:#888">прайс v14 от 02.07</span>
+      <span class="wf-btn">Снапшоты</span><span class="wf-btn">Экспорт ▾</span>
+      <span class="wf-btn pri" style="opacity:.5" title="блокировано">На проверку 🔒</span>
+    </div>
+    <!-- filter bar -->
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-bottom:1.5px solid #2b2b2b;background:#f4f4f4;flex-wrap:wrap">
+      <span class="wf-cell" style="text-align:left;width:180px;color:#999">🔍 поиск по наименованию…</span>
+      <span style="color:#999;font-size:9px">|</span>
+      <span class="pill" style="background:#2b2b2b;color:#fff">Все категории</span>
+      <span class="pill">Собств. пр-во</span><span class="pill">ФОТ</span><span class="pill">Метизы</span><span class="pill">Запорная арм.</span><span class="pill">Насосы/АТМ</span><span class="pill">Датчики</span><span class="pill">ещё 7 ▾</span>
+      <span style="color:#999;font-size:9px">|</span>
+      <span class="pill" style="border-color:#c00;color:#c00">без цены · 1</span>
+      <span class="pill" style="border-color:#c98a1a;color:#8a5c00">конфликты · 1</span>
+      <span class="pill" style="border-color:#2a78d6;color:#1a5cb0">override · 2</span>
+      <span style="margin-left:auto;font-size:9.5px;color:#666">группировка: <b>по сборкам ▾</b> · <span style="text-decoration:underline dotted">показ. выключенные ☑</span></span>
+    </div>
+    <div style="display:grid;grid-template-columns:200px 1fr 230px">
+      <!-- tree = scrollspy nav -->
+      <div style="border-right:1.5px solid #2b2b2b;background:#fafafa">
+        <div style="padding:6px 8px;display:flex;justify-content:space-between;align-items:baseline"><span class="hand">Сборки</span><span style="font-size:8.5px;color:#999">клик = скролл к группе</span></div>
+        <div class="tree-i"><span class="chk on"></span>Корпус <span class="pill" style="border-color:#c00;color:#c00">1</span><span class="sum num">4 120 т</span></div>
+        <div class="tree-i" style="background:#eee;border-left:3px solid #2b2b2b;padding-left:19px"><span style="color:#999">└</span> Дно + фальшпол</div>
+        <div class="tree-i"><span class="chk on"></span>Патрубки<span class="sum num">312 т</span></div>
+        <div class="tree-i"><span class="chk on"></span>Насосное обор.<span class="sum num">3 240 т</span></div>
+        <div class="tree-i"><span class="chk on"></span>Запорная арматура <span class="pill" style="border-color:#c98a1a;color:#8a5c00">1</span><span class="sum num">890 т</span></div>
+        <div class="tree-i"><span class="chk on"></span>Автоматика<span class="sum num">618 т</span></div>
+        <div class="tree-i ghost"><span class="chk"></span>Теплоизоляция<span class="sum num">—</span></div>
+        <div class="tree-i"><span class="chk on"></span>Пуско-наладка<span class="sum num">402 т</span></div>
+        <div style="padding:8px"><span class="wf-note">подсветка следит за<br>прокруткой (scrollspy);<br>флаг вкл/выкл — тут же</span></div>
+      </div>
+      <!-- full estimate, grouped -->
+      <div>
+        <div class="wf-th" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Категория</span><span>Наименование</span><span style="text-align:right">Кол-во</span><span>ЕИ</span><span style="text-align:right">Цена</span><span style="text-align:right">Сумма</span><span>Прим.</span></div>
+        <div style="padding:3px 8px;background:#e8e8e8;border-bottom:1px solid #bbb;display:flex;gap:8px;align-items:center;position:sticky;top:0"><b>Корпус</b><span class="pill" style="border-color:#c00;color:#c00">1 без цены</span><span class="num" style="margin-left:auto">4 120 213</span><span style="font-size:9px;color:#999">▾ свернуть</span></div>
+        <div class="wf-r red-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Труба СК/НПС-К 3000-0,1-10000</span><span class="wf-cell num">11,6</span><span>м</span><span class="wf-cell num" style="border-color:#c00;color:#c00">—</span><span class="num" style="text-align:right">0</span><span style="color:#c00">указать стоимость</span></div>
+        <div style="padding:2px 8px 2px 20px;background:#f1f1f1;border-bottom:1px solid #ddd;font-size:9.5px;color:#555;display:flex"><span>└ Дно + фальшпол</span><span class="num" style="margin-left:auto">169 713</span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Механическое формованное дно</span><span class="wf-cell num">262,8</span><span>кг</span><span class="wf-cell num">214,4</span><span class="num" style="text-align:right">56 344</span><span></span></div>
+        <div class="wf-r sat" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px;padding-left:26px"><span>ФОТ</span><span class="name">↳ ФОТ формовки дна</span><span class="wf-cell num" style="background:#f3f3f3">73,6</span><span>чел.ч</span><span class="wf-cell num" style="background:#f3f3f3">1 207,8</span><span class="num" style="text-align:right">88 894</span><span></span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Ламинирование дна к фальшполу</span><span class="wf-cell num">78,9</span><span>кг</span><span class="wf-cell num">310,2</span><span class="num" style="text-align:right">24 475</span><span></span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Придание изделию товарного вида</span><span class="wf-cell num ovr">26,8</span><span>чел.ч</span><span class="wf-cell num">1 207,8</span><span class="num" style="text-align:right">32 369</span><span style="color:#1a5cb0;font-size:9px">расчётное 24,0 · ↺</span></div>
+        <div style="padding:3px 8px;background:#e8e8e8;border-bottom:1px solid #bbb;display:flex;gap:8px;align-items:center"><b>Насосное оборудование</b><span class="num" style="margin-left:auto">3 240 000</span><span style="font-size:9px;color:#999">▾</span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Насосы/АТМ</span><span class="name">Насос VSL.100.55.4.5.0D</span><span class="wf-cell num">3</span><span>шт</span><span class="wf-cell num">980 000</span><span class="num" style="text-align:right">2 940 000</span><span></span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Датчики</span><span class="name">Поплавковый выключатель, кабель 10 м</span><span class="wf-cell num ovr">2*2</span><span>шт</span><span class="wf-cell num">6 000</span><span class="num" style="text-align:right">24 000</span><span></span></div>
+        <div style="padding:3px 8px;background:#e8e8e8;border-bottom:1px solid #bbb;display:flex;gap:8px;align-items:center"><b>Запорная арматура</b><span class="pill" style="border-color:#c98a1a;color:#8a5c00">1 конфликт</span><span class="num" style="margin-left:auto">890 400</span><span style="font-size:9px;color:#999">▾</span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Запорн. арм.</span><span class="name">Задвижка чугунная клиновая DN150</span><span class="wf-cell num amb">5 ⚠</span><span>шт</span><span class="wf-cell num">67 200</span><span class="num" style="text-align:right">336 000</span><span style="color:#8a5c00;font-size:9px">оставить / сбросить</span></div>
+        <div style="padding:3px 8px;background:#e8e8e8;border-bottom:1px solid #bbb;display:flex;gap:8px;align-items:center;opacity:.4"><span class="chk"></span><b>Теплоизоляция</b><span style="margin-left:auto;font-size:9px">выключена</span></div>
+        <div class="wf-r ghost" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Материалы</span><span class="name">Теплоизоляция подземной части</span><span class="wf-cell num">44,2</span><span>м²</span><span class="wf-cell num">1 850</span><span class="num" style="text-align:right">—</span><span></span></div>
+        <div style="padding:6px 8px;display:flex;gap:8px"><span class="wf-btn">+ Из каталога</span><span class="wf-btn">+ Свободная строка</span><span class="wf-note" style="margin-left:auto">заголовок активной группы липнет к верху при прокрутке</span></div>
+      </div>
+      <!-- totals -->
+      <div style="border-left:1.5px solid #2b2b2b;background:#fafafa;padding:10px 12px">
+        <div class="hand" style="font-size:14px;margin-bottom:6px">Итоги</div>
+        <div class="tot-row"><span>Материалы</span><span class="num">6 214 300</span></div>
+        <div class="tot-row"><span>Труба/муфта</span><span class="num">2 180 000</span></div>
+        <div class="tot-row"><span>Формовка</span><span class="num">1 402 140</span></div>
+        <div class="tot-row"><span>Работы ФОТ</span><span class="num">1 118 000</span></div>
+        <div class="tot-row"><span>Прочие</span><span class="num">689 000</span></div>
+        <div class="tot-row" style="border-top:1.5px solid #2b2b2b;margin-top:4px;padding-top:6px;font-weight:700"><span>Себестоимость</span><span class="num">11 603 440</span></div>
+        <div class="tot-row"><span>Наценка</span><span class="wf-cell num" style="width:44px">0,43</span></div>
+        <div class="tot-row" style="font-weight:700;font-size:13px"><span>Цена продажи</span><span class="num">16 593 000</span></div>
+        <div class="tot-row"><span>Рентабельность</span><span class="num">30,1%</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 2b ===================== -->
+<div class="dv-opt" id="2b">
+  <div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>То же — фильтр «проблемы» активен: смета схлопывается до красных/янтарных строк, дерево гасит группы без совпадений</div>
+  <div class="dv-card wf" style="width:1160px">
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-bottom:1.5px solid #2b2b2b;background:#f4f4f4">
+      <span class="wf-cell" style="text-align:left;width:180px;color:#999">🔍 поиск…</span>
+      <span class="pill" style="background:#fdecec;border-color:#c00;color:#c00">✓ без цены · 1</span>
+      <span class="pill" style="background:#fdf3df;border-color:#c98a1a;color:#8a5c00">✓ конфликты · 1</span>
+      <span class="pill" style="border-color:#2a78d6;color:#1a5cb0">override · 2</span>
+      <span style="font-size:9.5px;color:#1a5cb0;text-decoration:underline">сбросить фильтры ✕</span>
+      <span style="margin-left:auto;font-size:9.5px;color:#666">показано <b>2 из 347</b> строк</span>
+    </div>
+    <div style="display:grid;grid-template-columns:200px 1fr">
+      <div style="border-right:1.5px solid #2b2b2b;background:#fafafa">
+        <div class="tree-i"><span class="chk on"></span>Корпус <span class="pill" style="border-color:#c00;color:#c00">1</span></div>
+        <div class="tree-i" style="opacity:.35"><span class="chk on"></span>Патрубки</div>
+        <div class="tree-i" style="opacity:.35"><span class="chk on"></span>Насосное обор.</div>
+        <div class="tree-i"><span class="chk on"></span>Запорная арматура <span class="pill" style="border-color:#c98a1a;color:#8a5c00">1</span></div>
+        <div class="tree-i" style="opacity:.35"><span class="chk on"></span>Автоматика</div>
+      </div>
+      <div>
+        <div style="padding:3px 8px;background:#e8e8e8;border-bottom:1px solid #bbb"><b>Корпус</b></div>
+        <div class="wf-r red-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Труба СК/НПС-К 3000-0,1-10000</span><span class="wf-cell num">11,6</span><span>м</span><span class="wf-cell num" style="border-color:#c00;color:#c00">—</span><span class="num" style="text-align:right">0</span><span style="color:#c00">указать стоимость</span></div>
+        <div style="padding:3px 8px;background:#e8e8e8;border-bottom:1px solid #bbb"><b>Запорная арматура</b></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Запорн. арм.</span><span class="name">Задвижка чугунная клиновая DN150</span><span class="wf-cell num amb">5 ⚠</span><span>шт</span><span class="wf-cell num">67 200</span><span class="num" style="text-align:right">336 000</span><span style="color:#8a5c00;font-size:9px">оставить / сбросить</span></div>
+        <div style="padding:8px"><span class="wf-note">рабочий сценарий «закрыть красные строки»: клик по счётчику проблем в топбаре включает этот же фильтр</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<p class="dv-next">Дальше: «hi-fi из <a class="dv-oid" href="#2a">2a</a>» · «вайрфреймы Опросного листа и Dashboard» · «поменять состав фильтров»</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Калькулятор — 3 компоновки: дерево · индикация источника · размещение итогов</span></div>
+<div class="dv-opts">
+
+<!-- ===================== 1a ===================== -->
+<div class="dv-opt" id="1a">
+  <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>«Верстак» — дерево слева всегда развёрнуто · итоги справа колонкой · маркер-точка в ячейке</div>
+  <div class="dv-card wf" style="width:1160px">
+    <div class="wf-top">
+      <span class="hand" style="font-size:15px">КНС 3000×11900 · АО «ГК «ЕКС» · ГКБ №52, ул. Пехотная, 3</span>
+      <span class="wf-badge">CALC</span>
+      <span class="wf-note">⚠ 1 без цены · 1 конфликт — клик фильтрует</span>
+      <span style="margin-left:auto;color:#888">прайс v14 от 02.07</span>
+      <span class="wf-btn">Снапшоты</span><span class="wf-btn">Экспорт ▾</span>
+      <span class="wf-btn pri" style="opacity:.5" title="блокировано">На проверку 🔒</span>
+    </div>
+    <div style="display:grid;grid-template-columns:210px 1fr 230px">
+      <!-- tree -->
+      <div style="border-right:1.5px solid #2b2b2b;background:#fafafa">
+        <div style="padding:6px 8px" class="hand">Сборки</div>
+        <div class="tree-i" style="background:#eee;border-left:3px solid #2b2b2b"><span class="chk on"></span>Корпус <span class="pill" style="border-color:#c00;color:#c00">1</span><span class="sum num">4 120 т</span></div>
+        <div class="tree-i" style="padding-left:22px"><span style="color:#999">└</span> Труба корпуса</div>
+        <div class="tree-i" style="padding-left:22px"><span style="color:#999">└</span> Дно + фальшпол</div>
+        <div class="tree-i"><span class="chk on"></span>Патрубки<span class="sum num">312 т</span></div>
+        <div class="tree-i"><span class="chk on"></span>Насосное обор.<span class="sum num">3 240 т</span></div>
+        <div class="tree-i"><span class="chk on"></span>Запорная арматура <span class="pill" style="border-color:#c98a1a;color:#8a5c00">1</span><span class="sum num">890 т</span></div>
+        <div class="tree-i"><span class="chk on"></span>Автоматика<span class="sum num">618 т</span></div>
+        <div class="tree-i ghost"><span class="chk"></span>Теплоизоляция<span class="sum num">—</span></div>
+        <div class="tree-i"><span class="chk on"></span>Пуско-наладка<span class="sum num">402 т</span></div>
+        <div style="padding:8px"><span class="wf-note">выкл = призрак,<br>в итог не входит</span></div>
+      </div>
+      <!-- table -->
+      <div>
+        <div class="wf-th" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Категория</span><span>Наименование</span><span style="text-align:right">Кол-во</span><span>ЕИ</span><span style="text-align:right">Цена</span><span style="text-align:right">Сумма</span><span>Прим.</span></div>
+        <div class="wf-r red-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Труба СК/НПС-К 3000-0,1-10000</span><span class="wf-cell num">11,6</span><span>м</span><span class="wf-cell num" style="border-color:#c00;color:#c00">—</span><span class="num" style="text-align:right">0</span><span style="color:#c00">указать стоимость</span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Механическое формованное дно</span><span class="wf-cell num">262,8</span><span>кг</span><span class="wf-cell num">214,4</span><span class="num" style="text-align:right">56 344</span><span></span></div>
+        <div class="wf-r sat" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px;padding-left:26px"><span>ФОТ</span><span class="name">↳ ФОТ формовки дна</span><span class="wf-cell num" style="background:#f3f3f3">73,6</span><span>чел.ч</span><span class="wf-cell num" style="background:#f3f3f3">1 207,8</span><span class="num" style="text-align:right">88 894</span><span style="font-size:9px">спутник, read-only</span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Ламинирование дна к фальшполу</span><span class="wf-cell num">78,9</span><span>кг</span><span class="wf-cell num">310,2</span><span class="num" style="text-align:right">24 475</span><span></span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Собств. пр-во</span><span class="name">Придание изделию товарного вида</span><span class="wf-cell num ovr">26,8</span><span>чел.ч</span><span class="wf-cell num">1 207,8</span><span class="num" style="text-align:right">32 369</span><span style="color:#1a5cb0;font-size:9px">ховер: расчётное 24,0 · ↺</span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Запорн. арм.</span><span class="name">Задвижка чугунная клиновая DN150</span><span class="wf-cell num amb">5 ⚠</span><span>шт</span><span class="wf-cell num">67 200</span><span class="num" style="text-align:right">336 000</span><span style="color:#8a5c00;font-size:9px">ОЛ изменился: оставить / сбросить</span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Насосы/АТМ</span><span class="name">Насос VSL.100.55.4.5.0D</span><span class="wf-cell num">3</span><span>шт</span><span class="wf-cell num">980 000</span><span class="num" style="text-align:right">2 940 000</span><span></span></div>
+        <div class="wf-r" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Датчики</span><span class="name">Поплавковый выключатель, кабель 10 м</span><span class="wf-cell num ovr">2*2</span><span>шт</span><span class="wf-cell num">6 000</span><span class="num" style="text-align:right">24 000</span><span style="color:#1a5cb0;font-size:9px">выражение хранится</span></div>
+        <div class="wf-r ghost" style="grid-template-columns:78px 1fr 64px 34px 70px 78px 96px"><span>Материалы</span><span class="name">Теплоизоляция подземной части</span><span class="wf-cell num">44,2</span><span>м²</span><span class="wf-cell num">1 850</span><span class="num" style="text-align:right">—</span><span style="font-size:9px">сборка выключена</span></div>
+        <div style="padding:6px 8px;display:flex;gap:8px"><span class="wf-btn">+ Из каталога (поиск 1000+)</span><span class="wf-btn">+ Свободная строка</span></div>
+      </div>
+      <!-- totals -->
+      <div style="border-left:1.5px solid #2b2b2b;background:#fafafa;padding:10px 12px">
+        <div class="hand" style="font-size:14px;margin-bottom:6px">Итоги <span class="wf-note" style="font-size:11px">всегда видны</span></div>
+        <div class="tot-row"><span>Материалы</span><span class="num">6 214 300</span></div>
+        <div class="tot-row"><span>Труба/муфта</span><span class="num">2 180 000</span></div>
+        <div class="tot-row"><span>Формовка</span><span class="num">1 402 140</span></div>
+        <div class="tot-row"><span>Работы ФОТ</span><span class="num">1 118 000</span></div>
+        <div class="tot-row"><span>Прочие</span><span class="num">689 000</span></div>
+        <div class="tot-row" style="border-top:1.5px solid #2b2b2b;margin-top:4px;padding-top:6px;font-weight:700"><span>Себестоимость</span><span class="num">11 603 440</span></div>
+        <div class="tot-row"><span>Наценка</span><span class="wf-cell num" style="width:44px">0,43</span></div>
+        <div class="tot-row" style="font-weight:700;font-size:13px"><span>Цена продажи</span><span class="num">16 593 000</span></div>
+        <div class="tot-row"><span>Рентабельность</span><span class="num">30,1%</span></div>
+        <div style="margin-top:8px"><span class="wf-note">правка строки →<br>анимир. апдейт итога</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 1b ===================== -->
+<div class="dv-opt" id="1b">
+  <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>«Лента» — узкий рейл сборок · таблица во всю ширину · итоги док-баром снизу · индикация цветной кромкой ячейки</div>
+  <div class="dv-card wf" style="width:1160px">
+    <div class="wf-top">
+      <span class="hand" style="font-size:15px">КНС 3000×11900 · ЕКС · ГКБ №52</span>
+      <span class="wf-badge">CALC</span>
+      <span style="margin-left:auto"></span>
+      <span class="wf-note">⚠ 1 без цены · 1 конфликт</span>
+      <span class="wf-btn">Экспорт ▾</span><span class="wf-btn pri" style="opacity:.5">На проверку 🔒</span>
+    </div>
+    <div style="display:grid;grid-template-columns:52px 1fr">
+      <!-- rail -->
+      <div style="border-right:1.5px solid #2b2b2b;background:#fafafa;display:flex;flex-direction:column;align-items:center;padding:6px 0;gap:4px">
+        <div style="width:38px;height:30px;border:1.5px solid #2b2b2b;border-radius:4px;background:#2b2b2b;color:#fff;display:grid;place-items:center;font-size:8px">Корп<br></div>
+        <div style="width:38px;height:30px;border:1px solid #999;border-radius:4px;display:grid;place-items:center;font-size:8px">Патр</div>
+        <div style="width:38px;height:30px;border:1px solid #999;border-radius:4px;display:grid;place-items:center;font-size:8px;position:relative">Насос</div>
+        <div style="width:38px;height:30px;border:1px solid #999;border-radius:4px;display:grid;place-items:center;font-size:8px;color:#8a5c00">Арм ⚠</div>
+        <div style="width:38px;height:30px;border:1px solid #999;border-radius:4px;display:grid;place-items:center;font-size:8px">Автом</div>
+        <div style="width:38px;height:30px;border:1px dashed #999;border-radius:4px;display:grid;place-items:center;font-size:8px;opacity:.4">Тепл</div>
+        <div style="margin-top:6px"><span class="wf-note" style="writing-mode:vertical-rl;font-size:10px">ховер → флайаут дерева</span></div>
+      </div>
+      <!-- table: grouped, full width -->
+      <div>
+        <div class="wf-th" style="grid-template-columns:84px 1fr 70px 40px 80px 90px 110px"><span>Категория</span><span>Наименование</span><span style="text-align:right">Кол-во</span><span>ЕИ</span><span style="text-align:right">Цена</span><span style="text-align:right">Сумма</span><span>Прим.</span></div>
+        <div style="padding:3px 8px;background:#efefef;border-bottom:1px solid #ccc;display:flex;gap:8px;align-items:center"><span class="chk on"></span><b>Корпус</b><span class="pill" style="border-color:#c00;color:#c00">1 без цены</span><span class="num" style="margin-left:auto">4 120 213</span></div>
+        <div class="wf-r red-r" style="grid-template-columns:84px 1fr 70px 40px 80px 90px 110px"><span>Собств. пр-во</span><span class="name">Труба СК/НПС-К 3000-0,1-10000</span><span class="wf-cell num">11,6</span><span>м</span><span class="wf-cell num" style="border-left:3px solid #c00;color:#c00">—</span><span class="num" style="text-align:right">0</span><span style="color:#c00">указать стоимость</span></div>
+        <div class="wf-r" style="grid-template-columns:84px 1fr 70px 40px 80px 90px 110px"><span>Собств. пр-во</span><span class="name">Механическое формованное дно</span><span class="wf-cell num" style="border-left:3px solid #bbb">262,8</span><span>кг</span><span class="wf-cell num" style="border-left:3px solid #bbb">214,4</span><span class="num" style="text-align:right">56 344</span><span style="font-size:9px;color:#999">серая кромка = формула</span></div>
+        <div class="wf-r" style="grid-template-columns:84px 1fr 70px 40px 80px 90px 110px"><span>Собств. пр-во</span><span class="name">Придание изделию товарного вида</span><span class="wf-cell num" style="border-left:3px solid #2a78d6;color:#1a5cb0">26,8</span><span>чел.ч</span><span class="wf-cell num" style="border-left:3px solid #bbb">1 207,8</span><span class="num" style="text-align:right">32 369</span><span style="font-size:9px;color:#1a5cb0">синяя кромка = override</span></div>
+        <div style="padding:3px 8px;background:#efefef;border-bottom:1px solid #ccc;display:flex;gap:8px;align-items:center"><span class="chk on"></span><b>Запорная арматура</b><span class="pill" style="border-color:#c98a1a;color:#8a5c00">1 конфликт</span><span class="num" style="margin-left:auto">890 400</span></div>
+        <div class="wf-r" style="grid-template-columns:84px 1fr 70px 40px 80px 90px 110px"><span>Запорн. арм.</span><span class="name">Задвижка чугунная клиновая DN150</span><span class="wf-cell num" style="border-left:3px solid #c98a1a;background:#fdf3df">5</span><span>шт</span><span class="wf-cell num" style="border-left:3px solid #bbb">67 200</span><span class="num" style="text-align:right">336 000</span><span style="font-size:9px;color:#8a5c00">оставить / сбросить</span></div>
+        <div style="padding:3px 8px;background:#efefef;border-bottom:1px solid #ccc;display:flex;gap:8px;align-items:center;opacity:.4"><span class="chk"></span><b>Теплоизоляция</b><span style="margin-left:auto;font-size:9px">выключена — призрак</span></div>
+        <div class="wf-r ghost" style="grid-template-columns:84px 1fr 70px 40px 80px 90px 110px"><span>Материалы</span><span class="name">Теплоизоляция подземной части</span><span class="wf-cell num">44,2</span><span>м²</span><span class="wf-cell num">1 850</span><span class="num" style="text-align:right">—</span><span></span></div>
+        <div style="padding:6px 8px"><span class="wf-note">группы-сборки прямо в таблице — прокрутка одной лентой, как в Excel</span></div>
+      </div>
+    </div>
+    <!-- dock totals -->
+    <div style="border-top:2px solid #2b2b2b;background:#fafafa;display:flex;align-items:center;gap:14px;padding:8px 12px">
+      <span>Матер. <b class="num">6 214 300</b></span><span>Труба <b class="num">2 180 000</b></span><span>Формовка <b class="num">1 402 140</b></span><span>ФОТ <b class="num">1 118 000</b></span><span>Прочие <b class="num">689 000</b></span>
+      <span style="border-left:1.5px solid #2b2b2b;padding-left:14px">Себест. <b class="num">11 603 440</b></span>
+      <span>× наценка <span class="wf-cell num" style="display:inline-block;width:40px">0,43</span></span>
+      <span style="font-size:13px">Цена <b class="num">16 593 000</b></span>
+      <span>рент. <b class="num">30,1%</b></span>
+      <span style="margin-left:auto"><span class="wf-note">одна строка — max место таблице</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 1c ===================== -->
+<div class="dv-opt" id="1c">
+  <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>«Штурвал» — дерево-оглавление слева сворачиваемое до заголовков · плавающая карточка итогов · индикация фоном ячейки, легенда в шапке</div>
+  <div class="dv-card wf" style="width:1160px">
+    <div class="wf-top">
+      <span class="hand" style="font-size:15px">КНС 3000×11900</span>
+      <span class="wf-badge">REVIEW</span>
+      <span style="display:flex;gap:6px;align-items:center;font-size:9.5px;color:#666">
+        <span class="wf-cell num" style="padding:0 4px">1,0</span>формула
+        <span class="wf-cell num ovr" style="padding:0 8px 0 4px">1,0</span>override
+        <span class="wf-cell num" style="padding:0 4px;background:#fdecec;border-color:#c00">—</span>нет цены
+        <span class="wf-cell num amb" style="padding:0 4px">1,0</span>конфликт
+      </span>
+      <span style="margin-left:auto"></span>
+      <span class="wf-btn">↩ Вернуть в CALC</span><span class="wf-btn pri">Утвердить</span>
+    </div>
+    <div style="display:grid;grid-template-columns:170px 1fr;position:relative">
+      <div style="border-right:1px solid #ccc;background:#fafafa;padding:4px 0">
+        <div class="tree-i" style="font-weight:700"><span class="chk on"></span>Корпус</div>
+        <div class="tree-i" style="background:#eee;border-left:3px solid #2b2b2b;padding-left:16px">Труба корпуса</div>
+        <div class="tree-i" style="padding-left:16px">Дно + фальшпол</div>
+        <div class="tree-i" style="font-weight:700"><span class="chk on"></span>Насосное обор.</div>
+        <div class="tree-i" style="padding-left:16px">Насосы</div>
+        <div class="tree-i" style="padding-left:16px">Обвязка</div>
+        <div class="tree-i" style="font-weight:700"><span class="chk on"></span>Автоматика</div>
+        <div style="padding:8px"><span class="wf-note">режим MANAGER:<br>флаги заблокированы,<br>таблица read-only</span></div>
+      </div>
+      <div>
+        <div class="wf-th" style="grid-template-columns:1fr 70px 40px 80px 92px"><span>Наименование (категория подписью)</span><span style="text-align:right">Кол-во</span><span>ЕИ</span><span style="text-align:right">Цена</span><span style="text-align:right">Сумма</span></div>
+        <div class="wf-r" style="grid-template-columns:1fr 70px 40px 80px 92px;min-height:34px"><span class="name">Труба СК/НПС-К 3000-0,1-10000<br><span style="font-size:8.5px;color:#999">СОБСТВЕННОЕ ПРОИЗВОДСТВО</span></span><span class="wf-cell num">11,6</span><span>м</span><span class="wf-cell num ovr">2 180 000</span><span class="num" style="text-align:right">2 180 000</span></div>
+        <div class="wf-r" style="grid-template-columns:1fr 70px 40px 80px 92px;min-height:34px"><span class="name">Фланец 50-10-01-1-В-12Х18Н10Т ГОСТ 33259-2015<br><span style="font-size:8.5px;color:#999">МЕТИЗЫ</span></span><span class="wf-cell num">8</span><span>шт</span><span class="wf-cell num">4 120</span><span class="num" style="text-align:right">32 960</span></div>
+        <div class="wf-r" style="grid-template-columns:1fr 70px 40px 80px 92px;min-height:34px"><span class="name">Насос VSL.100.55.4.5.0D<br><span style="font-size:8.5px;color:#999">НАСОСЫ/АТМ</span></span><span class="wf-cell num">3</span><span>шт</span><span class="wf-cell num">980 000</span><span class="num" style="text-align:right">2 940 000</span></div>
+        <div class="wf-r" style="grid-template-columns:1fr 70px 40px 80px 92px;min-height:34px"><span class="name">Задвижка чугунная клиновая DN150<br><span style="font-size:8.5px;color:#999">ЗАПОРНАЯ АРМАТУРА</span></span><span class="wf-cell num amb">5</span><span>шт</span><span class="wf-cell num">67 200</span><span class="num" style="text-align:right">336 000</span></div>
+        <div style="padding:6px 8px"><span class="wf-note">двухэтажная строка: длинные ГОСТ-имена целиком, категория не ест колонку · но ~44px/строка — меньше строк на экран</span></div>
+        <div style="height:52px"></div>
+      </div>
+      <!-- floating totals -->
+      <div style="position:absolute;right:14px;bottom:10px;width:250px;background:#fff;border:2px solid #2b2b2b;border-radius:8px;box-shadow:4px 4px 0 rgba(0,0,0,.15);padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><b>Итоги</b><span style="font-size:9px;color:#999">свернуть ▾</span></div>
+        <div class="tot-row"><span>Себестоимость</span><span class="num">11 603 440</span></div>
+        <div class="tot-row"><span>Наценка</span><span class="wf-cell num" style="width:44px">0,43</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;border-top:1px solid #ccc;margin-top:4px;padding-top:4px;font-size:9.5px;color:#666"><span>за 1 корп.</span><span>за 2 корп.</span><span class="num" style="font-weight:700;color:#2b2b2b">16 593 000</span><span class="num" style="font-weight:700;color:#2b2b2b">31 526 700</span></div>
+        <div class="tot-row"><span>Рентабельность</span><span class="num">30,1%</span></div>
+        <div style="margin-top:4px"><span class="wf-note" style="font-size:11px">плавает над таблицей, разворачивается в детали</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<p class="dv-next">Дальше: «hi-fi из <a class="dv-oid" href="#1a">1a</a>» · «дерево из <a class="dv-oid" href="#1a">1a</a> + док-итоги из <a class="dv-oid" href="#1b">1b</a>» · «вайрфреймы Опросного листа и Dashboard»</p>
+</section>
+
+</x-dc>
+</body>
+</html>

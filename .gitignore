@@ -1,0 +1,40 @@
+# Зависимости
+node_modules/
+
+# Сборка
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+
+# Секреты: .env содержит JWT_SECRET и пароль БД.
+# Шаблоны (.env.example) — коммитятся, см. исключение ниже.
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Логи
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Тесты
+coverage/
+__screenshots__/
+
+# Кеши
+.eslintcache
+*.timestamp-*-*.mjs
+
+# Редакторы / ОС
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Локальный архив сессии Claude (151 МБ, не артефакт проекта)
+.claude.zip
+.claude/settings.local.json

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/modernist-0176f9c8-9b4a-4f1e-9f23-217c44f1625c/styles.css">
+<script src="_ds/modernist-0176f9c8-9b4a-4f1e-9f23-217c44f1625c/_ds_bundle.js"></script>
+<style>
+html{--bg:#1d1c1b;--panel:#242220;--panel2:#2b2927;--cellbg:#201f1e;--line:#3a3733;--line2:#4c4841;
+--text:#f3f2f2;--muted:#a8a29a;--faint:#736e66;
+--acc:#ec3013;--acc-bg:rgba(236,48,19,.12);--blue:#5f9ae8;--blue-bg:rgba(95,154,232,.12);
+--amber:#d9a544;--green:#5fb87a}
+html[data-theme="light"]{--bg:#f3f2f2;--panel:#fbfaf9;--panel2:#eceae8;--cellbg:#ffffff;--line:#d9d6d2;--line2:#b9b5af;
+--text:#201e1d;--muted:#6b6660;--faint:#98938c;
+--acc:#ec3013;--acc-bg:rgba(236,48,19,.08);--blue:#2f6fce;--blue-bg:rgba(47,111,206,.08);
+--amber:#9a6f14;--green:#2e8b57}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-body,Archivo,system-ui,sans-serif)}
+a{color:var(--blue)}a:hover{color:var(--text)}
+input,select,button{font:inherit;color:inherit}
+button{cursor:pointer;text-align:left}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:var(--line2)}
+</style>
+</helmet>
+
+<div data-screen-label="Опросный лист" style="height:100vh;min-width:1000px;display:flex;flex-direction:column;font-size:13px;overflow:hidden">
+
+  <!-- topbar -->
+  <div style="flex:none;display:flex;align-items:baseline;gap:14px;padding:12px 20px;border-bottom:2px solid var(--line2);background:var(--panel)">
+    <div style="font-weight:700;font-size:16px">Опросный лист — насосная станция</div>
+    <div style="font-size:12px;color:var(--muted)">заявка {{ zayavkaNo }} · черновик валиден в любом порядке</div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <span style="font-size:11px;color:var(--faint)">сохранено {{ draftTime }}</span>
+      <a href="Калькулятор v2.dc.html" style="font-size:12px">→ Конфигуратор расчёта</a>
+      <button onClick="{{ onTheme }}" style="background:none;border:1px solid var(--line2);padding:4px 10px;font-size:11.5px;color:var(--muted)" style-hover="color:var(--text)">{{ themeIcon }} тема</button>
+    </div>
+  </div>
+
+  <div style="flex:1;display:grid;grid-template-columns:190px minmax(0,1fr) 300px;min-height:0">
+
+    <!-- stepper -->
+    <div style="border-right:2px solid var(--line2);background:var(--panel);padding:10px 0;overflow:auto">
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
+        <div onClick="{{ n.onNav }}" style="{{ n.style }}"><span style="width:16px;color:{{ n.markColor }}">{{ n.mark }}</span>{{ n.label }}</div>
+      </sc-for>
+      <div style="padding:14px;font-size:10.5px;color:var(--faint);line-height:1.5;border-top:1px solid var(--line);margin-top:8px">Секции заполняются в любом порядке. ● — есть незаполненные обязательные.</div>
+    </div>
+
+    <!-- form -->
+    <div ref="{{ formRef }}" style="overflow:auto;padding:0 24px 40px">
+
+      <!-- 1 ОБЩИЕ -->
+      <div ref="{{ sec1Ref }}" style="font-weight:700;font-size:15px;border-bottom:2px solid var(--line2);padding:18px 0 6px;margin-bottom:14px">1 · Общие</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 18px;max-width:820px">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">№ заявки <span style="color:var(--acc)">*</span></div><input value="{{ f.zayavka.val }}" onChange="{{ f.zayavka.on }}" style="{{ inp }}"></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Тип НС <span style="color:var(--acc)">*</span></div>
+          <select value="{{ f.tipNs.val }}" onChange="{{ f.tipNs.on }}" style="{{ inp }}"><option>Канализационная</option><option>Ливневая</option><option>Дренажная</option></select></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Стадия</div>
+          <select value="{{ f.stadiya.val }}" onChange="{{ f.stadiya.on }}" style="{{ inp }}"><option>проект</option><option>рабочая</option><option>КД</option><option>продажа</option><option>тендер</option></select></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Заказчик <span style="color:var(--acc)">*</span></div><input value="{{ f.zakazchik.val }}" onChange="{{ f.zakazchik.on }}" style="{{ inp }}"></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Объект <span style="color:var(--acc)">*</span></div><input value="{{ f.obekt.val }}" onChange="{{ f.obekt.on }}" style="{{ inp }}"></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Регион</div><input value="{{ f.region.val }}" onChange="{{ f.region.on }}" style="{{ inp }}"></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Дата</div><input value="{{ f.data.val }}" onChange="{{ f.data.on }}" style="{{ inpNum }};max-width:130px"></div>
+      </div>
+
+      <!-- 2 КОРПУС -->
+      <div ref="{{ sec2Ref }}" style="font-weight:700;font-size:15px;border-bottom:2px solid var(--line2);padding:22px 0 6px;margin-bottom:14px">2 · Корпус</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px 18px;max-width:820px">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">DN, мм <span style="color:var(--acc)">*</span></div>
+          <select value="{{ f.dn.val }}" onChange="{{ f.dn.on }}" style="{{ inpNum }}"><option>300</option><option>500</option><option>800</option><option>1000</option><option>1200</option><option>1500</option><option>2000</option><option>2400</option><option>3000</option></select></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Возвышение над землёй, мм</div><input value="{{ f.vozv.val }}" onChange="{{ f.vozv.on }}" style="{{ inpNum }}"></div>
+        <div style="grid-column:span 2;border:1px solid var(--line);background:var(--panel);padding:8px 12px">
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-size:11px;color:var(--muted)">Труба корпуса <span title="PN и SN не задаются вручную — они продиктованы глубиной и требованиями заказчика (МВК, проезжая часть)" style="cursor:help;border-bottom:1px dotted var(--faint)">ƒ</span></span>
+            <b style="font-variant-numeric:tabular-nums;color:{{ pipeColor }}">{{ pipeLabel }}</b>
+            <label style="margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11.5px;color:var(--muted)">
+              <input type="checkbox" checked="{{ pipeManual }}" onChange="{{ onPipeToggle }}">изменить вручную
+            </label>
+          </div>
+          <div style="font-size:10.5px;color:var(--faint);margin-top:4px">{{ pipeHint }}</div>
+          <sc-if value="{{ pipeManual }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:16px;align-items:flex-end;margin-top:10px;padding:10px 12px;border-left:2px solid var(--blue);background:var(--blue-bg);flex-wrap:wrap">
+              <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">PN, МПа</div>
+                <select value="{{ f.pnM.val }}" onChange="{{ f.pnM.on }}" style="{{ inpNum }};width:90px"><option>0,1</option><option>0,25</option><option>0,6</option><option>1,0</option><option>1,6</option><option>2,5</option><option>3,2</option></select></div>
+              <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">SN, Па</div>
+                <select value="{{ f.snM.val }}" onChange="{{ f.snM.on }}" style="{{ inpNum }};width:100px"><option>1250</option><option>2500</option><option>5000</option><option>10000</option></select></div>
+              <button onClick="{{ onPipeAuto }}" style="background:none;border:none;color:var(--blue);font-size:12px;padding:4px" title="снять ручной режим и вернуть расчётные PN/SN">↺ вернуть расчётные</button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+      <div style="display:flex;gap:28px;max-width:820px;margin-top:12px;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Под проезжей частью</div><span style="display:inline-flex"><button onClick="{{ tg.proezd.yes }}" style="{{ tg.proezd.yesStyle }}">да</button><button onClick="{{ tg.proezd.no }}" style="{{ tg.proezd.noStyle }}">нет</button></span></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">По ТТ МВК</div><span style="display:inline-flex"><button onClick="{{ tg.mvk.yes }}" style="{{ tg.mvk.yesStyle }}">да</button><button onClick="{{ tg.mvk.no }}" style="{{ tg.mvk.noStyle }}">нет</button></span></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Теплоизоляция</div><span style="display:inline-flex"><button onClick="{{ tg.teplo.yes }}" style="{{ tg.teplo.yesStyle }}">да</button><button onClick="{{ tg.teplo.no }}" style="{{ tg.teplo.noStyle }}">нет</button></span></div>
+        <sc-if value="{{ teploOn }}" hint-placeholder-val="{{ true }}">
+          <div style="padding-left:14px;border-left:2px solid var(--line2)"><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Глубина теплоизоляции, мм</div><input value="{{ f.tiGlubina.val }}" onChange="{{ f.tiGlubina.on }}" style="{{ inpNum }}"></div>
+        </sc-if>
+      </div>
+
+      <!-- 3 ПАТРУБКИ -->
+      <div ref="{{ sec3Ref }}" style="font-weight:700;font-size:15px;border-bottom:2px solid var(--line2);padding:22px 0 6px;margin-bottom:14px">3 · Патрубки</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:820px">
+        <div style="border:1px solid var(--line);background:var(--panel);padding:12px 14px">
+          <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Подводящий</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Материал</div><select value="{{ f.podvMat.val }}" onChange="{{ f.podvMat.on }}" style="{{ inp }}"><option>ПЭ</option><option>ПВХ</option><option>ПНД</option><option>ПП</option><option>сталь</option><option>стеклокомпозит</option></select></div>
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">DN, мм</div><input value="{{ f.podvDn.val }}" onChange="{{ f.podvDn.on }}" style="{{ inpNum }}"></div>
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Кол-во</div><input value="{{ f.podvKol.val }}" onChange="{{ f.podvKol.on }}" style="{{ inpNum }}"></div>
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Глубина лотка, мм <span style="color:var(--acc)">*</span></div><input value="{{ f.podvLotok.val }}" onChange="{{ f.podvLotok.on }}" style="{{ inpNum }}"></div>
+          </div>
+        </div>
+        <div style="border:1px solid var(--line);background:var(--panel);padding:12px 14px">
+          <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Напорный</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Материал</div><select value="{{ f.napMat.val }}" onChange="{{ f.napMat.on }}" style="{{ inp }}"><option>ПЭ</option><option>ПВХ</option><option>ПНД</option><option>ПП</option><option>сталь</option><option>стеклокомпозит</option></select></div>
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">DN, мм</div><input value="{{ f.napDn.val }}" onChange="{{ f.napDn.on }}" style="{{ inpNum }}"></div>
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Кол-во</div><input value="{{ f.napKol.val }}" onChange="{{ f.napKol.on }}" style="{{ inpNum }}"></div>
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Глубина лотка, мм</div><input value="{{ f.napLotok.val }}" onChange="{{ f.napLotok.on }}" style="{{ inpNum }}"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:28px;max-width:820px;margin-top:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Задвижки — подводящие (безнапорные) <span title="ƒ задвижки устанавливаются на подводящие патрубки безнапорного трубопровода: кол-во = кол-во подводящих патрубков" style="cursor:help;border-bottom:1px dotted var(--faint)">ƒ</span></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input value="{{ zadvVal }}" onChange="{{ onZadv }}" style="{{ inpNum }};width:64px;{{ zadvOvrStyle }}" title="{{ zadvTitle }}">
+            <sc-if value="{{ zadvOvr }}" hint-placeholder-val="{{ false }}"><button onClick="{{ onZadvReset }}" style="background:none;border:none;color:var(--blue);font-size:12px;padding:0 2px" title="вернуть расчётное">↺</button></sc-if>
+          </div>
+          <div style="font-size:10.5px;color:var(--faint);margin-top:3px">{{ zadvHint }}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Шаровые краны — напорная линия <span title="ƒ шаровые краны используются на напорной линии: по технологической схеме (раб+рез) + коллектор; +1 при аварийном трубопроводе" style="cursor:help;border-bottom:1px dotted var(--faint)">ƒ</span></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input value="{{ kranVal }}" onChange="{{ onKran }}" style="{{ inpNum }};width:64px;{{ kranOvrStyle }}" title="{{ kranTitle }}">
+            <sc-if value="{{ kranOvr }}" hint-placeholder-val="{{ false }}"><button onClick="{{ onKranReset }}" style="background:none;border:none;color:var(--blue);font-size:12px;padding:0 2px" title="вернуть расчётное">↺</button></sc-if>
+          </div>
+          <div style="font-size:10.5px;color:var(--faint);margin-top:3px">{{ kranHint }}</div>
+        </div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Аварийный трубопровод</div><span style="display:inline-flex"><button onClick="{{ tg.avar.yes }}" style="{{ tg.avar.yesStyle }}">да</button><button onClick="{{ tg.avar.no }}" style="{{ tg.avar.noStyle }}">нет</button></span></div>
+      </div>
+
+      <!-- 4 НАСОСНОЕ -->
+      <div ref="{{ sec4Ref }}" style="font-weight:700;font-size:15px;border-bottom:2px solid var(--line2);padding:22px 0 6px;margin-bottom:14px">4 · Насосное оборудование</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 18px;max-width:820px">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Максимальный приток <span style="color:var(--acc)">*</span></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input value="{{ rashodVal }}" onChange="{{ onRashod }}" style="{{ inpNum }};width:100px">
+            <span style="display:inline-flex">
+              <sc-for list="{{ unitBtns }}" as="u" hint-placeholder-count="3"><button onClick="{{ u.onClick }}" style="{{ u.style }}">{{ u.label }}</button></sc-for>
+            </span>
+          </div>
+        </div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Расчётный напор, м <span style="color:var(--acc)">*</span></div><input value="{{ f.napor.val }}" onChange="{{ f.napor.on }}" style="{{ inpNum }};width:100px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Рабочих <span style="color:var(--acc)">*</span></div><input value="{{ f.nRab.val }}" onChange="{{ f.nRab.on }}" style="{{ inpNum }}"></div>
+          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Резервных</div><input value="{{ f.nRez.val }}" onChange="{{ f.nRez.on }}" style="{{ inpNum }}"></div>
+          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Запасных</div><input value="{{ f.nZap.val }}" onChange="{{ f.nZap.on }}" style="{{ inpNum }}"></div>
+        </div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Марка насоса</div><input value="{{ f.marka.val }}" onChange="{{ f.marka.on }}" style="{{ inp }}"></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Взрывозащита</div><span style="display:inline-flex"><button onClick="{{ tg.vzryv.yes }}" style="{{ tg.vzryv.yesStyle }}">да</button><button onClick="{{ tg.vzryv.no }}" style="{{ tg.vzryv.noStyle }}">нет</button></span></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Дробилка / корзина</div><select value="{{ f.drobilka.val }}" onChange="{{ f.drobilka.on }}" style="{{ inp }}"><option>корзина</option><option>дробилка</option><option>обе</option><option>нет</option></select></div>
+      </div>
+
+      <!-- 5 АВТОМАТИКА -->
+      <div ref="{{ sec5Ref }}" style="font-weight:700;font-size:15px;border-bottom:2px solid var(--line2);padding:22px 0 6px;margin-bottom:14px">5 · Автоматика</div>
+      <div style="display:flex;gap:28px;max-width:820px;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Шкаф управления</div><span style="display:inline-flex"><button onClick="{{ tg.shu.yes }}" style="{{ tg.shu.yesStyle }}">да</button><button onClick="{{ tg.shu.no }}" style="{{ tg.shu.noStyle }}">нет</button></span></div>
+        <sc-if value="{{ shuOn }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;gap:28px;padding-left:14px;border-left:2px solid var(--line2)">
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Тип</div><select value="{{ f.shuTip.val }}" onChange="{{ f.shuTip.on }}" style="{{ inp }}"><option>внутренний</option><option>уличный</option></select></div>
+            <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Пуск</div><select value="{{ f.shuPusk.val }}" onChange="{{ f.shuPusk.on }}" style="{{ inp }}"><option>стандартный</option><option>плавный</option><option>ЧП</option></select></div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="display:flex;gap:28px;max-width:820px;margin-top:12px;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Датчики давления</div><span style="display:inline-flex"><button onClick="{{ tg.dDavl.yes }}" style="{{ tg.dDavl.yesStyle }}">да</button><button onClick="{{ tg.dDavl.no }}" style="{{ tg.dDavl.noStyle }}">нет</button></span></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Датчики уровня</div><span style="display:inline-flex"><button onClick="{{ tg.dUrov.yes }}" style="{{ tg.dUrov.yesStyle }}">да</button><button onClick="{{ tg.dUrov.no }}" style="{{ tg.dUrov.noStyle }}">нет</button></span></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">Расходомер</div><span style="display:inline-flex"><button onClick="{{ tg.rashm.yes }}" style="{{ tg.rashm.yesStyle }}">да</button><button onClick="{{ tg.rashm.no }}" style="{{ tg.rashm.noStyle }}">нет</button></span></div>
+      </div>
+
+      <!-- footer -->
+      <div style="max-width:820px;border-top:2px solid var(--line2);margin-top:32px;padding-top:16px;display:flex;gap:12px;align-items:center">
+        <button onClick="{{ onCreate }}" style="{{ createStyle }}">Создать расчёт →</button>
+        <span style="font-size:12px;color:var(--muted)">{{ createHint }}</span>
+      </div>
+    </div>
+
+    <!-- live panel -->
+    <div style="border-left:2px solid var(--line2);background:var(--panel);overflow:auto;padding:14px 16px">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin-bottom:10px;font-weight:700">Подбор глубины</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12.5px;font-variant-numeric:tabular-nums">
+        <span style="color:var(--muted)" title="приток, приведённый к л/с">Q</span><span style="text-align:right">{{ lc.q }} л/с</span>
+        <span style="color:var(--muted)" title="ƒ Vэф = Q·3,6 / (4·10·n) — 10 пусков в час">Vэф</span><span style="text-align:right">{{ lc.vef }} м³</span>
+        <span style="color:var(--muted)" title="ƒ Vмин = (Q·3,6/n)·5/60">Vмин</span><span style="text-align:right">{{ lc.vmin }} м³</span>
+        <span style="color:var(--muted)" title="ƒ hраб = 4·Vмин / (π·(DN/1000)²)">hраб</span><span style="text-align:right">{{ lc.hrab }} м</span>
+        <span style="color:var(--muted)" title="ƒ hР = hраб + 0,3 + 0,16 + 0,627">hР</span><span style="text-align:right">{{ lc.hr }} м</span>
+      </div>
+      <div style="border:2px solid var(--acc);background:var(--acc-bg);padding:12px;margin-top:12px">
+        <div style="font-size:11px;color:var(--muted)">Рекомендуемая глубина подземной части</div>
+        <div style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;margin:4px 0" title="ƒ Нподз = ROUNDUP((лоток подводящего/1000 + hР)·1000, до 100 вверх)">{{ lc.npodz }} мм</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button onClick="{{ onAccept }}" style="{{ acceptStyle }}">{{ acceptLabel }}</button>
+          <input value="{{ f.npodzManual.val }}" onChange="{{ f.npodzManual.on }}" placeholder="своя, мм" style="{{ inpNum }};width:90px">
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px;font-size:12px;line-height:1.8;color:var(--muted)">
+        <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">Изделие</div>
+        <b style="color:var(--text);font-variant-numeric:tabular-nums">{{ pvLine }}</b><br>
+        {{ pvLine2 }}<br>{{ pvLine3 }}
+      </div>
+      <div style="margin-top:12px;font-size:10.5px;color:var(--faint);line-height:1.5">Значения пересчитываются при каждом вводе. Наведите на подпись — увидите формулу.</div>
+    </div>
+  </div>
+
+  <!-- preview dialog -->
+  <sc-if value="{{ previewOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ onPreviewClose }}" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:flex;align-items:flex-start;justify-content:center;padding-top:12vh">
+      <div onClick="{{ stop }}" style="width:480px;background:var(--panel);border:2px solid var(--line2);padding:0">
+        <div style="padding:14px 18px;border-bottom:2px solid var(--line2);font-weight:700;font-size:15px">Создание расчёта</div>
+        <div style="padding:14px 18px">
+          <div style="font-weight:700;font-size:16px;font-variant-numeric:tabular-nums">{{ pvTitle }}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums">{{ pvSub }}</div>
+          <div style="border-top:1px solid var(--line);margin:10px 0;padding-top:10px;font-size:13px;line-height:2">
+            <sc-for list="{{ pvBlocks }}" as="b" hint-placeholder-count="7"><div style="color:{{ b.color }}">{{ b.text }}</div></sc-for>
+          </div>
+        </div>
+        <div style="padding:12px 18px;border-top:2px solid var(--line2);display:flex;gap:10px">
+          <button onClick="{{ onPreviewClose }}" style="background:none;border:1px solid var(--line2);padding:8px 14px;color:var(--muted)">← Вернуться</button>
+          <button onClick="{{ onConfirm }}" style="flex:1;background:var(--acc);border:1px solid var(--acc);padding:8px 14px;color:#fff;font-weight:600">Создать расчёт → конфигуратор</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;font-size:13px;z-index:50">{{ toast }}</div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    theme: 'dark',
+    f: {
+      zayavka: '2406-118', tipNs: 'Канализационная', stadiya: 'рабочая',
+      zakazchik: 'АО «ГК «ЕКС»', obekt: 'ГКБ №52, ул. Пехотная, 3', region: 'Москва', data: '14.07.2026',
+      dn: '3000', pnM: '0,1', snM: '10000', vozv: '300', tiGlubina: '2000',
+      podvMat: 'ПЭ', podvDn: '250', podvKol: '1', podvLotok: '9910',
+      napMat: 'ПЭ', napDn: '150', napKol: '2', napLotok: '1800',
+      zadvM: '', kranM: '',
+      napor: '12,9', nRab: '2', nRez: '1', nZap: '0', marka: 'VSL.100.55.4.5.0D',
+      drobilka: 'корзина', shuTip: 'уличный', shuPusk: 'плавный',
+      npodzManual: ''
+    },
+    rashod: '25,13', unit: 'l/s',
+    tg: { proezd: false, mvk: true, teplo: true, avar: false, vzryv: false, shu: true, dDavl: true, dUrov: true, rashm: true },
+    pipeManual: false,
+    activeSec: 1, previewOpen: false, toast: null, draftTime: '14:02'
+  };
+
+  SECS = [
+    { n: 1, label: 'Общие', req: ['zayavka', 'zakazchik', 'obekt'] },
+    { n: 2, label: 'Корпус', req: ['dn'] },
+    { n: 3, label: 'Патрубки', req: ['podvLotok'] },
+    { n: 4, label: 'Насосное', req: ['napor', 'nRab'] },
+    { n: 5, label: 'Автоматика', req: [] }
+  ];
+
+  secEls = {}; formEl = null;
+
+  componentDidMount() { document.documentElement.setAttribute('data-theme', this.state.theme); }
+
+  num(s) { const v = parseFloat(String(s).replace(/\s/g, '').replace(',', '.')); return isFinite(v) ? v : null; }
+  fmt(n, d) { return n.toLocaleString('ru-RU', { minimumFractionDigits: d ?? 2, maximumFractionDigits: d ?? 2 }); }
+
+  toastMsg(m) { clearTimeout(this._tt); this.setState({ toast: m }); this._tt = setTimeout(() => this.setState({ toast: null }), 2400); }
+  setF(k, v) { this.setState({ f: { ...this.state.f, [k]: v }, draftTime: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) }); }
+
+  calc() {
+    const st = this.state;
+    const qRaw = this.num(st.rashod);
+    const q = qRaw == null ? null : (st.unit === 'l/s' ? qRaw : st.unit === 'm3/h' ? qRaw / 3.6 : qRaw / 86.4);
+    const n = this.num(st.f.nRab) || 1;
+    const dn = this.num(st.f.dn);
+    const lotok = this.num(st.f.podvLotok);
+    if (q == null || !dn) return { q, vef: null };
+    const vef = q * 3.6 / (4 * 10 * n);
+    const vmin = (q * 3.6 / n) * 5 / 60;
+    const hrab = 4 * vmin / (Math.PI * Math.pow(dn / 1000, 2));
+    const hr = hrab + 0.3 + 0.16 + 0.627;
+    const npodz = lotok != null ? Math.ceil((lotok / 1000 + hr) * 1000 / 100) * 100 : null;
+    return { q, vef, vmin, hrab, hr, npodz };
+  }
+
+  renderVals() {
+    const st = this.state;
+    const f = {};
+    Object.keys(st.f).forEach(k => { f[k] = { val: st.f[k], on: (e) => this.setF(k, e.target.value) }; });
+
+    const inp = 'width:100%;background:var(--cellbg);border:1px solid var(--line2);padding:5px 9px;font-size:12.5px;color:var(--text);border-radius:0';
+    const inpNum = inp + ';text-align:right;font-variant-numeric:tabular-nums';
+
+    // да/нет segmented
+    const segBtn = (on, first) => ({
+      padding: '4px 14px', fontSize: '12px', borderRadius: 0,
+      border: '1px solid ' + (on ? 'var(--acc)' : 'var(--line2)'),
+      marginLeft: first ? 0 : '-1px',
+      background: on ? 'var(--acc)' : 'transparent',
+      color: on ? '#fff' : 'var(--muted)', position: on ? 'relative' : 'static', zIndex: on ? 1 : 0
+    });
+    const tg = {};
+    Object.keys(st.tg).forEach(k => {
+      tg[k] = {
+        yes: () => this.setState({ tg: { ...st.tg, [k]: true } }),
+        no: () => this.setState({ tg: { ...st.tg, [k]: false } }),
+        yesStyle: segBtn(st.tg[k], true), noStyle: segBtn(!st.tg[k], false)
+      };
+    });
+
+    const lc = this.calc();
+    const npodzUsed = this.num(st.f.npodzManual) ?? lc.npodz;
+    const dn = this.num(st.f.dn);
+    const vozv = this.num(st.f.vozv) || 0;
+    const totalH = npodzUsed != null ? npodzUsed + vozv : null;
+    const fmtI = (n) => Math.round(n).toLocaleString('ru-RU');
+
+    // required
+    const allReq = this.SECS.flatMap(s => s.req);
+    const reqDone = allReq.filter(k => String(st.f[k]).trim() !== '').length;
+    const canCreate = reqDone === allReq.length && lc.npodz != null;
+
+    const navItems = this.SECS.map(s => {
+      const missing = s.req.some(k => String(st.f[k]).trim() === '');
+      const active = st.activeSec === s.n;
+      return {
+        key: s.n, label: s.label,
+        mark: missing ? '●' : '✓',
+        markColor: missing ? 'var(--acc)' : 'var(--muted)',
+        style: {
+          display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', cursor: 'pointer',
+          fontSize: '13px', fontWeight: active ? 700 : 400,
+          borderLeft: '3px solid ' + (active ? 'var(--acc)' : 'transparent'),
+          background: active ? 'var(--panel2)' : 'transparent'
+        },
+        onNav: () => {
+          this.setState({ activeSec: s.n });
+          const el = this.secEls[s.n];
+          if (el && this.formEl) this.formEl.scrollTo({ top: el.getBoundingClientRect().top - this.formEl.getBoundingClientRect().top + this.formEl.scrollTop - 4, behavior: 'smooth' });
+        }
+      };
+    });
+
+    const unitDefs = [{ k: 'l/s', label: 'л/с' }, { k: 'm3/h', label: 'м³/ч' }, { k: 'm3/day', label: 'м³/сут' }];
+    const unitBtns = unitDefs.map((u, i) => ({
+      key: u.k, label: u.label,
+      style: segBtn(st.unit === u.k, i === 0),
+      onClick: () => {
+        const qLs = lc.q;
+        if (st.unit === u.k || qLs == null) { this.setState({ unit: u.k }); return; }
+        const conv = u.k === 'l/s' ? qLs : u.k === 'm3/h' ? qLs * 3.6 : qLs * 86.4;
+        this.setState({ unit: u.k, rashod: this.fmt(conv).replace(/\u00A0/g, ' ') });
+      }
+    }));
+
+    // труба корпуса: PN/SN продиктованы глубиной и требованиями заказчика
+    const depth = npodzUsed ?? 0;
+    let snCalc = depth > 8000 ? 10000 : depth > 5000 ? 5000 : depth > 3000 ? 2500 : 1250;
+    if ((st.tg.proezd || st.tg.mvk) && snCalc < 10000) snCalc = [1250, 2500, 5000, 10000][[1250, 2500, 5000, 10000].indexOf(snCalc) + 1];
+    const pnCalc = '0,1';
+    const pnUsed = st.pipeManual ? st.f.pnM : pnCalc;
+    const snUsed = st.pipeManual ? st.f.snM : String(snCalc);
+    const reasons = [];
+    reasons.push('глубина ' + (npodzUsed != null ? fmtI(npodzUsed) : '—') + ' мм → SN ' + snCalc);
+    if (st.tg.mvk) reasons.push('ТТ МВК');
+    if (st.tg.proezd) reasons.push('проезжая часть');
+
+    // задвижки — на подводящих (безнапорных) патрубках; шаровые краны — на напорной линии
+    const zadvCalc = this.num(st.f.podvKol) || 0;
+    const zadvOvr = String(st.f.zadvM).trim() !== '' && this.num(st.f.zadvM) !== zadvCalc;
+    const zadvUsed = zadvOvr ? st.f.zadvM : String(zadvCalc);
+    const kNap = (this.num(st.f.nRab) || 0) + (this.num(st.f.nRez) || 0);
+    const kAvar = st.tg.avar ? 1 : 0;
+    const kranCalc = kNap + 1 + kAvar;
+    const kranOvr = String(st.f.kranM).trim() !== '' && this.num(st.f.kranM) !== kranCalc;
+    const kranUsed = kranOvr ? st.f.kranM : String(kranCalc);
+
+    const accepted = lc.npodz != null && this.num(st.f.npodzManual) === lc.npodz;
+    const schema = (st.f.nRab || '?') + '+' + (st.f.nRez || '0');
+    const blocks = [
+      { text: '☑ Корпус DN ' + st.f.dn + ' · труба СК/НПС-К ' + st.f.dn + '-' + pnUsed + '-' + snUsed + (st.pipeManual ? ' (вручную)' : ''), on: true },
+      { text: '☑ Лестница и перекрытие', on: true },
+      { text: '☑ Патрубки: подводящий ' + st.f.podvMat + ' DN' + st.f.podvDn + ' ×' + st.f.podvKol + ', напорный ' + st.f.napMat + ' DN' + st.f.napDn + ' ×' + st.f.napKol, on: true },
+      { text: '☑ Насосы ' + st.f.marka + ' — ' + schema + (st.f.drobilka !== 'нет' ? ' · ' + st.f.drobilka : ''), on: true },
+      { text: '☑ Запорная арматура: задвижки ' + zadvUsed + ' шт (подводящие) · шаровые краны ' + kranUsed + ' шт (напорная линия)', on: true },
+      { text: (st.tg.shu ? '☑ Автоматика: ШУ ' + st.f.shuTip + ', пуск ' + st.f.shuPusk : '☐ Автоматика — без ШУ'), on: st.tg.shu },
+      { text: (st.tg.teplo ? '☑ Теплоизоляция до ' + st.f.tiGlubina + ' мм' : '☐ Теплоизоляция — нет'), on: st.tg.teplo }
+    ];
+    const onBlocks = blocks.filter(b => b.on).length;
+
+    return {
+      f, tg, inp, inpNum,
+      zayavkaNo: st.f.zayavka, draftTime: st.draftTime,
+      onTheme: () => { const t = st.theme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', t); this.setState({ theme: t }); },
+      themeIcon: st.theme === 'dark' ? '☀' : '☾',
+      navItems,
+      formRef: (el) => { this.formEl = el; },
+      sec1Ref: (el) => { this.secEls[1] = el; }, sec2Ref: (el) => { this.secEls[2] = el; },
+      sec3Ref: (el) => { this.secEls[3] = el; }, sec4Ref: (el) => { this.secEls[4] = el; },
+      sec5Ref: (el) => { this.secEls[5] = el; },
+      teploOn: st.tg.teplo, shuOn: st.tg.shu,
+      // труба корпуса
+      pipeLabel: 'СК/НПС-К ' + st.f.dn + '-' + pnUsed + '-' + snUsed,
+      pipeColor: st.pipeManual ? 'var(--blue)' : 'var(--text)',
+      pipeManual: st.pipeManual, pipeAuto: !st.pipeManual,
+      pipeHint: st.pipeManual ? 'PN/SN заданы вручную — расчётные: ' + pnCalc + ' / SN ' + snCalc : 'расчётные: ' + reasons.join(' · '),
+      onPipeToggle: (e) => {
+        const on = e.target.checked;
+        if (on) this.setState({ pipeManual: true, f: { ...st.f, pnM: pnCalc, snM: String(snCalc) } });
+        else { this.setState({ pipeManual: false }); this.toastMsg('Труба вернулась к расчётным PN/SN'); }
+      },
+      onPipeAuto: () => { this.setState({ pipeManual: false }); this.toastMsg('Труба вернулась к расчётным PN/SN'); },
+      // задвижки
+      zadvVal: zadvUsed,
+      onZadv: (e) => this.setF('zadvM', e.target.value),
+      onZadvReset: () => { this.setF('zadvM', ''); this.toastMsg('Кол-во задвижек вернулось к расчётному: ' + zadvCalc); },
+      zadvOvr,
+      zadvOvrStyle: zadvOvr ? 'color:var(--blue);border-color:var(--blue)' : '',
+      zadvTitle: zadvOvr ? 'вручную; расчётное: ' + zadvCalc : 'ƒ = кол-во подводящих патрубков',
+      zadvHint: 'по кол-ву подводящих патрубков = ' + zadvCalc,
+      kranVal: kranUsed,
+      onKran: (e) => this.setF('kranM', e.target.value),
+      onKranReset: () => { this.setF('kranM', ''); this.toastMsg('Кол-во кранов вернулось к расчётному: ' + kranCalc); },
+      kranOvr,
+      kranOvrStyle: kranOvr ? 'color:var(--blue);border-color:var(--blue)' : '',
+      kranTitle: kranOvr ? 'вручную; расчётное: ' + kranCalc : 'ƒ = напорные линии (раб+рез) + коллектор' + (kAvar ? ' + аварийный' : ''),
+      kranHint: 'напорные (' + (st.f.nRab || 0) + '+' + (st.f.nRez || 0) + ') + коллектор 1' + (kAvar ? ' + аварийный 1' : '') + ' = ' + kranCalc,
+      rashodVal: st.rashod, onRashod: (e) => this.setState({ rashod: e.target.value }),
+      unitBtns,
+      lc: {
+        q: lc.q != null ? this.fmt(lc.q) : '—',
+        vef: lc.vef != null ? this.fmt(lc.vef) : '—',
+        vmin: lc.vmin != null ? this.fmt(lc.vmin) : '—',
+        hrab: lc.hrab != null ? this.fmt(lc.hrab, 3) : '—',
+        hr: lc.hr != null ? this.fmt(lc.hr, 3) : '—',
+        npodz: lc.npodz != null ? fmtI(lc.npodz) : '—'
+      },
+      onAccept: () => { if (lc.npodz != null) { this.setF('npodzManual', fmtI(lc.npodz)); this.toastMsg('Нподз = ' + fmtI(lc.npodz) + ' мм принята'); } },
+      acceptLabel: accepted ? 'Принято ✓' : 'Принять',
+      acceptStyle: {
+        padding: '5px 14px', fontSize: '12px', borderRadius: 0, fontWeight: 600,
+        border: '1px solid var(--acc)',
+        background: accepted ? 'transparent' : 'var(--acc)',
+        color: accepted ? 'var(--acc)' : '#fff'
+      },
+      pvLine: 'КНС ' + (dn ? fmtI(dn) : '—') + '×' + (totalH != null ? fmtI(totalH) : '—') + ' мм',
+      pvLine2: 'подз. ' + (npodzUsed != null ? fmtI(npodzUsed) : '—') + ' мм · ' + st.rashod + ' ' + (unitDefs.find(u => u.k === st.unit) || {}).label,
+      pvLine3: schema + ' насоса · ' + onBlocks + ' блоков включено',
+      onCreate: () => { if (!canCreate) { this.toastMsg('Заполните обязательные поля (отмечены ●)'); return; } this.setState({ previewOpen: true }); },
+      createStyle: {
+        padding: '9px 20px', fontSize: '13.5px', fontWeight: 700, borderRadius: 0,
+        border: '1px solid var(--acc)',
+        background: canCreate ? 'var(--acc)' : 'var(--panel2)',
+        color: canCreate ? '#fff' : 'var(--faint)',
+        cursor: canCreate ? 'pointer' : 'not-allowed',
+        borderColor: canCreate ? 'var(--acc)' : 'var(--line2)'
+      },
+      createHint: canCreate
+        ? ('КНС ' + st.f.dn + '×' + (totalH != null ? fmtI(totalH) : '—') + ' мм (подз. ' + (npodzUsed != null ? fmtI(npodzUsed) : '—') + '), ' + st.rashod + ' л/с, ' + schema + ' насоса, ' + onBlocks + ' блоков включено')
+        : 'заполните обязательные поля — кнопка разблокируется',
+      previewOpen: st.previewOpen,
+      onPreviewClose: () => this.setState({ previewOpen: false }),
+      stop: (e) => e.stopPropagation(),
+      pvTitle: 'КНС ' + st.f.dn + '×' + (totalH != null ? fmtI(totalH) : '—') + ' мм',
+      pvSub: 'подземная часть ' + (npodzUsed != null ? fmtI(npodzUsed) : '—') + ' мм · ' + st.rashod + ' л/с · ' + schema + ' насоса · заявка ' + st.f.zayavka,
+      pvBlocks: blocks.map((b, i) => ({ key: i, text: b.text, color: b.on ? 'var(--text)' : 'var(--faint)' })),
+      onConfirm: () => { window.location.href = 'Калькулятор v2.dc.html'; },
+      toast: st.toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>

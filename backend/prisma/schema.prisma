@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  ENGINEER
+  BUYER
+  VIEWER
+}
+
+enum DeviceType {
+  KNS  // Канализационная насосная станция
+  EMK  // Ёмкость
+  KOL  // Колодец
+}
+
+enum Status {
+  DRAFT
+  CALC
+  REVIEW
+  APPROVED
+  REJECTED
+}
+
+// ── Users ──────────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  name         String
+  role         Role       @default(VIEWER)
+  passwordHash String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  projects     Project[]
+  estimates    Estimate[]
+  auditLogs    AuditLog[]
+}
+
+// ── Projects ───────────────────────────────────────────────────────────────
+
+model Project {
+  id        String     @id @default(uuid())
+  title     String                        // Название объекта
+  address   String?                       // Адрес объекта
+  customer  String?                       // Заказчик
+  notes     String?
+  authorId  String
+  author    User       @relation(fields: [authorId], references: [id])
+  estimates Estimate[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// ── Estimates ──────────────────────────────────────────────────────────────
+
+model Estimate {
+  id          String      @id @default(uuid())
+  title       String                        // Обозначение единицы, напр. «КНС DN3000»
+  deviceType  DeviceType
+  status      Status      @default(DRAFT)
+  surveyData  Json        // технические параметры + bundles
+  totalRub    Float?
+  projectId   String?
+  project     Project?    @relation(fields: [projectId], references: [id])
+  authorId    String
+  author      User        @relation(fields: [authorId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  snapshots   EstimateSnapshot[]
+}
+
+// ── Snapshots (версионирование расчётов) ──────────────────────────────────
+// TODO: реализовать POST /api/estimates/:id/snapshot и GET /api/estimates/:id/snapshots
+//       Снапшот создаётся при смене статуса на APPROVED или вручную («Сохранить версию»).
+
+model EstimateSnapshot {
+  id               String    @id @default(uuid())
+  estimateId       String
+  estimate         Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  version          Int
+  priceListVersion Int
+  totalRub         Float
+  bundlesJson      Json      // полный CalcBundle[] snapshot
+  createdAt        DateTime  @default(now())
+
+  @@unique([estimateId, version])
+}
+
+// ── Price list ─────────────────────────────────────────────────────────────
+
+model PriceItem {
+  id         String   @id @default(uuid())
+  lookupKey  String   @unique  // category:name — уникальный ключ поиска
+  category   String
+  name       String
+  unit       String
+  priceRub   Float?
+  supplier   String?
+  updatedAt  DateTime @updatedAt
+
+  history    PriceHistory[]
+}
+
+model PriceHistory {
+  id          String    @id @default(uuid())
+  priceItemId String
+  priceItem   PriceItem @relation(fields: [priceItemId], references: [id], onDelete: Cascade)
+  oldPrice    Float?
+  newPrice    Float?
+  changedById String?
+  changedAt   DateTime  @default(now())
+}
+
+// ── Audit log ──────────────────────────────────────────────────────────────
+// TODO: добавить запись в AuditLog при ключевых событиях:
+//       estimate.create, estimate.status_change, prices.update, prices.import, user.create
+//       Писать через вспомогательную функцию audit(prisma, userId, action, entityType, entityId, meta)
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String   // e.g. "estimate.create", "prices.import"
+  entityType String?
+  entityId   String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+}
