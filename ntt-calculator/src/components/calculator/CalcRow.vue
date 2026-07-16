@@ -237,8 +237,9 @@ function onKeydown(e: KeyboardEvent) {
     activeIdx.value = Math.max(activeIdx.value - 1, -1)
   } else if (e.key === 'Enter') {
     e.preventDefault()
-    if (activeIdx.value >= 0 && filtered.value[activeIdx.value]) {
-      selectItem(filtered.value[activeIdx.value])
+    const active = activeIdx.value >= 0 ? filtered.value[activeIdx.value] : undefined
+    if (active) {
+      selectItem(active)
     } else {
       store.setField(props.row.id, 'name', (e.target as HTMLInputElement).value)
       dropdownOpen.value = false

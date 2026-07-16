@@ -40,7 +40,7 @@ const STATUS_LABELS: Record<EstimateStatus, string> = {
   CALC:     'Расчёт',
   REVIEW:   'Проверка',
   APPROVED: 'Утверждено',
-  ARCHIVED: 'Архив',
+  REJECTED: 'Отклонено',
 }
 
 function fmtDate(iso: string) {

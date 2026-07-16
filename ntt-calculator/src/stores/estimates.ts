@@ -41,6 +41,7 @@ export const useEstimatesStore = defineStore('estimates', () => {
       status: estimate.status,
       totalRub: estimate.totalRub,
       updatedAt: estimate.updatedAt,
+      surveyData: estimate.surveyData as EstimateListItem['surveyData'],
       author: estimate.author,
     })
     return estimate

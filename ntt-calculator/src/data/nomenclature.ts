@@ -2,7 +2,8 @@ import type { NomItem } from '@/types/calculator'
 
 export const FOT_RATE = '1207.8'
 
-export const BCOLORS = [
+// Непустой кортеж: гарантирует TS, что BCOLORS[0] существует (fallback в mkBundle).
+export const BCOLORS: readonly [string, ...string[]] = [
   '#eeaa28', '#16c8b0', '#9068f8',
   '#ee6868', '#30d468', '#3a9aff',
   '#f07028', '#e058c0',

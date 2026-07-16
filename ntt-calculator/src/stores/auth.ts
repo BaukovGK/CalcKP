@@ -24,8 +24,11 @@ export const useAuthStore = defineStore('auth', () => {
   function _persist(u: AuthUser | null, token: string | null) {
     user.value = u
     accessToken.value = token
-    u ? localStorage.setItem('ntt_user', JSON.stringify(u)) : localStorage.removeItem('ntt_user')
-    token ? localStorage.setItem('ntt_token', token) : localStorage.removeItem('ntt_token')
+    if (u) localStorage.setItem('ntt_user', JSON.stringify(u))
+    else localStorage.removeItem('ntt_user')
+
+    if (token) localStorage.setItem('ntt_token', token)
+    else localStorage.removeItem('ntt_token')
   }
 
   // ── Login ──────────────────────────────────────────────────────────────────
