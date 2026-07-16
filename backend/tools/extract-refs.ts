@@ -1,0 +1,264 @@
+/**
+ * Извлечение справочников из мастер-шаблона «Шаблон 3.0.xlsx» в JSON-сиды.
+ *
+ * Инструмент постоянный, не одноразовый: справочники завода обновляются
+ * (прайс НН версионируется, таблица весов дополняется), и повторяемость
+ * важнее разовой выгрузки. Формулы Excel здесь НЕ вычисляются — берутся
+ * закешированные результаты, поэтому книга должна быть сохранена Excel'ем
+ * с пересчитанными формулами.
+ *
+ * Запуск:  npm run refs:extract
+ * Выход:   prisma/seed-data/*.json
+ *
+ * Источник: doc/Реверс_калькуляторов.md §9, ТЗ §3 (модель PriceItem).
+ */
+import ExcelJS from 'exceljs'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
+// Бэкенд собирается в CommonJS (tsconfig module=commonjs), поэтому __dirname,
+// а не import.meta.url.
+const WORKBOOK = resolve(__dirname, '../../ntt-calculator/doc/Шаблон 3.0.xlsx')
+const OUT_DIR = resolve(__dirname, '../prisma/seed-data')
+
+// ─── Чтение ячеек ────────────────────────────────────────────────────────────
+// ExcelJS отдаёт формульные ячейки объектом {formula, result}; нас интересует
+// только закешированный result.
+
+type Cell = ExcelJS.Cell
+
+function raw(cell: Cell): unknown {
+  const v = cell?.value
+  if (v == null) return null
+  if (typeof v === 'object') {
+    if ('result' in v) return (v as { result: unknown }).result
+    if ('richText' in v) return (v as ExcelJS.RichText[] & { richText: { text: string }[] }).richText.map((t) => t.text).join('')
+    if ('text' in v) return (v as { text: string }).text
+    return null
+  }
+  return v
+}
+
+function str(cell: Cell): string {
+  const v = raw(cell)
+  return v == null ? '' : String(v).trim()
+}
+
+function num(cell: Cell): number | null {
+  const v = raw(cell)
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'string') {
+    // В книге встречаются числа строкой с запятой-разделителем («0,193 »).
+    const parsed = Number(v.replace(/\s/g, '').replace(',', '.'))
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+// ─── Прайс НН ────────────────────────────────────────────────────────────────
+// Колонки (проверено по шапке листа): B=Группа, D=Номенклатура, F=ЕИ,
+// G=Цена без скидки, H=Валюта, I=Скидка %, J=Цена руб (её тянет VLOOKUP),
+// K=Комментарий. Колонки «Поставщик» в НН нет — при импорте не заполняется.
+
+export interface PriceSeed {
+  category: string
+  name: string
+  unit: string
+  priceBaseRub: number | null
+  discountPct: number | null
+  currency: string
+  priceRub: number | null
+  comment: string | null
+}
+
+function extractPrices(ws: ExcelJS.Worksheet): PriceSeed[] {
+  const out: PriceSeed[] = []
+  const seen = new Set<string>()
+  let skipped = 0
+  let dupes = 0
+
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r)
+    const category = str(row.getCell(2))
+    const name = str(row.getCell(4))
+    const unit = str(row.getCell(6))
+
+    // Ключ прайса — тройка (категория, наименование, ЕИ): VLOOKUP(C&D&K,...).
+    if (!category || !name || !unit) {
+      skipped++
+      continue
+    }
+
+    // Символ «~» запрещён в наименованиях (наследие VLOOKUP, ТЗ §9.8).
+    if (name.includes('~')) {
+      console.warn(`  ⚠ НН строка ${r}: «~» в наименовании — пропущена: ${name}`)
+      skipped++
+      continue
+    }
+
+    const key = `${category}:${name}:${unit}`
+    if (seen.has(key)) {
+      dupes++
+      continue
+    }
+    seen.add(key)
+
+    out.push({
+      category,
+      name,
+      unit,
+      priceBaseRub: num(row.getCell(7)),
+      discountPct: num(row.getCell(9)),
+      currency: str(row.getCell(8)) || 'руб',
+      priceRub: num(row.getCell(10)),
+      comment: str(row.getCell(11)) || null,
+    })
+  }
+
+  console.log(`  прайс: ${out.length} позиций, пропущено ${skipped}, дублей ключа ${dupes}`)
+  return out
+}
+
+// ─── Веса труб ───────────────────────────────────────────────────────────────
+// GRP: B=DN, C=SN, D=PN, F=толщина стенки, G=вес кг/пм.
+// ПЭ:  S=DN, T=наименование, U=DNнар, V=толщина, W=вес кг/м.
+
+export interface PipeWeightSeed {
+  dn: number
+  pn: number
+  sn: number
+  wallMm: number | null
+  kgPerM: number
+}
+
+export interface PePipeSeed {
+  dn: number
+  name: string
+  odMm: number | null
+  wallMm: string | null
+  kgPerM: number
+}
+
+function extractPipeWeights(ws: ExcelJS.Worksheet): { grp: PipeWeightSeed[]; pe: PePipeSeed[] } {
+  const grp: PipeWeightSeed[] = []
+  const pe: PePipeSeed[] = []
+
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r)
+
+    const dn = num(row.getCell(2))
+    const sn = num(row.getCell(3))
+    const pn = num(row.getCell(4))
+    const kgPerM = num(row.getCell(7))
+    if (dn != null && pn != null && sn != null && kgPerM != null) {
+      grp.push({ dn, pn, sn, wallMm: num(row.getCell(6)), kgPerM })
+    }
+
+    const peDn = num(row.getCell(19))
+    const peName = str(row.getCell(20))
+    const peKg = num(row.getCell(23))
+    if (peDn != null && peName && peKg != null) {
+      pe.push({
+        dn: peDn,
+        name: peName,
+        odMm: num(row.getCell(21)),
+        wallMm: str(row.getCell(22)) || null,
+        kgPerM: peKg,
+      })
+    }
+  }
+
+  console.log(`  веса труб: GRP ${grp.length}, ПЭ ${pe.length}`)
+  return { grp, pe }
+}
+
+// ─── Списки (enum'ы) ─────────────────────────────────────────────────────────
+// AG2:AG17 — 16 категорий строк; последние три (Собственное производство,
+// Работы, ФОТ) — непокупные: F=IF(OR(C=AG15:AG17),"нет","да").
+// S2:S7 — единицы измерения.
+
+export interface ListsSeed {
+  categories: string[]
+  nonPurchaseCategories: string[]
+  units: string[]
+}
+
+function extractLists(ws: ExcelJS.Worksheet): ListsSeed {
+  const categories: string[] = []
+  for (let r = 2; r <= 17; r++) {
+    const v = str(ws.getRow(r).getCell(33))
+    if (v) categories.push(v)
+  }
+
+  const units: string[] = []
+  for (let r = 2; r <= 8; r++) {
+    const v = str(ws.getRow(r).getCell(19))
+    if (v) units.push(v)
+  }
+
+  // AG15:AG17 в терминах листа = последние три категории.
+  const nonPurchaseCategories = categories.slice(-3)
+
+  console.log(`  списки: ${categories.length} категорий (непокупных ${nonPurchaseCategories.length}), ${units.length} ЕИ`)
+  return { categories, nonPurchaseCategories, units }
+}
+
+// ─── main ────────────────────────────────────────────────────────────────────
+
+async function main() {
+  console.log(`Читаю ${WORKBOOK}`)
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.readFile(WORKBOOK)
+
+  const sheet = (name: string): ExcelJS.Worksheet => {
+    const ws = wb.getWorksheet(name)
+    if (!ws) throw new Error(`Лист «${name}» не найден в книге`)
+    return ws
+  }
+
+  const prices = extractPrices(sheet('НН'))
+  const { grp, pe } = extractPipeWeights(sheet('Вес трубы, ПЭ трубы'))
+  const lists = extractLists(sheet('Списки'))
+
+  // ─── Проверки целостности: лучше упасть здесь, чем засеять мусор в БД ───
+  const errors: string[] = []
+
+  if (prices.length < 900) errors.push(`прайс: ожидалось ~1044 позиции, получено ${prices.length}`)
+  if (grp.length !== 162) errors.push(`GRP-трубы: ожидалось 162 строки (Реверс §9.2), получено ${grp.length}`)
+  if (lists.categories.length !== 16) errors.push(`категории: ожидалось 16, получено ${lists.categories.length}`)
+
+  // Ставка ФОТ обязана находиться по тройному ключу — на ней стоит вся экономика.
+  const fot = prices.find((p) => p.category === 'ФОТ' && p.name === 'ФОТ' && p.unit === 'чел. ч')
+  if (!fot) errors.push('не найдена позиция прайса «ФОТ / ФОТ / чел. ч» (ставка ФОТ)')
+  else console.log(`  ставка ФОТ: ${fot.priceRub} ₽/чел.ч`)
+
+  // Контроль: вес трубы ОЛ3487 (DN3000, PN_трубы 0,6, SN 10000) = 970,2 кг/пм.
+  const ref = grp.find((g) => g.dn === 3000 && g.pn === 0.6 && g.sn === 10000)
+  if (!ref) errors.push('не найден контрольный вес DN3000 / PN0,6 / SN10000')
+  else if (Math.abs(ref.kgPerM - 970.2) > 0.05) errors.push(`контрольный вес DN3000: ожидалось 970,2, получено ${ref.kgPerM}`)
+  else console.log(`  контроль веса DN3000;0,6;10000 = ${ref.kgPerM} кг/пм ✓`)
+
+  if (errors.length) {
+    console.error('\nПРОВЕРКИ НЕ ПРОЙДЕНЫ:')
+    errors.forEach((e) => console.error(`  ✗ ${e}`))
+    process.exit(1)
+  }
+
+  await mkdir(OUT_DIR, { recursive: true })
+  const write = async (file: string, data: unknown) => {
+    await writeFile(resolve(OUT_DIR, file), JSON.stringify(data, null, 2) + '\n', 'utf8')
+    console.log(`  → prisma/seed-data/${file}`)
+  }
+
+  await write('prices.json', prices)
+  await write('pipe-weights-grp.json', grp)
+  await write('pipe-weights-pe.json', pe)
+  await write('lists.json', lists)
+
+  console.log('\nГотово.')
+}
+
+main().catch((e: unknown) => {
+  console.error('ОШИБКА:', e instanceof Error ? e.message : e)
+  process.exit(1)
+})
