@@ -23,7 +23,7 @@ import {
   marketableAppearanceHours,
   pipeLengthM,
 } from './formulas'
-import { FOT_K_LAMIN, FOT_K_MECH } from './fot'
+import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import type { CostBucket } from './economics'
 import {
   ballValveCount,
@@ -115,6 +115,15 @@ export interface MaterializeContext {
   pipeWeightOf(dn: number, pn: number, sn: number): number | null
   priceListVersion: number
 }
+
+/**
+ * Толщина защитного слоя ламинации теплоизоляции, мм.
+ *
+ * У КНС — 5 мм, у колодца — 4 мм (Реверс §4.3). В прайсе это две разные
+ * позиции, и толщина входит в наименование, поэтому константа задаётся здесь,
+ * а не в формуле: она нужна и для массы, и для ключа поиска цены.
+ */
+const INSULATION_LAYER_MM = 5
 
 /** Каркас 7 разделов КНС — порядок фиксирован (§9.1 ТЗ). */
 export const KNS_SECTIONS: ReadonlyArray<{ code: string; title: string }> = [
@@ -226,7 +235,10 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
       },
       makeRow(ctx, {
         kind: 'ОПЕРАЦИЯ',
-        category: 'Работы',
+        // Категория «Собственное производство», а НЕ «Работы»: в прайсе НН
+        // категория «Работы» пуста (0 позиций из 1040) — весь труд лежит в
+        // «Собственном производстве». Строка с «Работы» всегда была бы красной.
+        category: 'Собственное производство',
         name: 'Придание изделию товарного вида',
         unit: 'чел. ч',
         qtyCalc: marketableAppearanceHours(s.dn, lengthM),
@@ -260,9 +272,21 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
   })
 
   // A5 — Патрубки: подводящие и напорные, каждый со своей гильзой.
-  const nozzles: Array<{ title: string; dn: number; count: number }> = [
-    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount },
-    { title: 'Патрубок напорный', dn: s.outletDn, count: s.outletCount },
+  // Наименования и категории — ДОСЛОВНО из прайса НН: ключ поиска это тройка
+  // (категория, наименование, ЕИ), и любое расхождение даёт «красную» строку.
+  const nozzles: Array<{ title: string; dn: number; count: number; cutoutName: string }> = [
+    {
+      title: 'Патрубок подводящий',
+      dn: s.inletDn,
+      count: s.inletCount,
+      cutoutName: 'Прорезка отверстия под гильзу входящего патрубка',
+    },
+    {
+      title: 'Патрубок напорный',
+      dn: s.outletDn,
+      count: s.outletCount,
+      cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)',
+    },
   ]
 
   for (const n of nozzles) {
@@ -274,27 +298,36 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
       title: `${n.title} DN${n.dn} ×${n.count}`,
       enabled: true,
       rows: [
-        makeRow(ctx, {
-          kind: 'МАТЕРИАЛ',
+        // Гильза в прайсе — «Формовка гильз» в КГ, а не штучная позиция.
+        // ❗ Масса формовки = f(DN) берётся из матрицы листа «Для расчетов»,
+        // которая пока не извлечена (План: этап 1 извлёк прайс и веса труб).
+        // До извлечения количество остаётся ручным вводом: молча подставить
+        // выдуманную массу было бы хуже пустой строки.
+        // ФОТ-спутник обязателен для каждой операции с ЕИ «кг» (Механика §6).
+        // При пустой массе он даст 0 и пересчитается, как только инженер
+        // введёт количество.
+        ...operationWithFot(ctx, {
           category: 'Собственное производство',
-          name: `Стеклокомпозитная гильза Ø${sleeve}`,
-          unit: 'шт',
-          qtyCalc: n.count,
-          note: `Ø гильзы = CEILING(DN${n.dn}+100) = ${sleeve} мм`,
+          name: 'Формовка гильз',
+          unit: 'кг',
+          qtyCalc: null,
+          fotK: FOT_K_MANUAL,
+          note: `Гильза Ø${sleeve} мм (CEILING(DN${n.dn}+100)) ×${n.count} · масса — из матрицы «Для расчетов», не извлечена`,
         }),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
-          category: 'Работы',
-          name: 'Прорезка отверстия',
+          category: 'Собственное производство',
+          name: n.cutoutName,
           unit: 'чел. ч',
           qtyCalc: cutoutHours(sleeve, n.count),
+          note: `ƒ Ø${sleeve}·π/1000 × 0,5 чел.ч/м × ${n.count}`,
         }),
       ],
     })
   }
 
   // A9 — Теплоизоляция: включается флагом ОЛ (Механика §7.2).
-  const ins = insulation(s.dn, s.insulationDepthMm)
+  const ins = insulation(s.dn, s.insulationDepthMm, { protectiveThickness: INSULATION_LAYER_MM / 1000 })
   components.push({
     id: nextId('c'),
     nodeCode: 'A9',
@@ -306,23 +339,31 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
       makeRow(ctx, {
         kind: 'МАТЕРИАЛ',
         category: 'Прочие материалы',
-        name: 'Изофом ППЭ ОР 15 1,5х40',
+        // Наименование в НН — с префиксом «Теплоизоляция - » (750 ₽/м²).
+        // README хендоффа приводит его без префикса и с ценой 890 — это данные
+        // мок-прототипа, а не прайса.
+        name: 'Теплоизоляция - Изофом ППЭ ОР 15 1,5х40',
         unit: 'м²',
         qtyCalc: ins.totalM2,
+        note: `ƒ π·(DN/1000)·h + π·(DN/2000)² = ${ins.totalM2.toFixed(1)} м²`,
       }),
+      // В прайсе две позиции, различающиеся толщиной слоя: «5 мм» и «4 мм».
+      // Это подтверждает Реверс §4.3 (S·0,005·1850 у КНС, 0,004 у колодца) —
+      // толщина зашита в наименование, поэтому имя выводится из параметра.
       ...operationWithFot(ctx, {
         category: 'Собственное производство',
-        name: 'Защитный слой ламинации теплоизоляции',
+        name: `Защитный слой ламинации ${INSULATION_LAYER_MM} мм на теплоизоляцию`,
         unit: 'кг',
         qtyCalc: ins.protectiveLayerKg,
         fotK: FOT_K_LAMIN,
       }),
       makeRow(ctx, {
         kind: 'ОПЕРАЦИЯ',
-        category: 'Работы',
+        category: 'Собственное производство',
         name: 'Монтаж теплоизоляции',
         unit: 'чел. ч',
         qtyCalc: ins.mountingHours,
+        note: 'ƒ 1 чел.ч на 1 м²',
       }),
     ],
   })
@@ -343,21 +384,25 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
       title: 'Узел запорной арматуры',
       enabled: true,
       rows: [
+        // Наименование в НН содержит полную спецификацию
+        // («…металл/металл DN50 PN10/16 клин бронза»), и позиции есть не для
+        // всех DN. Подбор конкретной позиции — за инженером: он выбирает её
+        // из прайса. Количество при этом посчитано.
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
           category: 'Запорная арматура',
-          name: `Задвижка чугунная клиновая DN${s.inletDn}`,
+          name: `Задвижка чугунная клиновая металл/металл DN${s.inletDn} PN10/16 клин бронза`,
           unit: 'шт',
           qtyCalc: gates,
-          note: `= кол-во подводящих (${s.inletCount}) × флаг «арматура на подводящем»`,
+          note: `ƒ = подводящих (${s.inletCount}) × флаг «арматура на подводящем»`,
         }),
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
-          category: 'Запорная арматура',
+          category: 'Прочее оборудование',
           name: `Кран шаровой DN${s.outletDn}`,
           unit: 'шт',
           qtyCalc: balls,
-          note: `= (раб ${s.pumpsWorking} + рез ${s.pumpsReserve}) + 1 коллектор${s.emergencyPipeline ? ' + 1 аварийный' : ''}`,
+          note: `ƒ = (раб ${s.pumpsWorking} + рез ${s.pumpsReserve}) + коллектор 1${s.emergencyPipeline ? ' + аварийный 1' : ''}`,
         }),
       ],
     },
@@ -367,20 +412,34 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
       title: 'Насосная группа',
       enabled: true,
       rows: [
+        // В категории «Насосы, АТМ» прайс НН НЕ содержит ни одной позиции:
+        // насос подбирается под проект (марка из гидравлического расчёта),
+        // цена договорная. Строка рождается «красной» намеренно — так же, как
+        // труба корпуса (Механика §5.2).
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
           category: 'Насосы, АТМ',
-          name: 'Насос',
+          name: 'Насос (марка по подбору)',
           unit: 'шт',
           qtyCalc: s.pumpsWorking + s.pumpsReserve,
+          note: `ƒ = раб ${s.pumpsWorking} + рез ${s.pumpsReserve} · цена договорная, в прайсе насосов нет`,
         }),
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
           category: 'Выключатели',
-          name: 'Поплавковый выключатель',
+          // Наименование в НН — капсом и с длиной кабеля.
+          name: 'ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ  КАБЕЛЬ 10 М',
           unit: 'шт',
           qtyCalc: floatSwitchCount(s.pumpsWorking, s.pumpsReserve),
-          note: '= раб + рез + 2',
+          note: 'ƒ = раб + рез + 2',
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Монтаж Поплавковых выключателей',
+          unit: 'чел. ч',
+          qtyCalc: floatSwitchCount(s.pumpsWorking, s.pumpsReserve),
+          note: 'ƒ 1 чел.ч — 1 выключатель',
         }),
       ],
     },

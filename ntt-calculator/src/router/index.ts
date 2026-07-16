@@ -48,8 +48,18 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
     },
     {
+      // Конфигуратор расчёта по прототипу «Калькулятор v2»: материализованное
+      // дерево «Сборка→Компонент→Строка» (§9).
       path: '/calculator/:id?',
       name: 'calculator',
+      component: () => import('@/views/CalculatorTreeView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
+    },
+    {
+      // Прежний экран свободного дерева — оставлен до переноса ручных строк
+      // и DnD, недоступен из навигации.
+      path: '/calculator-legacy/:id?',
+      name: 'calculator-legacy',
       component: CalculatorView,
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
     },
