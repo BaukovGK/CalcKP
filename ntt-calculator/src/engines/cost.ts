@@ -1,3 +1,14 @@
+/**
+ * УСТАРЕВШИЙ движок свободного дерева «связка→группа→подгруппа→строка».
+ *
+ * Заменяется движком §9 (`engines/row.ts`, `fot.ts`, `economics.ts`,
+ * `rounding.ts`). Живёт до этапа 5, пока на нём держатся текущие компоненты
+ * калькулятора; новый код сюда добавлять не нужно.
+ *
+ * Осторожно: здесь всё считается через parseFloat поверх строк и без
+ * округления — расхождения с эталоном ожидаемы. Единственный источник истины
+ * по округлению — `engines/rounding.ts`.
+ */
 import type { CalcRow, CalcSubgroup, CalcGroup, CalcBundle } from '@/types/calculator'
 
 export const rowSum = (r: CalcRow): number =>
@@ -18,13 +29,10 @@ export const grandTotal = (bundles: CalcBundle[]): number =>
 export const fmt = (n: number): string =>
   n ? n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '—'
 
-// FOT coefficient by operation name — from Excel COUNTIF logic
-export function fotCoeff(name: string): number {
-  const n = name.toLowerCase()
-  if (n.includes('мех') || n.includes('формов')) return 0.28
-  if (n.includes('ламин')) return 0.56
-  return 1.0
-}
+// fotCoeff удалён: не вызывался ниоткуда и содержал ошибку — возвращал 0,28 на
+// любое вхождение «формов», то есть и для «Ручной формовки», которой по §9.3
+// положено 1,0 (0,28 — только механическая формовка).
+// Актуальная реализация: engines/fot.ts → fotCoeffByName / resolveFotK.
 
 // Recalculate auto-linked rows within a subgroup
 export function recalcAuto(sg: CalcSubgroup): void {
