@@ -8,6 +8,7 @@ import { projectsRouter }  from './routes/projects.routes'
 import { estimatesRouter } from './routes/estimates.routes'
 import { pricesRouter }    from './routes/prices.routes'
 import { refsRouter }      from './routes/refs.routes'
+import { purchaseRouter }  from './routes/purchase.routes'
 
 const app  = express()
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000
@@ -39,6 +40,9 @@ app.use('/api/auth',      authRouter)
 app.use('/api/admin',     adminRouter)
 app.use('/api/projects',  projectsRouter)
 app.use('/api/estimates', estimatesRouter)
+// Заявка на закупку — отчёт поверх расчёта (ТЗ §9.6), поэтому висит на
+// /api/estimates, а не на своём ресурсе: своей сущности у неё нет.
+app.use('/api/estimates', purchaseRouter)
 app.use('/api/prices',    pricesRouter)
 app.use('/api/refs',      refsRouter)
 

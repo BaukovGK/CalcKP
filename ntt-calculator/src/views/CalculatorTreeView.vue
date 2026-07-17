@@ -21,7 +21,7 @@
         </button>
         <span class="tb-pl">прайс {{ priceListLabel }}</span>
         <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
-        <button class="btn" @click="onExport">Экспорт ▾</button>
+        <button class="btn" title="Заявка на закупку" @click="onExport">Экспорт ▾</button>
         <button class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
         <button class="btn" title="Переключить тему" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
       </div>
@@ -204,7 +204,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import CalcTableRow from '@/components/calculator/CalcTableRow.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -217,6 +217,7 @@ import type { CalcComponent, CalcRowNode } from '@/engines/template-kns'
 import { api } from '@/api/client'
 
 const route = useRoute()
+const router = useRouter()
 const st = useCalcTreeStore()
 const { theme, toggle } = useTheme()
 
@@ -411,10 +412,16 @@ function addFreeRow(sectionCode: string) {
   toast('Свободная строка добавлена — заполните наименование и цену')
 }
 
-function onExport() {
-  // Честная заглушка: печатная форма КП ждёт образец от заказчика, а экспорт
-  // сметы/Заявки — отдельный пункт этапа 5.
-  toast('Экспорт сметы и Заявки на закупку — в работе; печатная форма КП ждёт образец', 'error')
+async function onExport() {
+  // Заявка на закупку — отчёт поверх этого же расчёта (ТЗ §9.6).
+  // Сохраняем перед переходом: иначе заявка покажет данные до тюнинга.
+  if (!st.estimate) return
+  try {
+    await st.save()
+  } catch {
+    // Не блокируем просмотр заявки: стор общий, строки посчитаются из памяти.
+  }
+  await router.push({ name: 'purchase-request', params: { id: st.estimate.id } })
 }
 
 async function onSave() {

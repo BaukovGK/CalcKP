@@ -56,6 +56,14 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
     },
     {
+      // Заявка на закупку — отчёт поверх расчёта (ТЗ §9.6), поэтому вложена
+      // в его маршрут. BUYER ведёт закупку по чужим расчётам.
+      path: '/calculator/:id/purchase',
+      name: 'purchase-request',
+      component: () => import('@/views/PurchaseRequestView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER', 'BUYER'] },
+    },
+    {
       // Прежний экран свободного дерева — оставлен до переноса ручных строк
       // и DnD, недоступен из навигации.
       path: '/calculator-legacy/:id?',

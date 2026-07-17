@@ -22,6 +22,8 @@ export type AuditAction =
   | 'prices.update'
   | 'prices.import'
   | 'user.create'
+  /** Выгрузка Заявки на закупку (ТЗ §9.6). */
+  | 'purchase.export'
 
 export async function audit(
   userId: string | null | undefined,
