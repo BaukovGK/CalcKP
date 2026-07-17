@@ -1,0 +1,65 @@
+# ⚠️ НЕ ПРОВЕРЕН. Docker на машине разработки не установлен (решение
+# от 2026-07-16), поэтому этот файл написан «вслепую» и ни разу не запускался.
+# Рабочий и проверяемый путь развёртывания — ./verify.ps1 (см. README).
+#
+# Перед первым боевым запуском ожидайте правок: пути сборки, healthcheck'и и
+# порядок миграций проверяются только реальным `docker compose up`.
+#
+# Схема (ТЗ §10.1): nginx (отдаёт собранный фронт, проксирует /api)
+#                   → backend (Express :3000) → PostgreSQL 16
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ntt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}
+      POSTGRES_DB: ${POSTGRES_DB:-ntt_estimates}
+      # Кириллица в наименованиях прайса — коллация должна это выдержать.
+      LANG: ru_RU.utf8
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # backend стартует только после готовности БД: иначе migrate deploy
+      # упадёт на первом же запуске.
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ntt} -d ${POSTGRES_DB:-ntt_estimates}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ntt}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ntt_estimates}
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET обязателен}
+      JWT_ACCESS_EXPIRES: 15m
+      JWT_REFRESH_EXPIRES: 7d
+      # Фронт отдаётся тем же nginx, поэтому запросы идут с его origin.
+      CORS_ORIGIN: ${PUBLIC_URL:-http://localhost}
+    expose:
+      - '3000'
+
+  web:
+    build:
+      context: .
+      dockerfile: ./ntt-calculator/Dockerfile
+      args:
+        # Фронт ходит на /api того же origin — nginx проксирует.
+        VITE_API_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '${HTTP_PORT:-80}:80'
+
+volumes:
+  db-data:
