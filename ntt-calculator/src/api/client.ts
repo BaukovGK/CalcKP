@@ -11,6 +11,12 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('ntt_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+
+  // FormData: Content-Type должен ставить браузер — только он знает boundary
+  // multipart-запроса. Дефолтный 'application/json' инстанса его затирает, и
+  // сервер получает тело без границ (multer не видит файл -> 400).
+  if (config.data instanceof FormData) delete config.headers['Content-Type']
+
   return config
 })
 

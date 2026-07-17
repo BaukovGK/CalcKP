@@ -34,6 +34,50 @@
       <div class="pr-toolbar">
         <input class="fi pr-search" v-model="search" placeholder="Поиск по наименованию…" />
         <button class="btn btn-g" @click="search = ''; selectedCat = ''">Сбросить</button>
+
+        <div class="pr-tb-spacer"></div>
+
+        <!-- Импорт прайса (ТЗ §7). Доступ — ADMIN и BUYER (бэк проверяет тоже). -->
+        <span v-if="canImport" class="pr-hint">Лист «НН» мастер-шаблона</span>
+        <input
+          ref="fileEl"
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          hidden
+          @change="onFile"
+        />
+        <button v-if="canImport" class="btn btn-g" :disabled="importing" @click="fileEl?.click()">
+          {{ importing ? 'Импортируем…' : 'Импорт из xlsx' }}
+        </button>
+      </div>
+
+      <!-- Итог импорта: держим на экране, а не тостом — цифры нужно прочитать. -->
+      <div v-if="importResult" class="pr-imp">
+        <div class="pr-imp-h">
+          Импорт завершён · версия прайса v{{ importResult.version }}
+          <button class="pr-imp-x" @click="importResult = null">✕</button>
+        </div>
+        <div class="pr-imp-row">
+          <span>создано <b>{{ importResult.created }}</b></span>
+          <span>обновлено цен <b>{{ importResult.updated }}</b></span>
+          <span>без изменений <b>{{ importResult.unchanged }}</b></span>
+          <span :class="{ 'is-warn': importResult.skipped > 0 }">пропущено <b>{{ importResult.skipped }}</b></span>
+        </div>
+
+        <!-- Пропущенное не заминаем: дубли ключа и битые строки — это данные
+             завода, и о них надо знать (План §4.1-bis C, D). -->
+        <details v-if="importResult.skipped > 0" class="pr-imp-d">
+          <summary>что пропущено и почему</summary>
+          <div v-for="d in importResult.duplicates" :key="d.sheetRow" class="pr-imp-i">
+            строка {{ d.sheetRow }}: дубль ключа (первая — строка {{ d.firstRow }}) · {{ d.key }}
+          </div>
+          <div v-for="srow in importResult.skippedRows" :key="srow.sheetRow" class="pr-imp-i">
+            строка {{ srow.sheetRow }}: {{ srow.reason }}
+          </div>
+          <p class="pr-imp-note">
+            При дубле побеждает первая запись — так же ведёт себя VLOOKUP в Excel.
+          </p>
+        </details>
       </div>
 
       <div class="calc-area">
@@ -112,24 +156,58 @@
       </div>
     </div>
   </div>
+
+    <ToastHost />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { pricesApi, type PriceItem } from '@/api/prices'
+import { pricesApi, type ImportResult, type PriceItem } from '@/api/prices'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import { fmt } from '@/engines/cost'
 import { useAuthStore } from '@/stores/auth'
+import ToastHost from '@/components/ui/ToastHost.vue'
+import { toast } from '@/composables/useToast'
 
 const router = useRouter()
 const auth   = useAuthStore()
 const canEdit = computed(() => auth.role === 'ADMIN' || auth.role === 'BUYER')
 
+/** Импорт прайса — те же роли, что и правка цены (бэк проверяет тоже). */
+const canImport = canEdit
+
 const items    = ref<PriceItem[]>([])
 const loading  = ref(false)
 const loadError = ref('')
 const search    = ref('')
+
+const fileEl = ref<HTMLInputElement | null>(null)
+const importing = ref(false)
+const importResult = ref<ImportResult | null>(null)
+
+async function onFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  importing.value = true
+  importResult.value = null
+  try {
+    const res = await pricesApi.import(file)
+    importResult.value = res
+    toast(`Импорт: создано ${res.created}, обновлено ${res.updated}, пропущено ${res.skipped}`, 'success')
+    // Перечитываем: цены изменились, а на экране остались прежние.
+    await load()
+  } catch (err) {
+    const r = (err as { response?: { data?: { message?: string } } }).response
+    toast(r?.data?.message ?? (err instanceof Error ? err.message : 'Импорт не удался'), 'error')
+  } finally {
+    importing.value = false
+    // Сбрасываем input: иначе повторный выбор того же файла не даст события.
+    input.value = ''
+  }
+}
 const selectedCat = ref('')
 
 const editingId   = ref<string | null>(null)
@@ -202,6 +280,18 @@ onMounted(load)
 </script>
 
 <style scoped>
+.pr-tb-spacer { flex: 1; }
+.pr-hint { font-size: 10px; color: var(--faint); }
+.pr-imp { margin: 8px 12px; border: 1px solid var(--line2); background: var(--panel); padding: 8px 10px; }
+.pr-imp-h { display: flex; align-items: center; font-size: 11.5px; font-weight: 600; margin-bottom: 6px; }
+.pr-imp-x { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 12px; }
+.pr-imp-row { display: flex; gap: 16px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+.pr-imp-row .is-warn { color: var(--amber); }
+.pr-imp-d { margin-top: 6px; }
+.pr-imp-d summary { font-size: 10.5px; color: var(--faint); cursor: pointer; }
+.pr-imp-i { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.pr-imp-note { font-size: 10px; color: var(--faint); margin-top: 6px; }
+
 .pr-toolbar { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg1); flex-shrink: 0; }
 .pr-search  { flex: 1; min-width: 0; }
 
