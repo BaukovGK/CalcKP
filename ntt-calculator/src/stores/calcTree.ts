@@ -64,10 +64,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     loading.value = true
     error.value = null
     try {
-      const [est, prices, weights] = await Promise.all([
+      const [est, prices, weights, engineering] = await Promise.all([
         estimatesApi.get(id),
         refsApi.nomenclature(),
         refsApi.pipeWeights(),
+        refsApi.engineering(),
       ])
       estimate.value = est
 
@@ -92,9 +93,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
         ppeRub: FALLBACK_RATES.ppeRub,
       }
 
+      // Нормы патрубков — источник массы формовки гильз (лист «Для расчетов»).
+      // Ключ — DN гильзы; сетка дискретна, промахи дают «красную» строку.
+      const normIdx = new Map(engineering.nozzles.map((n) => [n.dn, n]))
+
       const ctx: MaterializeContext = {
         priceOf: (c, n, u) => priceIdx.get(`${c}|${n}|${u}`) ?? null,
         pipeWeightOf: (dn, pn, sn) => weightIdx.get(`${dn}|${pn}|${sn}`) ?? null,
+        nozzleNormOf: (dn) => normIdx.get(dn) ?? null,
         priceListVersion: priceListVersion.value,
       }
 

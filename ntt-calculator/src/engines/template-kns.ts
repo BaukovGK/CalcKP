@@ -16,12 +16,17 @@
  */
 
 import {
+  anchorCount,
   bottomMassKg,
   cutoutHours,
   insulation,
+  ladder,
   laminationMassKg,
   marketableAppearanceHours,
   pipeLengthM,
+  pumpGuidesM,
+  topSlabMassKg,
+  type NozzleNorm,
 } from './formulas'
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import type { CostBucket } from './economics'
@@ -118,6 +123,11 @@ export interface MaterializeContext {
   priceOf(category: string, name: string, unit: string): number | null
   /** Вес трубы кг/пм по (DN; PN_ТРУБЫ; SN). `null` — промах справочника. */
   pipeWeightOf(dn: number, pn: number, sn: number): number | null
+  /**
+   * Нормы простого патрубка по DN (лист «Для расчетов»). `null` — нормы нет:
+   * сетка дискретна, интерполировать нормы формовки недопустимо.
+   */
+  nozzleNormOf?(dn: number): NozzleNorm | null
   priceListVersion: number
 }
 
@@ -297,6 +307,9 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
   for (const n of nozzles) {
     if (n.count <= 0) continue
     const sleeve = sleeveDiameter(n.dn)
+    // Нормы приходят через контекст: движок остаётся чистым от БД.
+    const norm = ctx.nozzleNormOf?.(sleeve) ?? null
+    const sleeveMass = norm ? norm.moldingMassKg * n.count : null
     components.push({
       id: nextId('c'),
       nodeCode: 'A5',
@@ -308,16 +321,19 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
         // которая пока не извлечена (План: этап 1 извлёк прайс и веса труб).
         // До извлечения количество остаётся ручным вводом: молча подставить
         // выдуманную массу было бы хуже пустой строки.
-        // ФОТ-спутник обязателен для каждой операции с ЕИ «кг» (Механика §6).
-        // При пустой массе он даст 0 и пересчитается, как только инженер
-        // введёт количество.
+        // Масса формовки гильзы — из норм листа «Для расчетов» по ДИАМЕТРУ
+        // ГИЛЬЗЫ (формуется она, а не патрубок). ФОТ-спутник обязателен для
+        // каждой операции с ЕИ «кг» (Механика §6).
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Формовка гильз',
           unit: 'кг',
-          qtyCalc: null,
+          qtyCalc: sleeveMass,
           fotK: FOT_K_MANUAL,
-          note: `Гильза Ø${sleeve} мм (CEILING(DN${n.dn}+100)) ×${n.count} · масса — из матрицы «Для расчетов», не извлечена`,
+          note:
+            sleeveMass == null
+              ? `Гильза Ø${sleeve} мм (CEILING(DN${n.dn}+100)) ×${n.count} · нормы формовки для Ø${sleeve} в матрице «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф(Ø${sleeve}) × ${n.count} = ${sleeveMass.toFixed(2)} кг · гильза = CEILING(DN${n.dn}+100)`,
         }),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
@@ -374,6 +390,240 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
   })
 
   return components
+}
+
+// ─── Раздел 2: Лестница (Библиотека B1) ─────────────────────────────────────
+
+function buildLadder(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+  const heightM = s.depthMm / 1000
+  const l = ladder(heightM)
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'B1',
+      title: 'Лестница нержавеющая',
+      enabled: true,
+      rows: [
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Изготовление Лестницы',
+          unit: 'чел. ч',
+          qtyCalc: l.fabricationHours,
+          note: `ƒ 1,25 × H (${heightM.toFixed(1)} м)`,
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Монтаж Лестницы',
+          unit: 'чел. ч',
+          qtyCalc: l.mountingHours,
+          note: 'ƒ изготовление / 2',
+        }),
+      ],
+    },
+  ]
+}
+
+// ─── Раздел 3: Перекрытие, площадка, несущие балки (B2, B6) ─────────────────
+
+function buildSlab(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+  const slabMass = topSlabMassKg(s.dn)
+  // Наружный диаметр ≈ DN + 300 (по геометрии формовки, Реверс §4.3).
+  const outerD = (s.dn + 300) / 1000
+  const anchors = anchorCount(outerD, s.depthMm / 1000)
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'B2',
+      title: 'Перекрытие верхнее',
+      enabled: true,
+      rows: [
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Механическая формовка верхнего перекрытия',
+          unit: 'кг',
+          qtyCalc: slabMass,
+          fotK: FOT_K_MECH,
+          note: `ƒ π·((DN+300)/2000)²·0,006·1850 = ${slabMass.toFixed(1)} кг`,
+        }),
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ламинирование верхнего перекрытия',
+          unit: 'кг',
+          qtyCalc: laminationMassKg(slabMass),
+          fotK: FOT_K_LAMIN,
+          note: 'ƒ масса перекрытия × 3/10',
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Прорезка люков (горловин) в стеклокомпозитном перекрытии',
+          unit: 'чел. ч',
+          // Кол-во люков в ОЛ не задаётся — типовой один; уточняется вручную.
+          qtyCalc: cutoutHours(800, 1),
+          note: 'ƒ Ø800·π/1000 × 0,5 чел.ч · один люк типовой, уточните вручную',
+        }),
+      ],
+    },
+    {
+      id: nextId('c'),
+      nodeCode: 'B6',
+      title: 'Анкерное крепление против всплытия',
+      enabled: true,
+      rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: 'Метизы',
+          name: 'Анкерный болт распорный 16х100',
+          unit: 'шт',
+          qtyCalc: Math.ceil(anchors),
+          note: `ƒ (глубина·1000·9,8·π·Дн²/4)/27500, Дн ${outerD.toFixed(2)} м → ${anchors.toFixed(1)} → ${Math.ceil(anchors)} шт`,
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Монтаж анкерных болтов к плите перекрытия',
+          unit: 'чел. ч',
+          qtyCalc: Math.ceil(anchors) * 0.5,
+          note: 'ƒ 0,5 чел.ч на анкер',
+        }),
+      ],
+    },
+  ]
+}
+
+// ─── Раздел 4: Вентиляционный стояк (C1) ────────────────────────────────────
+
+function buildVent(ctx: MaterializeContext): CalcComponent[] {
+  // Ø вентстояка в ОЛ не задаётся; типовой ПЭ Ду110 — под него есть дефлектор.
+  const VENT_D = 110
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'C1',
+      title: 'Вентиляционный стояк ПЭ Ду110',
+      enabled: true,
+      rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: 'Детали труб_да ПЭ ПВХ PPR',
+          name: 'Дефлектор ПВХ Ду110',
+          unit: 'шт',
+          qtyCalc: 1,
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Прорезка отверстия вентиляции в перекрытии',
+          unit: 'чел. ч',
+          qtyCalc: cutoutHours(VENT_D, 1),
+          note: `ƒ Ø${VENT_D}·π/1000 × 0,5 чел.ч`,
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Монтаж вентиляционного стояка',
+          unit: 'чел. ч',
+          qtyCalc: 3,
+          note: 'ƒ норматив 3 чел.ч (Библиотека C1)',
+        }),
+      ],
+    },
+  ]
+}
+
+// ─── Раздел 5: Напорный трубопровод (C2) ────────────────────────────────────
+
+function buildPressurePipe(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+  const guides = pumpGuidesM(s.depthMm / 1000, s.pumpsWorking, s.pumpsReserve)
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'C2',
+      title: `Нитка напорного трубопровода DN${s.outletDn} ×${s.outletCount}`,
+      enabled: true,
+      rows: [
+        // Состав ниток — САМАЯ вариативная часть между заказами (Реверс §4.2:
+        // 55–109 строк). Материализуем только то, что считается из ОЛ;
+        // отводы, тройники и фланцы инженер добавляет из каталога.
+        //
+        // «Направляющие насосов» в прайсе — это ТРУД (изготовление + монтаж),
+        // а не метраж материала: категория «Собственное производство», ЕИ
+        // «чел. ч». Длина направляющих (guides, м) идёт нормативом на труд.
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Изготовление направляющих насосов',
+          unit: 'чел. ч',
+          // Норматив: ~0,25 чел.ч на 1 м направляющих (совпадает с B5 «0,5 на
+          // башмак» удвоенно на изготовление+монтаж; уточняется вручную).
+          qtyCalc: guides * 0.25,
+          note: `ƒ L·(раб+рез)·2 = ${guides.toFixed(1)} м · 0,25 чел.ч/м · норматив, уточните`,
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Монтаж направляющих насосов',
+          unit: 'чел. ч',
+          qtyCalc: guides * 0.25,
+          note: 'ƒ как изготовление',
+        }),
+      ],
+    },
+  ]
+}
+
+/**
+ * Полное наименование болта из марки норм.
+ *
+ * Нормы дают краткую марку «М20х90», а в прайсе НН имя полное и единообразное:
+ * «Болт М20-6gх90.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)». Проверено:
+ * все четыре марки норм (М16х80, М20х90, М24х100, М27х110) находятся по
+ * этому шаблону.
+ */
+export function boltFullName(bolt: string): string {
+  const m = /^М(\d+)х(\d+)$/.exec(bolt)
+  if (!m) return `Болт ${bolt}`
+  return `Болт М${m[1]}-6gх${m[2]}.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)`
+}
+
+// ─── Раздел 6: Крепёж (C3) ──────────────────────────────────────────────────
+
+function buildFasteners(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+  // Норма болтов на фланцевое соединение = f(DN) из матрицы «Для расчетов».
+  const norm = ctx.nozzleNormOf?.(s.outletDn) ?? null
+  const joints = s.outletCount
+  const bolts = norm?.boltCount != null ? norm.boltCount * joints : null
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'C3',
+      title: 'Крепёжный комплект фланцевых соединений',
+      enabled: true,
+      rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: 'Метизы',
+          // Полное наименование болта из прайса: у каждого DN своя марка
+          // (М16х80…М27х110), а имя строится по единому шаблону НН
+          // «Болт {М}-6gх{L}.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)».
+          name: norm?.bolt ? boltFullName(norm.bolt) : 'Болт фланцевого соединения',
+          unit: 'шт',
+          qtyCalc: bolts,
+          note:
+            bolts == null
+              ? `Норма крепежа для DN${s.outletDn} в матрице «Для расчетов» не найдена — введите вручную`
+              : `ƒ ${norm!.boltCount} отв. × ${joints} соединений = ${bolts} шт (${norm!.bolt})`,
+        }),
+      ],
+    },
+  ]
 }
 
 // ─── Раздел 7: Оборудование (частично — насосная группа и арматура) ─────────
@@ -456,14 +706,21 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
 /**
  * «Создать расчёт» из ОЛ: материализует шаблон КНС в дерево расчёта.
  *
- * Разделы 2–6 создаются каркасом без строк — их состав сильно варьирует между
- * заказами (прежде всего «Напорный трубопровод», Реверс §4.2), инженер
- * наполняет их вручную. Это осознанное ограничение Фазы 1, зафиксированное
- * в задаче: «остальные разделы — каркас с ручными строками».
+ * Материализуется всё, что ВЫВОДИТСЯ из опросного листа. То, чего в ОЛ нет
+ * (схема ниток напорного трубопровода, кол-во люков, состав площадки),
+ * инженер добавляет из каталога: «число строк внутри разделов — прежде всего
+ * "Напорный трубопровод" и "Оборудование" — меняется от расчёта к расчёту»
+ * (Реверс §10). Раздел 5 в реальных файлах занимает 55–109 строк, и вывести
+ * их из ОЛ нечем.
  */
 export function materializeKns(ctx: MaterializeContext, survey: KnsSurveyParams): CalcTree {
   const byCode: Record<string, CalcComponent[]> = {
     '1': buildKorpus(ctx, survey),
+    '2': buildLadder(ctx, survey),
+    '3': buildSlab(ctx, survey),
+    '4': buildVent(ctx),
+    '5': buildPressurePipe(ctx, survey),
+    '6': buildFasteners(ctx, survey),
     '7': buildEquipment(ctx, survey),
   }
 

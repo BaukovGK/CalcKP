@@ -1,0 +1,1974 @@
+{
+  "shell": [
+    {
+      "d": 1000,
+      "lengthMm": 3000,
+      "massKg": 18,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1200,
+      "lengthMm": 3000,
+      "massKg": 28,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1400,
+      "lengthMm": 3000,
+      "massKg": 41,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1500,
+      "lengthMm": 3000,
+      "massKg": 46,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1600,
+      "lengthMm": 3000,
+      "massKg": 59,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1800,
+      "lengthMm": 3000,
+      "massKg": 80,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1900,
+      "lengthMm": 3000,
+      "massKg": 92,
+      "thicknessMm": 15
+    },
+    {
+      "d": 2000,
+      "lengthMm": 3000,
+      "massKg": 106,
+      "thicknessMm": 15
+    },
+    {
+      "d": 2200,
+      "lengthMm": 3000,
+      "massKg": 138,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2400,
+      "lengthMm": 3000,
+      "massKg": 174,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2500,
+      "lengthMm": 3000,
+      "massKg": 180,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2600,
+      "lengthMm": 3000,
+      "massKg": 198,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2700,
+      "lengthMm": 3000,
+      "massKg": 221,
+      "thicknessMm": 20
+    },
+    {
+      "d": 3000,
+      "lengthMm": 3000,
+      "massKg": 300,
+      "thicknessMm": 22
+    },
+    {
+      "d": 1000,
+      "lengthMm": 3500,
+      "massKg": 19,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1200,
+      "lengthMm": 3500,
+      "massKg": 30,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1400,
+      "lengthMm": 3500,
+      "massKg": 44,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1500,
+      "lengthMm": 3500,
+      "massKg": 50,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1600,
+      "lengthMm": 3500,
+      "massKg": 63,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1800,
+      "lengthMm": 3500,
+      "massKg": 86,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1900,
+      "lengthMm": 3500,
+      "massKg": 110,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2000,
+      "lengthMm": 3500,
+      "massKg": 113,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2200,
+      "lengthMm": 3500,
+      "massKg": 147,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2400,
+      "lengthMm": 3500,
+      "massKg": 186,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2500,
+      "lengthMm": 3500,
+      "massKg": 193,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2600,
+      "lengthMm": 3500,
+      "massKg": 212,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2700,
+      "lengthMm": 3500,
+      "massKg": 236,
+      "thicknessMm": 21
+    },
+    {
+      "d": 3000,
+      "lengthMm": 3500,
+      "massKg": 327,
+      "thicknessMm": 24
+    },
+    {
+      "d": 1000,
+      "lengthMm": 4000,
+      "massKg": 20,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1200,
+      "lengthMm": 4000,
+      "massKg": 31,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1400,
+      "lengthMm": 4000,
+      "massKg": 47,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1500,
+      "lengthMm": 4000,
+      "massKg": 53,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1600,
+      "lengthMm": 4000,
+      "massKg": 66,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1800,
+      "lengthMm": 4000,
+      "massKg": 90,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1900,
+      "lengthMm": 4000,
+      "massKg": 104,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2000,
+      "lengthMm": 4000,
+      "massKg": 120,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2200,
+      "lengthMm": 4000,
+      "massKg": 156,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2400,
+      "lengthMm": 4000,
+      "massKg": 197,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2500,
+      "lengthMm": 4000,
+      "massKg": 205,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2600,
+      "lengthMm": 4000,
+      "massKg": 226,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2700,
+      "lengthMm": 4000,
+      "massKg": 251,
+      "thicknessMm": 23
+    },
+    {
+      "d": 3000,
+      "lengthMm": 4000,
+      "massKg": 341,
+      "thicknessMm": 25
+    },
+    {
+      "d": 1000,
+      "lengthMm": 4500,
+      "massKg": 21,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1200,
+      "lengthMm": 4500,
+      "massKg": 33,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1400,
+      "lengthMm": 4500,
+      "massKg": 49,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1500,
+      "lengthMm": 4500,
+      "massKg": 55,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1600,
+      "lengthMm": 4500,
+      "massKg": 70,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1800,
+      "lengthMm": 4500,
+      "massKg": 95,
+      "thicknessMm": 17
+    },
+    {
+      "d": 1900,
+      "lengthMm": 4500,
+      "massKg": 110,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2000,
+      "lengthMm": 4500,
+      "massKg": 127,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2200,
+      "lengthMm": 4500,
+      "massKg": 164,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2400,
+      "lengthMm": 4500,
+      "massKg": 209,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2500,
+      "lengthMm": 4500,
+      "massKg": 216,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2600,
+      "lengthMm": 4500,
+      "massKg": 238,
+      "thicknessMm": 23
+    },
+    {
+      "d": 2700,
+      "lengthMm": 4500,
+      "massKg": 265,
+      "thicknessMm": 24
+    },
+    {
+      "d": 3000,
+      "lengthMm": 4500,
+      "massKg": 361,
+      "thicknessMm": 27
+    },
+    {
+      "d": 1000,
+      "lengthMm": 5000,
+      "massKg": 22,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1200,
+      "lengthMm": 5000,
+      "massKg": 34,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1400,
+      "lengthMm": 5000,
+      "massKg": 51,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1500,
+      "lengthMm": 5000,
+      "massKg": 58,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1600,
+      "lengthMm": 5000,
+      "massKg": 73,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1800,
+      "lengthMm": 5000,
+      "massKg": 100,
+      "thicknessMm": 18
+    },
+    {
+      "d": 1900,
+      "lengthMm": 5000,
+      "massKg": 116,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2000,
+      "lengthMm": 5000,
+      "massKg": 133,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2200,
+      "lengthMm": 5000,
+      "massKg": 172,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2400,
+      "lengthMm": 5000,
+      "massKg": 218,
+      "thicknessMm": 23
+    },
+    {
+      "d": 2500,
+      "lengthMm": 5000,
+      "massKg": 227,
+      "thicknessMm": 24
+    },
+    {
+      "d": 2600,
+      "lengthMm": 5000,
+      "massKg": 249,
+      "thicknessMm": 24
+    },
+    {
+      "d": 2700,
+      "lengthMm": 5000,
+      "massKg": 278,
+      "thicknessMm": 25
+    },
+    {
+      "d": 3000,
+      "lengthMm": 5000,
+      "massKg": 379,
+      "thicknessMm": 28
+    },
+    {
+      "d": 1000,
+      "lengthMm": 5500,
+      "massKg": 23,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1200,
+      "lengthMm": 5500,
+      "massKg": 36,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1400,
+      "lengthMm": 5500,
+      "massKg": 53,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1500,
+      "lengthMm": 5500,
+      "massKg": 60,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1600,
+      "lengthMm": 5500,
+      "massKg": 76,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1800,
+      "lengthMm": 5500,
+      "massKg": 104,
+      "thicknessMm": 18
+    },
+    {
+      "d": 1900,
+      "lengthMm": 5500,
+      "massKg": 118,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2000,
+      "lengthMm": 5500,
+      "massKg": 138,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2200,
+      "lengthMm": 5500,
+      "massKg": 180,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2400,
+      "lengthMm": 5500,
+      "massKg": 228,
+      "thicknessMm": 24
+    },
+    {
+      "d": 2500,
+      "lengthMm": 5500,
+      "massKg": 237,
+      "thicknessMm": 25
+    },
+    {
+      "d": 2600,
+      "lengthMm": 5500,
+      "massKg": 261,
+      "thicknessMm": 25
+    },
+    {
+      "d": 2700,
+      "lengthMm": 5500,
+      "massKg": 291,
+      "thicknessMm": 26
+    },
+    {
+      "d": 3000,
+      "lengthMm": 5500,
+      "massKg": 396,
+      "thicknessMm": 29
+    },
+    {
+      "d": 1000,
+      "lengthMm": 6000,
+      "massKg": 24,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1200,
+      "lengthMm": 6000,
+      "massKg": 37,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1400,
+      "lengthMm": 6000,
+      "massKg": 56,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1500,
+      "lengthMm": 6000,
+      "massKg": 63,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1600,
+      "lengthMm": 6000,
+      "massKg": 79,
+      "thicknessMm": 17
+    },
+    {
+      "d": 1800,
+      "lengthMm": 6000,
+      "massKg": 108,
+      "thicknessMm": 19
+    },
+    {
+      "d": 1900,
+      "lengthMm": 6000,
+      "massKg": 122,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2000,
+      "lengthMm": 6000,
+      "massKg": 144,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2200,
+      "lengthMm": 6000,
+      "massKg": 187,
+      "thicknessMm": 23
+    },
+    {
+      "d": 2400,
+      "lengthMm": 6000,
+      "massKg": 238,
+      "thicknessMm": 25
+    },
+    {
+      "d": 2500,
+      "lengthMm": 6000,
+      "massKg": 246,
+      "thicknessMm": 26
+    },
+    {
+      "d": 2600,
+      "lengthMm": 6000,
+      "massKg": 272,
+      "thicknessMm": 27
+    },
+    {
+      "d": 2700,
+      "lengthMm": 6000,
+      "massKg": 303,
+      "thicknessMm": 27
+    },
+    {
+      "d": 3000,
+      "lengthMm": 6000,
+      "massKg": 412,
+      "thicknessMm": 30
+    },
+    {
+      "d": 1000,
+      "lengthMm": 6500,
+      "massKg": 25,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1200,
+      "lengthMm": 6500,
+      "massKg": 39,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1400,
+      "lengthMm": 6500,
+      "massKg": 57,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1500,
+      "lengthMm": 6500,
+      "massKg": 65,
+      "thicknessMm": 17
+    },
+    {
+      "d": 1600,
+      "lengthMm": 6500,
+      "massKg": 82,
+      "thicknessMm": 18
+    },
+    {
+      "d": 1800,
+      "lengthMm": 6500,
+      "massKg": 112,
+      "thicknessMm": 20
+    },
+    {
+      "d": 1900,
+      "lengthMm": 6500,
+      "massKg": 128,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2000,
+      "lengthMm": 6500,
+      "massKg": 149,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2200,
+      "lengthMm": 6500,
+      "massKg": 194,
+      "thicknessMm": 24
+    },
+    {
+      "d": 2400,
+      "lengthMm": 6500,
+      "massKg": 246,
+      "thicknessMm": 26
+    },
+    {
+      "d": 2500,
+      "lengthMm": 6500,
+      "massKg": 256,
+      "thicknessMm": 27
+    },
+    {
+      "d": 2600,
+      "lengthMm": 6500,
+      "massKg": 282,
+      "thicknessMm": 28
+    },
+    {
+      "d": 2700,
+      "lengthMm": 6500,
+      "massKg": 315,
+      "thicknessMm": 29
+    },
+    {
+      "d": 3000,
+      "lengthMm": 6500,
+      "massKg": 428,
+      "thicknessMm": 31
+    },
+    {
+      "d": 1000,
+      "lengthMm": 7000,
+      "massKg": 26,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1200,
+      "lengthMm": 7000,
+      "massKg": 40,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1400,
+      "lengthMm": 7000,
+      "massKg": 60,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1500,
+      "lengthMm": 7000,
+      "massKg": 68,
+      "thicknessMm": 17
+    },
+    {
+      "d": 1600,
+      "lengthMm": 7000,
+      "massKg": 85,
+      "thicknessMm": 18
+    },
+    {
+      "d": 1800,
+      "lengthMm": 7000,
+      "massKg": 117,
+      "thicknessMm": 21
+    },
+    {
+      "d": 1900,
+      "lengthMm": 7000,
+      "massKg": 134,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2000,
+      "lengthMm": 7000,
+      "massKg": 155,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2200,
+      "lengthMm": 7000,
+      "massKg": 201,
+      "thicknessMm": 24
+    },
+    {
+      "d": 2400,
+      "lengthMm": 7000,
+      "massKg": 255,
+      "thicknessMm": 26
+    },
+    {
+      "d": 2500,
+      "lengthMm": 7000,
+      "massKg": 266,
+      "thicknessMm": 28
+    },
+    {
+      "d": 2600,
+      "lengthMm": 7000,
+      "massKg": 291,
+      "thicknessMm": 28
+    },
+    {
+      "d": 2700,
+      "lengthMm": 7000,
+      "massKg": 337,
+      "thicknessMm": 31
+    },
+    {
+      "d": 3000,
+      "lengthMm": 7000,
+      "massKg": 447,
+      "thicknessMm": 33
+    },
+    {
+      "d": 1000,
+      "lengthMm": 12000,
+      "massKg": 28,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1200,
+      "lengthMm": 12000,
+      "massKg": 45,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1400,
+      "lengthMm": 12000,
+      "massKg": 68,
+      "thicknessMm": 19
+    },
+    {
+      "d": 1500,
+      "lengthMm": 12000,
+      "massKg": 78,
+      "thicknessMm": 20
+    },
+    {
+      "d": 1600,
+      "lengthMm": 12000,
+      "massKg": 99,
+      "thicknessMm": 21
+    },
+    {
+      "d": 1800,
+      "lengthMm": 12000,
+      "massKg": 136,
+      "thicknessMm": 24
+    },
+    {
+      "d": 1900,
+      "lengthMm": 12000,
+      "massKg": 159,
+      "thicknessMm": 26
+    },
+    {
+      "d": 2000,
+      "lengthMm": 12000,
+      "massKg": 184,
+      "thicknessMm": 27
+    },
+    {
+      "d": 2200,
+      "lengthMm": 12000,
+      "massKg": 241,
+      "thicknessMm": 29
+    },
+    {
+      "d": 2400,
+      "lengthMm": 12000,
+      "massKg": 307,
+      "thicknessMm": 32
+    },
+    {
+      "d": 2500,
+      "lengthMm": 12000,
+      "massKg": 321,
+      "thicknessMm": 33
+    },
+    {
+      "d": 2600,
+      "lengthMm": 12000,
+      "massKg": 355,
+      "thicknessMm": 35
+    },
+    {
+      "d": 2700,
+      "lengthMm": 12000,
+      "massKg": 398,
+      "thicknessMm": 36
+    },
+    {
+      "d": 3000,
+      "lengthMm": 12000,
+      "massKg": 546,
+      "thicknessMm": 40
+    }
+  ],
+  "ellipticBottom": [
+    {
+      "d": 1000,
+      "lengthMm": 3000,
+      "massKg": 20,
+      "thicknessMm": 7
+    },
+    {
+      "d": 1200,
+      "lengthMm": 3000,
+      "massKg": 25,
+      "thicknessMm": 8
+    },
+    {
+      "d": 1400,
+      "lengthMm": 3000,
+      "massKg": 32,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1500,
+      "lengthMm": 3000,
+      "massKg": 46,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1600,
+      "lengthMm": 3000,
+      "massKg": 54,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1800,
+      "lengthMm": 3000,
+      "massKg": 80,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1900,
+      "lengthMm": 3000,
+      "massKg": 94,
+      "thicknessMm": 12
+    },
+    {
+      "d": 2000,
+      "lengthMm": 3000,
+      "massKg": 107,
+      "thicknessMm": 13
+    },
+    {
+      "d": 2200,
+      "lengthMm": 3000,
+      "massKg": 140,
+      "thicknessMm": 14
+    },
+    {
+      "d": 2400,
+      "lengthMm": 3000,
+      "massKg": 175,
+      "thicknessMm": 15
+    },
+    {
+      "d": 2500,
+      "lengthMm": 3000,
+      "massKg": 197,
+      "thicknessMm": 15
+    },
+    {
+      "d": 2600,
+      "lengthMm": 3000,
+      "massKg": 227,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2700,
+      "lengthMm": 3000,
+      "massKg": 243,
+      "thicknessMm": 16
+    },
+    {
+      "d": 3000,
+      "lengthMm": 3000,
+      "massKg": 311,
+      "thicknessMm": 18
+    },
+    {
+      "d": 1000,
+      "lengthMm": 3500,
+      "massKg": 22,
+      "thicknessMm": 8
+    },
+    {
+      "d": 1200,
+      "lengthMm": 3500,
+      "massKg": 26,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1400,
+      "lengthMm": 3500,
+      "massKg": 34,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1500,
+      "lengthMm": 3500,
+      "massKg": 49,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1600,
+      "lengthMm": 3500,
+      "massKg": 58,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1800,
+      "lengthMm": 3500,
+      "massKg": 86,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1900,
+      "lengthMm": 3500,
+      "massKg": 102,
+      "thicknessMm": 13
+    },
+    {
+      "d": 2000,
+      "lengthMm": 3500,
+      "massKg": 114,
+      "thicknessMm": 13
+    },
+    {
+      "d": 2200,
+      "lengthMm": 3500,
+      "massKg": 149,
+      "thicknessMm": 14
+    },
+    {
+      "d": 2400,
+      "lengthMm": 3500,
+      "massKg": 187,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2500,
+      "lengthMm": 3500,
+      "massKg": 210,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2600,
+      "lengthMm": 3500,
+      "massKg": 243,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2700,
+      "lengthMm": 3500,
+      "massKg": 260,
+      "thicknessMm": 17
+    },
+    {
+      "d": 3000,
+      "lengthMm": 3500,
+      "massKg": 333,
+      "thicknessMm": 19
+    },
+    {
+      "d": 1000,
+      "lengthMm": 4000,
+      "massKg": 23,
+      "thicknessMm": 8
+    },
+    {
+      "d": 1200,
+      "lengthMm": 4000,
+      "massKg": 28,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1400,
+      "lengthMm": 4000,
+      "massKg": 36,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1500,
+      "lengthMm": 4000,
+      "massKg": 52,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1600,
+      "lengthMm": 4000,
+      "massKg": 61,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1800,
+      "lengthMm": 4000,
+      "massKg": 91,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1900,
+      "lengthMm": 4000,
+      "massKg": 105,
+      "thicknessMm": 13
+    },
+    {
+      "d": 2000,
+      "lengthMm": 4000,
+      "massKg": 121,
+      "thicknessMm": 14
+    },
+    {
+      "d": 2200,
+      "lengthMm": 4000,
+      "massKg": 158,
+      "thicknessMm": 15
+    },
+    {
+      "d": 2400,
+      "lengthMm": 4000,
+      "massKg": 199,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2500,
+      "lengthMm": 4000,
+      "massKg": 223,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2600,
+      "lengthMm": 4000,
+      "massKg": 258,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2700,
+      "lengthMm": 4000,
+      "massKg": 276,
+      "thicknessMm": 18
+    },
+    {
+      "d": 3000,
+      "lengthMm": 4000,
+      "massKg": 353,
+      "thicknessMm": 20
+    },
+    {
+      "d": 1000,
+      "lengthMm": 4500,
+      "massKg": 24,
+      "thicknessMm": 8
+    },
+    {
+      "d": 1200,
+      "lengthMm": 4500,
+      "massKg": 29,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1400,
+      "lengthMm": 4500,
+      "massKg": 37,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1500,
+      "lengthMm": 4500,
+      "massKg": 55,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1600,
+      "lengthMm": 4500,
+      "massKg": 64,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1800,
+      "lengthMm": 4500,
+      "massKg": 95,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1900,
+      "lengthMm": 4500,
+      "massKg": 110,
+      "thicknessMm": 14
+    },
+    {
+      "d": 2000,
+      "lengthMm": 4500,
+      "massKg": 127,
+      "thicknessMm": 15
+    },
+    {
+      "d": 2200,
+      "lengthMm": 4500,
+      "massKg": 166,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2400,
+      "lengthMm": 4500,
+      "massKg": 209,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2500,
+      "lengthMm": 4500,
+      "massKg": 235,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2600,
+      "lengthMm": 4500,
+      "massKg": 272,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2700,
+      "lengthMm": 4500,
+      "massKg": 291,
+      "thicknessMm": 19
+    },
+    {
+      "d": 3000,
+      "lengthMm": 4500,
+      "massKg": 373,
+      "thicknessMm": 21
+    },
+    {
+      "d": 1000,
+      "lengthMm": 5000,
+      "massKg": 25,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1200,
+      "lengthMm": 5000,
+      "massKg": 30,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1400,
+      "lengthMm": 5000,
+      "massKg": 39,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1500,
+      "lengthMm": 5000,
+      "massKg": 57,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1600,
+      "lengthMm": 5000,
+      "massKg": 67,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1800,
+      "lengthMm": 5000,
+      "massKg": 100,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1900,
+      "lengthMm": 5000,
+      "massKg": 118,
+      "thicknessMm": 15
+    },
+    {
+      "d": 2000,
+      "lengthMm": 5000,
+      "massKg": 133,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2200,
+      "lengthMm": 5000,
+      "massKg": 174,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2400,
+      "lengthMm": 5000,
+      "massKg": 219,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2500,
+      "lengthMm": 5000,
+      "massKg": 246,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2600,
+      "lengthMm": 5000,
+      "massKg": 285,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2700,
+      "lengthMm": 5000,
+      "massKg": 305,
+      "thicknessMm": 20
+    },
+    {
+      "d": 3000,
+      "lengthMm": 5000,
+      "massKg": 391,
+      "thicknessMm": 22
+    },
+    {
+      "d": 1000,
+      "lengthMm": 5500,
+      "massKg": 26,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1200,
+      "lengthMm": 5500,
+      "massKg": 32,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1400,
+      "lengthMm": 5500,
+      "massKg": 41,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1500,
+      "lengthMm": 5500,
+      "massKg": 60,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1600,
+      "lengthMm": 5500,
+      "massKg": 70,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1800,
+      "lengthMm": 5500,
+      "massKg": 104,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1900,
+      "lengthMm": 5500,
+      "massKg": 126,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2000,
+      "lengthMm": 5500,
+      "massKg": 139,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2200,
+      "lengthMm": 5500,
+      "massKg": 182,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2400,
+      "lengthMm": 5500,
+      "massKg": 229,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2500,
+      "lengthMm": 5500,
+      "massKg": 257,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2600,
+      "lengthMm": 5500,
+      "massKg": 297,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2700,
+      "lengthMm": 5500,
+      "massKg": 318,
+      "thicknessMm": 21
+    },
+    {
+      "d": 3000,
+      "lengthMm": 5500,
+      "massKg": 408,
+      "thicknessMm": 23
+    },
+    {
+      "d": 1000,
+      "lengthMm": 6000,
+      "massKg": 26,
+      "thicknessMm": 9
+    },
+    {
+      "d": 1200,
+      "lengthMm": 6000,
+      "massKg": 33,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1400,
+      "lengthMm": 6000,
+      "massKg": 42,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1500,
+      "lengthMm": 6000,
+      "massKg": 62,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1600,
+      "lengthMm": 6000,
+      "massKg": 72,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1800,
+      "lengthMm": 6000,
+      "massKg": 108,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1900,
+      "lengthMm": 6000,
+      "massKg": 130,
+      "thicknessMm": 16
+    },
+    {
+      "d": 2000,
+      "lengthMm": 6000,
+      "massKg": 144,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2200,
+      "lengthMm": 6000,
+      "massKg": 189,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2400,
+      "lengthMm": 6000,
+      "massKg": 238,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2500,
+      "lengthMm": 6000,
+      "massKg": 267,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2600,
+      "lengthMm": 6000,
+      "massKg": 309,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2700,
+      "lengthMm": 6000,
+      "massKg": 331,
+      "thicknessMm": 22
+    },
+    {
+      "d": 3000,
+      "lengthMm": 6000,
+      "massKg": 425,
+      "thicknessMm": 24
+    },
+    {
+      "d": 1000,
+      "lengthMm": 6500,
+      "massKg": 27,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1200,
+      "lengthMm": 6500,
+      "massKg": 34,
+      "thicknessMm": 11
+    },
+    {
+      "d": 1400,
+      "lengthMm": 6500,
+      "massKg": 44,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1500,
+      "lengthMm": 6500,
+      "massKg": 64,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1600,
+      "lengthMm": 6500,
+      "massKg": 75,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1800,
+      "lengthMm": 6500,
+      "massKg": 112,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1900,
+      "lengthMm": 6500,
+      "massKg": 134,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2000,
+      "lengthMm": 6500,
+      "massKg": 149,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2200,
+      "lengthMm": 6500,
+      "massKg": 196,
+      "thicknessMm": 19
+    },
+    {
+      "d": 2400,
+      "lengthMm": 6500,
+      "massKg": 247,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2500,
+      "lengthMm": 6500,
+      "massKg": 277,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2600,
+      "lengthMm": 6500,
+      "massKg": 321,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2700,
+      "lengthMm": 6500,
+      "massKg": 343,
+      "thicknessMm": 23
+    },
+    {
+      "d": 3000,
+      "lengthMm": 6500,
+      "massKg": 441,
+      "thicknessMm": 25
+    },
+    {
+      "d": 1000,
+      "lengthMm": 7000,
+      "massKg": 28,
+      "thicknessMm": 10
+    },
+    {
+      "d": 1200,
+      "lengthMm": 7000,
+      "massKg": 35,
+      "thicknessMm": 12
+    },
+    {
+      "d": 1400,
+      "lengthMm": 7000,
+      "massKg": 45,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1500,
+      "lengthMm": 7000,
+      "massKg": 66,
+      "thicknessMm": 14
+    },
+    {
+      "d": 1600,
+      "lengthMm": 7000,
+      "massKg": 77,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1800,
+      "lengthMm": 7000,
+      "massKg": 115,
+      "thicknessMm": 16
+    },
+    {
+      "d": 1900,
+      "lengthMm": 7000,
+      "massKg": 140,
+      "thicknessMm": 17
+    },
+    {
+      "d": 2000,
+      "lengthMm": 7000,
+      "massKg": 154,
+      "thicknessMm": 18
+    },
+    {
+      "d": 2200,
+      "lengthMm": 7000,
+      "massKg": 202,
+      "thicknessMm": 20
+    },
+    {
+      "d": 2400,
+      "lengthMm": 7000,
+      "massKg": 255,
+      "thicknessMm": 21
+    },
+    {
+      "d": 2500,
+      "lengthMm": 7000,
+      "massKg": 287,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2600,
+      "lengthMm": 7000,
+      "massKg": 332,
+      "thicknessMm": 23
+    },
+    {
+      "d": 2700,
+      "lengthMm": 7000,
+      "massKg": 355,
+      "thicknessMm": 24
+    },
+    {
+      "d": 3000,
+      "lengthMm": 7000,
+      "massKg": 456,
+      "thicknessMm": 26
+    },
+    {
+      "d": 1000,
+      "lengthMm": 12000,
+      "massKg": 35,
+      "thicknessMm": 13
+    },
+    {
+      "d": 1200,
+      "lengthMm": 12000,
+      "massKg": 44,
+      "thicknessMm": 15
+    },
+    {
+      "d": 1400,
+      "lengthMm": 12000,
+      "massKg": 57,
+      "thicknessMm": 17
+    },
+    {
+      "d": 1500,
+      "lengthMm": 12000,
+      "massKg": 84,
+      "thicknessMm": 18
+    },
+    {
+      "d": 1600,
+      "lengthMm": 12000,
+      "massKg": 98,
+      "thicknessMm": 19
+    },
+    {
+      "d": 1800,
+      "lengthMm": 12000,
+      "massKg": 147,
+      "thicknessMm": 21
+    },
+    {
+      "d": 1900,
+      "lengthMm": 12000,
+      "massKg": 173,
+      "thicknessMm": 22
+    },
+    {
+      "d": 2000,
+      "lengthMm": 12000,
+      "massKg": 196,
+      "thicknessMm": 23
+    },
+    {
+      "d": 2200,
+      "lengthMm": 12000,
+      "massKg": 259,
+      "thicknessMm": 25
+    },
+    {
+      "d": 2400,
+      "lengthMm": 12000,
+      "massKg": 327,
+      "thicknessMm": 27
+    },
+    {
+      "d": 2500,
+      "lengthMm": 12000,
+      "massKg": 368,
+      "thicknessMm": 28
+    },
+    {
+      "d": 2600,
+      "lengthMm": 12000,
+      "massKg": 425,
+      "thicknessMm": 29
+    },
+    {
+      "d": 2700,
+      "lengthMm": 12000,
+      "massKg": 455,
+      "thicknessMm": 30
+    },
+    {
+      "d": 3000,
+      "lengthMm": 12000,
+      "massKg": 586,
+      "thicknessMm": 34
+    }
+  ],
+  "nozzles": [
+    {
+      "dn": 50,
+      "odMm": null,
+      "minLengthMm": null,
+      "moldingMassKg": 0.5,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": 0.4,
+      "bolt": "М16х80",
+      "boltCount": 4
+    },
+    {
+      "dn": 65,
+      "odMm": null,
+      "minLengthMm": null,
+      "moldingMassKg": 0.5,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": 0.5,
+      "bolt": "М16х80",
+      "boltCount": 4
+    },
+    {
+      "dn": 80,
+      "odMm": null,
+      "minLengthMm": null,
+      "moldingMassKg": 0.55,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": 0.6,
+      "bolt": "М16х80",
+      "boltCount": 4
+    },
+    {
+      "dn": 100,
+      "odMm": null,
+      "minLengthMm": null,
+      "moldingMassKg": 0.6,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": 0.9,
+      "bolt": "М16х80",
+      "boltCount": 8
+    },
+    {
+      "dn": 150,
+      "odMm": null,
+      "minLengthMm": null,
+      "moldingMassKg": 0.6,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": 1.4,
+      "bolt": "М20х90",
+      "boltCount": 8
+    },
+    {
+      "dn": 200,
+      "odMm": null,
+      "minLengthMm": null,
+      "moldingMassKg": 0.6,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": 1.8,
+      "bolt": "М20х90",
+      "boltCount": 12
+    },
+    {
+      "dn": 250,
+      "odMm": null,
+      "minLengthMm": null,
+      "moldingMassKg": 0.6,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": 2.3,
+      "bolt": "М24х100",
+      "boltCount": 12
+    },
+    {
+      "dn": 300,
+      "odMm": 314.6,
+      "minLengthMm": 375,
+      "moldingMassKg": 0.6,
+      "h1Mm": 78,
+      "s1Mm": 5.7,
+      "flangeMassKg": 3.1,
+      "bolt": "М24х100",
+      "boltCount": 12
+    },
+    {
+      "dn": 350,
+      "odMm": 366.6,
+      "minLengthMm": 390,
+      "moldingMassKg": 0.9,
+      "h1Mm": 90,
+      "s1Mm": 5.7,
+      "flangeMassKg": 3.6,
+      "bolt": "М24х100",
+      "boltCount": 16
+    },
+    {
+      "dn": 400,
+      "odMm": 413.1,
+      "minLengthMm": 406,
+      "moldingMassKg": 1.1,
+      "h1Mm": 101,
+      "s1Mm": 6.8,
+      "flangeMassKg": 4.6,
+      "bolt": "М24х100",
+      "boltCount": 16
+    },
+    {
+      "dn": 450,
+      "odMm": 464.1,
+      "minLengthMm": 433,
+      "moldingMassKg": 1.3,
+      "h1Mm": 113,
+      "s1Mm": 6.8,
+      "flangeMassKg": 5.3,
+      "bolt": "М24х100",
+      "boltCount": 20
+    },
+    {
+      "dn": 500,
+      "odMm": 515,
+      "minLengthMm": 458,
+      "moldingMassKg": 1.9,
+      "h1Mm": 123,
+      "s1Mm": 7.8,
+      "flangeMassKg": 6.4,
+      "bolt": "М27х110",
+      "boltCount": 20
+    },
+    {
+      "dn": 600,
+      "odMm": 617.1,
+      "minLengthMm": 551,
+      "moldingMassKg": 2.6,
+      "h1Mm": 146,
+      "s1Mm": 7.8,
+      "flangeMassKg": 8.5,
+      "bolt": "М27х110",
+      "boltCount": 20
+    },
+    {
+      "dn": 700,
+      "odMm": 719.1,
+      "minLengthMm": 623,
+      "moldingMassKg": 3.5,
+      "h1Mm": 168,
+      "s1Mm": 9,
+      "flangeMassKg": 10.8,
+      "bolt": "М27х110",
+      "boltCount": 24
+    },
+    {
+      "dn": 800,
+      "odMm": 821.1,
+      "minLengthMm": 646,
+      "moldingMassKg": 4.6,
+      "h1Mm": 191,
+      "s1Mm": 9,
+      "flangeMassKg": 14.8,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 900,
+      "odMm": 923.1,
+      "minLengthMm": 748,
+      "moldingMassKg": 5.8,
+      "h1Mm": 213,
+      "s1Mm": 10,
+      "flangeMassKg": 19,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 1000,
+      "odMm": 1025.1,
+      "minLengthMm": 771,
+      "moldingMassKg": 7.2,
+      "h1Mm": 236,
+      "s1Mm": 11.3,
+      "flangeMassKg": 23,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 1200,
+      "odMm": 1229.1,
+      "minLengthMm": 876,
+      "moldingMassKg": 10.3,
+      "h1Mm": 281,
+      "s1Mm": 11.3,
+      "flangeMassKg": 36,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 1300,
+      "odMm": 1331,
+      "minLengthMm": 890,
+      "moldingMassKg": 14.100000000000001,
+      "h1Mm": 333,
+      "s1Mm": 13,
+      "flangeMassKg": null,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 1400,
+      "odMm": 1433.1,
+      "minLengthMm": 1008,
+      "moldingMassKg": 16.4,
+      "h1Mm": 338,
+      "s1Mm": 14.6,
+      "flangeMassKg": 55.2,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 1600,
+      "odMm": 1637.1,
+      "minLengthMm": 1043,
+      "moldingMassKg": 24.4,
+      "h1Mm": 383,
+      "s1Mm": 15.8,
+      "flangeMassKg": 71.4,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 1800,
+      "odMm": 1841.1,
+      "minLengthMm": 1238,
+      "moldingMassKg": 33,
+      "h1Mm": 428,
+      "s1Mm": 18,
+      "flangeMassKg": 99,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 2000,
+      "odMm": 2045.1,
+      "minLengthMm": 1273,
+      "moldingMassKg": 45.4,
+      "h1Mm": 473,
+      "s1Mm": 20.3,
+      "flangeMassKg": 129.1,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 2200,
+      "odMm": 2249,
+      "minLengthMm": 1378,
+      "moldingMassKg": 57.6,
+      "h1Mm": 518,
+      "s1Mm": 21.5,
+      "flangeMassKg": 163,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 2400,
+      "odMm": 2453.1,
+      "minLengthMm": 1613,
+      "moldingMassKg": 75.7,
+      "h1Mm": 563,
+      "s1Mm": 22.5,
+      "flangeMassKg": 199.9,
+      "bolt": null,
+      "boltCount": null
+    },
+    {
+      "dn": 3000,
+      "odMm": 3066,
+      "minLengthMm": null,
+      "moldingMassKg": 300,
+      "h1Mm": null,
+      "s1Mm": null,
+      "flangeMassKg": null,
+      "bolt": null,
+      "boltCount": null
+    }
+  ]
+}

@@ -175,6 +175,137 @@ function extractPipeWeights(ws: ExcelJS.Worksheet): { grp: PipeWeightSeed[]; pe:
   return { grp, pe }
 }
 
+// ─── Матрицы листа «Для расчетов» ────────────────────────────────────────────
+// Три таблицы (Реверс §9.3):
+//   строки  2–14  вес и толщина корпуса      = f(Dу, L)
+//   строки 18–31  формовка эллиптических днищ = f(Dн, L)
+//   строки 36–62  формовка простых патрубков  = f(DN)
+//
+// Первые две устроены одинаково: в шапке пары колонок «{D}» (кг) и «{D}-b» (мм),
+// в строках — длина L. Значения снимаются по пересечению.
+
+/** Ячейка матрицы f(D, L): масса формовки и толщина. */
+export interface MatrixCell {
+  /** Dу (корпус) или Dн (днище), мм. */
+  d: number
+  /** Длина изделия, мм. */
+  lengthMm: number
+  massKg: number
+  thicknessMm: number | null
+}
+
+/** Нормы простого патрубка = f(DN) — на них считается формовка гильз. */
+export interface NozzleNorm {
+  /** Диаметр номинальный, мм. */
+  dn: number
+  /** Диаметр наружный, мм. */
+  odMm: number | null
+  /** Минимальная длина патрубка, мм. */
+  minLengthMm: number | null
+  /** Мф общая — масса формовки, кг. */
+  moldingMassKg: number
+  /** Н1, мм. */
+  h1Mm: number | null
+  /** S1, мм. */
+  s1Mm: number | null
+  /** Мф фланца, кг. */
+  flangeMassKg: number | null
+  /** Болтовое соединение для фланца, напр. «М24х100». */
+  bolt: string | null
+  /** Количество отверстий. */
+  boltCount: number | null
+}
+
+/**
+ * Разбирает матрицу вида f(D, L) с парными колонками «{D}» (кг) / «{D}-b» (мм).
+ *
+ * @param headerRow строка с диаметрами
+ * @param firstRow  первая строка данных
+ * @param lastRow   последняя строка данных
+ */
+function parseDxLMatrix(
+  ws: ExcelJS.Worksheet,
+  headerRow: number,
+  firstRow: number,
+  lastRow: number,
+): MatrixCell[] {
+  // Колонки диаметров: «1000» → масса, следом «1000-b» → толщина.
+  const cols: Array<{ d: number; massCol: number; thickCol: number }> = []
+  for (let c = 3; c <= ws.columnCount; c++) {
+    const h = str(ws.getRow(headerRow).getCell(c))
+    if (!h || h.includes('-b')) continue
+    const d = Number(h)
+    if (!Number.isFinite(d)) continue
+    const next = str(ws.getRow(headerRow).getCell(c + 1))
+    cols.push({ d, massCol: c, thickCol: next === `${h}-b` ? c + 1 : -1 })
+  }
+
+  const out: MatrixCell[] = []
+  for (let r = firstRow; r <= lastRow; r++) {
+    // Колонка 2 — длина в мм («До 3м» → 3000).
+    const lengthMm = num(ws.getRow(r).getCell(2))
+    if (lengthMm == null) continue
+    for (const col of cols) {
+      const massKg = num(ws.getRow(r).getCell(col.massCol))
+      if (massKg == null) continue
+      out.push({
+        d: col.d,
+        lengthMm,
+        massKg,
+        thicknessMm: col.thickCol > 0 ? num(ws.getRow(r).getCell(col.thickCol)) : null,
+      })
+    }
+  }
+  return out
+}
+
+/** Нормы патрубков: колонки 1–9 листа, строки 37…62. */
+function parseNozzleNorms(ws: ExcelJS.Worksheet): NozzleNorm[] {
+  const out: NozzleNorm[] = []
+  for (let r = 37; r <= 62; r++) {
+    const row = ws.getRow(r)
+    const dn = num(row.getCell(1))
+    const moldingMassKg = num(row.getCell(4))
+    // Без DN или массы формовки строка бесполезна: ради неё таблица и нужна.
+    if (dn == null || moldingMassKg == null) continue
+
+    out.push({
+      dn,
+      odMm: num(row.getCell(2)),
+      minLengthMm: num(row.getCell(3)),
+      moldingMassKg,
+      h1Mm: num(row.getCell(5)),
+      s1Mm: num(row.getCell(6)),
+      flangeMassKg: num(row.getCell(7)),
+      bolt: str(row.getCell(8)) || null,
+      boltCount: num(row.getCell(9)),
+    })
+  }
+  return out
+}
+
+export interface EngineeringRefs {
+  /** Вес и толщина корпуса = f(Dу, L). */
+  shell: MatrixCell[]
+  /** Формовка эллиптических днищ = f(Dн, L). */
+  ellipticBottom: MatrixCell[]
+  /** Нормы простых патрубков = f(DN). */
+  nozzles: NozzleNorm[]
+}
+
+function extractEngineering(ws: ExcelJS.Worksheet): EngineeringRefs {
+  const shell = parseDxLMatrix(ws, 2, 5, 14)
+  const ellipticBottom = parseDxLMatrix(ws, 20, 22, 31)
+  const nozzles = parseNozzleNorms(ws)
+
+  const dus = [...new Set(shell.map((c) => c.d))]
+  console.log(
+    `  инженерные матрицы: корпус ${shell.length} ячеек (Dу ${dus.length}), ` +
+      `днища ${ellipticBottom.length}, патрубки ${nozzles.length}`,
+  )
+  return { shell, ellipticBottom, nozzles }
+}
+
 // ─── Списки (enum'ы) ─────────────────────────────────────────────────────────
 // AG2:AG17 — 16 категорий строк; последние три (Собственное производство,
 // Работы, ФОТ) — непокупные: F=IF(OR(C=AG15:AG17),"нет","да").
@@ -222,6 +353,7 @@ async function main() {
   const prices = extractPrices(sheet('НН'))
   const { grp, pe } = extractPipeWeights(sheet('Вес трубы, ПЭ трубы'))
   const lists = extractLists(sheet('Списки'))
+  const engineering = extractEngineering(sheet('Для расчетов'))
 
   // ─── Проверки целостности: лучше упасть здесь, чем засеять мусор в БД ───
   const errors: string[] = []
@@ -249,6 +381,34 @@ async function main() {
   else if (Math.abs(ref.kgPerM - 970.2) > 0.05) errors.push(`контрольный вес DN3000: ожидалось 970,2, получено ${ref.kgPerM}`)
   else console.log(`  контроль веса DN3000;0,6;10000 = ${ref.kgPerM} кг/пм ✓`)
 
+  // ─── Инженерные матрицы ───
+  if (engineering.nozzles.length !== 26) {
+    errors.push(`нормы патрубков: ожидалось 26 DN, получено ${engineering.nozzles.length}`)
+  }
+  // Диаметров Dу в матрице корпуса — 14 (1000…3000), длин — 10 («До 3м»…«До 12»).
+  const shellD = new Set(engineering.shell.map((c) => c.d))
+  const shellL = new Set(engineering.shell.map((c) => c.lengthMm))
+  if (shellD.size !== 14) errors.push(`матрица корпуса: ожидалось 14 значений Dу, получено ${shellD.size}`)
+  if (shellL.size !== 10) errors.push(`матрица корпуса: ожидалось 10 длин, получено ${shellL.size}`)
+  if (engineering.ellipticBottom.length === 0) errors.push('матрица эллиптических днищ пуста')
+
+  // Контрольные нормы патрубков (сверено с листом): DN250 -> 0,6 кг,
+  // DN400 -> 1,1 кг и фланец 4,6 кг.
+  const n250 = engineering.nozzles.find((n) => n.dn === 250)
+  const n400 = engineering.nozzles.find((n) => n.dn === 400)
+  if (!n250 || Math.abs(n250.moldingMassKg - 0.6) > 0.001) {
+    errors.push(`норма патрубка DN250: ожидалось 0,6 кг, получено ${n250?.moldingMassKg}`)
+  }
+  if (!n400 || Math.abs(n400.moldingMassKg - 1.1) > 0.001 || Math.abs((n400.flangeMassKg ?? 0) - 4.6) > 0.001) {
+    errors.push(`норма патрубка DN400: ожидалось 1,1 кг / фланец 4,6 кг, получено ${n400?.moldingMassKg} / ${n400?.flangeMassKg}`)
+  }
+  if (n250 && n400) console.log(`  контроль норм патрубков: DN250 = ${n250.moldingMassKg} кг, DN400 = ${n400.moldingMassKg} кг ✓`)
+
+  // Контроль матрицы корпуса: Dу 3000, L «До 12» — сверено с листом.
+  const shellRef = engineering.shell.find((c) => c.d === 3000 && c.lengthMm === 12000)
+  if (!shellRef) errors.push('не найдена контрольная ячейка корпуса Dу3000 / L12000')
+  else console.log(`  контроль корпуса Dу3000 / L12000 = ${shellRef.massKg} кг, ${shellRef.thicknessMm} мм ✓`)
+
   if (errors.length) {
     console.error('\nПРОВЕРКИ НЕ ПРОЙДЕНЫ:')
     errors.forEach((e) => console.error(`  ✗ ${e}`))
@@ -265,6 +425,7 @@ async function main() {
   await write('pipe-weights-grp.json', grp)
   await write('pipe-weights-pe.json', pe)
   await write('lists.json', lists)
+  await write('engineering.json', engineering)
 
   console.log('\nГотово.')
 }

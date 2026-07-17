@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { aggregateRows, computeEconomics, type Rates } from './economics'
 import { recalcFotSatellites } from './fot'
 import { computeRow } from './row'
+import type { NozzleNorm } from './formulas'
 import { computeDepth, PN_SURVEY_DEFAULT, snByDepth } from './survey-kns'
 import {
   __resetIds,
@@ -39,6 +40,21 @@ const PRICES: Record<string, number> = {
   'Запорная арматура|Задвижка чугунная клиновая металл/металл DN250 PN10/16 клин бронза|шт': 25000,
   'Прочее оборудование|Кран шаровой DN150|шт': 12000,
   'Выключатели|ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ  КАБЕЛЬ 10 М|шт': 6000,
+
+  // Разделы 2–6
+  'Собственное производство|Изготовление Лестницы|чел. ч': 1207.8,
+  'Собственное производство|Монтаж Лестницы|чел. ч': 1207.8,
+  'Собственное производство|Механическая формовка верхнего перекрытия|кг': 214.4,
+  'Собственное производство|Ламинирование верхнего перекрытия|кг': 310.2,
+  'Собственное производство|Прорезка люков (горловин) в стеклокомпозитном перекрытии|чел. ч': 1207.8,
+  'Собственное производство|Монтаж анкерных болтов к плите перекрытия|чел. ч': 1207.8,
+  'Метизы|Анкерный болт распорный 16х100|шт': 150,
+  'Детали труб_да ПЭ ПВХ PPR|Дефлектор ПВХ Ду110|шт': 600,
+  'Собственное производство|Прорезка отверстия вентиляции в перекрытии|чел. ч': 1207.8,
+  'Собственное производство|Монтаж вентиляционного стояка|чел. ч': 1207.8,
+  'Собственное производство|Изготовление направляющих насосов|чел. ч': 1207.8,
+  'Собственное производство|Монтаж направляющих насосов|чел. ч': 1207.8,
+  'Метизы|Болт М20-6gх90.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)|шт': 270,
 }
 
 /** Реальный фрагмент справочника весов (сид из мастер-шаблона). */
@@ -48,9 +64,20 @@ const WEIGHTS: Record<string, number> = {
   '3000|0.6|5000': 876.7,
 }
 
+/**
+ * Реальный фрагмент норм патрубков (лист «Для расчетов», строки 36–62).
+ * Значения сверены с листом: DN250 -> 0,6 кг; DN400 -> 1,1 кг / фланец 4,6.
+ */
+const NOZZLE_NORMS: NozzleNorm[] = [
+  { dn: 150, odMm: null, minLengthMm: null, moldingMassKg: 0.6, h1Mm: null, s1Mm: null, flangeMassKg: 1.4, bolt: 'М20х90', boltCount: 8 },
+  { dn: 250, odMm: null, minLengthMm: null, moldingMassKg: 0.6, h1Mm: null, s1Mm: null, flangeMassKg: 2.3, bolt: 'М24х100', boltCount: 12 },
+  { dn: 400, odMm: 413.1, minLengthMm: 406, moldingMassKg: 1.1, h1Mm: 101, s1Mm: 6.8, flangeMassKg: 4.6, bolt: 'М24х100', boltCount: 16 },
+]
+
 const ctx: MaterializeContext = {
   priceOf: (c, n, u) => PRICES[`${c}|${n}|${u}`] ?? null,
   pipeWeightOf: (dn, pn, sn) => WEIGHTS[`${dn}|${pn}|${sn}`] ?? null,
+  nozzleNormOf: (dn) => NOZZLE_NORMS.find((n) => n.dn === dn) ?? null,
   priceListVersion: 1,
 }
 
@@ -104,11 +131,99 @@ describe('материализация ОЛ3487 (сценарий приёмки
     expect(tree.priceListVersion).toBe(1)
   })
 
-  it('разделы 2–6 — каркас без строк (ограничение Фазы 1)', () => {
+  it('все 7 разделов материализованы — пустых нет', () => {
     const tree = materializeKns(ctx, OL3487)
-    for (const code of ['2', '3', '4', '5', '6']) {
-      expect(tree.sections.find((s) => s.code === code)!.components).toHaveLength(0)
+    for (const s of tree.sections) {
+      expect(s.components.length, `раздел ${s.code} «${s.title}» пуст`).toBeGreaterThan(0)
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Разделы 2–6: материализуется то, что ВЫВОДИТСЯ из ОЛ.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('раздел 2 «Лестница» (Библиотека B1)', () => {
+  const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '2')!.components.flatMap((c) => c.rows)
+  const byName = (n: string) => rows.find((r) => r.name === n)!
+
+  it('изготовление = 1,25 × H (11,6 м) = 14,5 чел.ч', () => {
+    expect(byName('Изготовление Лестницы').qtyCalc).toBeCloseTo(14.5, 6)
+  })
+
+  it('монтаж = изготовление / 2 = 7,25 чел.ч', () => {
+    expect(byName('Монтаж Лестницы').qtyCalc).toBeCloseTo(7.25, 6)
+  })
+})
+
+describe('раздел 3 «Перекрытие» (B2, B6)', () => {
+  const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '3')!.components.flatMap((c) => c.rows)
+  const byName = (n: string) => rows.find((r) => r.name === n)!
+
+  it('формовка перекрытия по геометрии DN3000', () => {
+    const expected = Math.PI * ((3000 + 300) / 2000) ** 2 * 0.006 * 1850
+    expect(byName('Механическая формовка верхнего перекрытия').qtyCalc).toBeCloseTo(expected, 6)
+  })
+
+  it('ламинирование = масса перекрытия × 3/10', () => {
+    const slab = byName('Механическая формовка верхнего перекрытия').qtyCalc!
+    expect(byName('Ламинирование верхнего перекрытия').qtyCalc).toBeCloseTo(slab * 0.3, 6)
+  })
+
+  it('анкеры округляются ВВЕРХ до целого: пол-анкера не бывает', () => {
+    const a = byName('Анкерный болт распорный 16х100').qtyCalc!
+    expect(Number.isInteger(a)).toBe(true)
+    expect(a).toBeGreaterThan(0)
+  })
+})
+
+describe('раздел 4 «Вентстояк» (C1)', () => {
+  const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '4')!.components.flatMap((c) => c.rows)
+
+  it('монтаж — норматив 3 чел.ч', () => {
+    expect(rows.find((r) => r.name === 'Монтаж вентиляционного стояка')!.qtyCalc).toBe(3)
+  })
+
+  it('дефлектор берёт цену из прайса', () => {
+    expect(rows.find((r) => r.name === 'Дефлектор ПВХ Ду110')!.priceCatalog).toBe(600)
+  })
+})
+
+describe('раздел 5 «Напорный трубопровод» (C2)', () => {
+  const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '5')!.components.flatMap((c) => c.rows)
+
+  it('направляющие насосов — труд из «Собственного производства», не метраж', () => {
+    // L × (раб + рез) × 2 = 69,6 м; норматив 0,25 чел.ч/м -> 17,4 чел.ч.
+    const izg = rows.find((r) => r.name === 'Изготовление направляющих насосов')!
+    expect(izg.category).toBe('Собственное производство')
+    expect(izg.unit).toBe('чел. ч')
+    expect(izg.qtyCalc).toBeCloseTo(17.4, 6)
+  })
+
+  // Состав ниток — 55–109 строк в реальных файлах (Реверс §4.2) и из ОЛ не
+  // выводится: схема отводов и тройников там не задаётся.
+  it('отводы и тройники НЕ выдумываются — их добавляет инженер', () => {
+    expect(rows.some((r) => /отвод|тройник/i.test(r.name))).toBe(false)
+  })
+})
+
+describe('раздел 6 «Крепёж» (C3)', () => {
+  it('болты = отверстий(DN напорного) × кол-во соединений, марка из норм', () => {
+    const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '6')!.components.flatMap((c) => c.rows)
+    // DN150 -> 8 отверстий, М20х90 (лист «Для расчетов»); напорных 2.
+    const bolt = rows.find((r) => r.category === 'Метизы')!
+    expect(bolt.qtyCalc).toBe(16)
+    // Полное наименование по шаблону НН, а не краткая марка норм.
+    expect(bolt.name).toBe('Болт М20-6gх90.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)')
+  })
+
+  it('без норм для DN количество не выдумывается', () => {
+    // DN 175 в матрице нет.
+    const rows = materializeKns(ctx, { ...OL3487, outletDn: 175 })
+      .sections.find((s) => s.code === '6')!.components.flatMap((c) => c.rows)
+    const bolt = rows[0]!
+    expect(bolt.qtyCalc).toBeNull()
+    expect(bolt.note).toContain('не найдена')
   })
 })
 
@@ -154,11 +269,38 @@ describe('раздел 1 «Корпус»', () => {
     expect(sleeves[1]!.note).toContain('Ø250')
   })
 
-  it('масса гильз не выдумывается: qtyCalc = null (ждём матрицу «Для расчетов»)', () => {
-    for (const s of rows.filter((r) => r.name === 'Формовка гильз')) {
-      expect(s.qtyCalc).toBeNull()
-      expect(s.note).toContain('не извлечена')
-    }
+  // Масса гильз теперь СЧИТАЕТСЯ из норм листа «Для расчетов» (раньше была
+  // ручным вводом: матрица не была извлечена).
+  it('масса гильз считается из норм: Мф(Ø гильзы) × кол-во', () => {
+    const sleeves = rows.filter((r) => r.name === 'Формовка гильз')
+    // Подводящий DN250 -> гильза Ø400 -> Мф 1,1 кг × 1 шт.
+    expect(sleeves[0]!.qtyCalc).toBeCloseTo(1.1, 6)
+    // Напорный DN150 -> гильза Ø250 -> Мф 0,6 кг × 2 шт.
+    expect(sleeves[1]!.qtyCalc).toBeCloseTo(1.2, 6)
+  })
+
+  it('масса гильзы берётся по диаметру ГИЛЬЗЫ, а не патрубка', () => {
+    // Если бы брали по DN патрубка (250 -> 0,6), вышло бы 0,6, а не 1,1.
+    const sleeve = rows.find((r) => r.name === 'Формовка гильз')!
+    expect(sleeve.qtyCalc).not.toBeCloseTo(0.6, 6)
+    expect(sleeve.note).toContain('Ø400')
+  })
+
+  it('ФОТ-спутник гильзы пересчитывается от её массы', () => {
+    const all = recalcFotSatellites(flattenRows(tree))
+    const sleeve = all.find((r) => r.name === 'Формовка гильз')!
+    const fot = all.find((r) => r.kind === 'ФОТ' && r.parentId === sleeve.id)!
+    // k = 1,0 (ручная формовка): ROUNDUP(1,1 × 1,0; 0,1) = 1,1
+    expect(fot.qtyCalc).toBeCloseTo(1.1, 6)
+  })
+
+  // Гильза крупного патрубка выходит за сетку норм — молча не выдумываем.
+  it('нет нормы для Ø гильзы → количество null и явное примечание', () => {
+    // DN1000 -> гильза Ø1100, которой в матрице нет.
+    const big = materializeKns(ctx, { ...OL3487, inletDn: 1000 })
+    const sleeve = flattenRows(big).find((r) => r.name === 'Формовка гильз')!
+    expect(sleeve.qtyCalc).toBeNull()
+    expect(sleeve.note).toContain('нормы формовки для Ø1100')
   })
 
   it('прорезка отверстий — с наименованиями из НН', () => {

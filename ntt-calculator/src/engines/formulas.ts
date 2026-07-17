@@ -152,6 +152,66 @@ export function insulation(
   }
 }
 
+// ─── Инженерные матрицы (лист «Для расчетов», Реверс §9.3) ──────────────────
+
+/** Ячейка матрицы f(D, L). */
+export interface MatrixCell {
+  d: number
+  lengthMm: number
+  massKg: number
+  thicknessMm: number | null
+}
+
+/** Нормы простого патрубка = f(DN). */
+export interface NozzleNorm {
+  dn: number
+  odMm: number | null
+  minLengthMm: number | null
+  /** Мф общая — масса формовки, кг. */
+  moldingMassKg: number
+  h1Mm: number | null
+  s1Mm: number | null
+  /** Мф фланца, кг. */
+  flangeMassKg: number | null
+  bolt: string | null
+  boltCount: number | null
+}
+
+/**
+ * Выбор ячейки матрицы f(D, L).
+ *
+ * Строки матрицы — пороги «До 3м», «До 3,5»…«До 12»: берётся ПЕРВАЯ длина,
+ * которая не меньше фактической. Диаметр должен совпасть точно — матрица
+ * задана для конкретных Dу (1000…3000), промежуточных значений в ней нет.
+ *
+ * `null` — промах: строка станет «красной», а не получит выдуманное число.
+ */
+export function lookupMatrix(cells: MatrixCell[], d: number, lengthMm: number): MatrixCell | null {
+  const byD = cells.filter((c) => c.d === d).sort((a, b) => a.lengthMm - b.lengthMm)
+  if (byD.length === 0) return null
+  return byD.find((c) => c.lengthMm >= lengthMm) ?? null
+}
+
+/**
+ * Норма патрубка по DN. Диаметр должен совпасть точно: список DN в матрице
+ * дискретный (50, 65, 80, 100, 150…3000), интерполяция здесь недопустима —
+ * это нормы формовки, а не непрерывная функция.
+ */
+export function lookupNozzleNorm(norms: NozzleNorm[], dn: number): NozzleNorm | null {
+  return norms.find((n) => n.dn === dn) ?? null
+}
+
+/**
+ * Масса формовки гильзы, кг: `Мф общая(DN гильзы) × кол-во`.
+ *
+ * DN здесь — диаметр ГИЛЬЗЫ (`sleeveDiameter(DN патрубка)`), а не патрубка:
+ * формуется именно гильза. `null` — нормы для такого диаметра нет.
+ */
+export function sleeveMoldingMassKg(norms: NozzleNorm[], sleeveDn: number, count: number): number | null {
+  const norm = lookupNozzleNorm(norms, sleeveDn)
+  return norm ? norm.moldingMassKg * count : null
+}
+
 // ─── Патрубки ────────────────────────────────────────────────────────────────
 
 /**

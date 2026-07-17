@@ -30,6 +30,43 @@ refsRouter.get('/nomenclature', async (_req, res, next) => {
 })
 
 /**
+ * GET /api/refs/engineering — инженерные матрицы листа «Для расчетов»
+ * (ТЗ §7, приоритет высокий; Реверс §9.3).
+ *
+ * `shell`          вес и толщина корпуса      = f(Dу, L) — 140 ячеек
+ * `ellipticBottom` формовка эллиптических днищ = f(Dн, L) — 140 ячеек
+ * `nozzles`        нормы простых патрубков     = f(DN)    — 26 позиций
+ *
+ * Нормы патрубков — источник массы формовки гильз (Библиотека A5): без них
+ * количество приходилось вводить вручную.
+ */
+refsRouter.get('/engineering', async (_req, res, next) => {
+  try {
+    const [matrix, nozzles] = await Promise.all([
+      prisma.engineeringMatrix.findMany({
+        orderBy: [{ kind: 'asc' }, { d: 'asc' }, { lengthMm: 'asc' }],
+        select: { kind: true, d: true, lengthMm: true, massKg: true, thicknessMm: true },
+      }),
+      prisma.nozzleNorm.findMany({
+        orderBy: { dn: 'asc' },
+        select: {
+          dn: true, odMm: true, minLengthMm: true, moldingMassKg: true,
+          h1Mm: true, s1Mm: true, flangeMassKg: true, bolt: true, boltCount: true,
+        },
+      }),
+    ])
+
+    res.json({
+      shell: matrix.filter((m) => m.kind === 'SHELL').map(({ kind: _kind, ...c }) => c),
+      ellipticBottom: matrix.filter((m) => m.kind === 'ELLIPTIC_BOTTOM').map(({ kind: _kind, ...c }) => c),
+      nozzles,
+    })
+  } catch (e) {
+    next(e)
+  }
+})
+
+/**
  * GET /api/refs/pipe-weights — веса труб (ТЗ §7, приоритет высокий).
  *
  * GRP: ключ (DN; PN; SN) → толщина стенки, кг/пм — 162 позиции, DN 300…3000.

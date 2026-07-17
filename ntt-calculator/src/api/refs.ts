@@ -34,9 +34,41 @@ export interface PePipe {
   kgPerM: number
 }
 
+/** Ячейка инженерной матрицы f(D, L) — лист «Для расчетов». */
+export interface MatrixCell {
+  d: number
+  lengthMm: number
+  massKg: number
+  thicknessMm: number | null
+}
+
+/** Нормы простого патрубка = f(DN). Источник массы формовки гильз. */
+export interface NozzleNorm {
+  dn: number
+  odMm: number | null
+  minLengthMm: number | null
+  moldingMassKg: number
+  h1Mm: number | null
+  s1Mm: number | null
+  flangeMassKg: number | null
+  bolt: string | null
+  boltCount: number | null
+}
+
+export interface EngineeringRefs {
+  shell: MatrixCell[]
+  ellipticBottom: MatrixCell[]
+  nozzles: NozzleNorm[]
+}
+
 export const refsApi = {
   nomenclature(): Promise<Nomenclature> {
     return api.get<Nomenclature>('/refs/nomenclature').then((r) => r.data)
+  },
+
+  /** Инженерные матрицы (ТЗ §7): корпус, эллиптические днища, нормы патрубков. */
+  engineering(): Promise<EngineeringRefs> {
+    return api.get<EngineeringRefs>('/refs/engineering').then((r) => r.data)
   },
 
   pipeWeights(): Promise<{ grp: PipeWeightGrp[]; pe: PePipe[] }> {

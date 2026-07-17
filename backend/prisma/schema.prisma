@@ -175,6 +175,52 @@ model PipeWeight {
   @@unique([dn, pn, sn])
 }
 
+/// Тип инженерной матрицы листа «Для расчетов» (Реверс §9.3).
+enum MatrixKind {
+  /// Вес и толщина корпуса = f(Dу, L).
+  SHELL
+  /// Формовка эллиптических днищ = f(Dн, L).
+  ELLIPTIC_BOTTOM
+}
+
+/// Инженерные матрицы f(D, L) — лист «Для расчетов».
+/// Обе матрицы устроены одинаково (пары колонок «кг» / «мм» по диаметрам,
+/// строки по длине), поэтому лежат в одной таблице с дискриминатором `kind`,
+/// а не в двух близнецах.
+model EngineeringMatrix {
+  id          Int        @id @default(autoincrement())
+  kind        MatrixKind
+  /// Dу (корпус) или Dн (днище), мм.
+  d           Int
+  /// Длина изделия, мм: 3000…12000.
+  lengthMm    Int
+  massKg      Float
+  thicknessMm Float?
+
+  @@unique([kind, d, lengthMm])
+  @@index([kind])
+}
+
+/// Нормы простого патрубка = f(DN), лист «Для расчетов», строки 36–62.
+/// На них считается формовка гильз и фланцев (Библиотека A5, A6).
+model NozzleNorm {
+  id Int @id @default(autoincrement())
+  /// Диаметр номинальный, мм — ключ.
+  dn Int @unique
+
+  odMm          Float?
+  minLengthMm   Float?
+  /// Мф общая — масса формовки, кг.
+  moldingMassKg Float
+  h1Mm          Float?
+  s1Mm          Float?
+  /// Мф фланца, кг.
+  flangeMassKg  Float?
+  /// Болтовое соединение фланца, напр. «М24х100».
+  bolt          String?
+  boltCount     Int?
+}
+
 /// ПЭ-трубы ПЭ-100 SDR17, 26 позиций.
 /// Ключ — наружный диаметр `odMm`, а НЕ `dn`: в листе колонка «DN» — условный
 /// проход, и она не уникальна (DN 125 указан и для ⌀125, и для ⌀140), к тому же
