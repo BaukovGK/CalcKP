@@ -59,22 +59,26 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
     return pipeGradeName(dn, pn.value, sn.value)
   })
 
-  /** Пояснение расчёта SN — показывается под маркой. */
+  /**
+   * Марка БЕЗ префикса «Труба» — так в прототипе: подпись карточки уже
+   * говорит, что это труба корпуса. Полное наименование (с префиксом) нужно
+   * только строке расчёта — там оно ключ поиска цены.
+   */
+  const pipeMark = computed(() => pipeGrade.value?.replace(/^Труба\s+/, '') ?? null)
+
+  /**
+   * Пояснение расчёта — формулировка прототипа:
+   * «расчётные: глубина 11 600 мм → SN 10000 · ТТ МВК».
+   */
   const snExplain = computed(() => {
-    if (depthMm.value == null) return null
-    const base =
-      depthMm.value > 8000
-        ? 'глубина > 8000 мм → 10000'
-        : depthMm.value > 5000
-          ? 'глубина > 5000 мм → 5000'
-          : depthMm.value > 3000
-            ? 'глубина > 3000 мм → 2500'
-            : 'глубина ≤ 3000 мм → 1250'
-    const raised =
-      form.value.underRoadway || form.value.mvk
-        ? `, ${form.value.underRoadway ? 'проезжая часть' : 'ТТ МВК'} → на ступень выше`
-        : ''
-    return `SN: ${base}${raised}`
+    if (depthMm.value == null || sn.value == null) return null
+    const d = depthMm.value.toLocaleString('ru-RU')
+    const flags = [
+      form.value.underRoadway ? 'проезжая часть' : null,
+      form.value.mvk ? 'ТТ МВК' : null,
+    ].filter(Boolean)
+    const tail = flags.length ? ` · ${flags.join(' · ')}` : ''
+    return `расчётные: глубина ${d} мм → SN ${sn.value}${tail}`
   })
 
   // ── Арматура: вычисляемая с override ──
@@ -91,12 +95,16 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const balls = computed(() => num(form.value.kranManual) ?? ballsCalc.value)
   const ballsOverridden = computed(() => num(form.value.kranManual) != null)
 
-  const gatesExplain = computed(
-    () => `= подводящих (${form.value.podvKol}) × ${form.value.valveOnInlet ? 'арматура на подводящем' : 'без арматуры'}`,
+  // Формулировки разбивки — как в прототипе: он объясняет смысл, а не
+  // повторяет арифметику («по кол-ву подводящих патрубков = 1»).
+  const gatesExplain = computed(() =>
+    form.value.valveOnInlet
+      ? `по кол-ву подводящих патрубков = ${gatesCalc.value}`
+      : 'арматура на подводящем выключена = 0',
   )
   const ballsExplain = computed(
     () =>
-      `= раб ${form.value.nRab} + рез ${form.value.nRez} + коллектор 1${form.value.emergency ? ' + аварийный 1' : ''}`,
+      `напорные (${form.value.nRab}+${form.value.nRez}) + коллектор 1${form.value.emergency ? ' + аварийный 1' : ''} = ${ballsCalc.value}`,
   )
 
   // ── Полный габарит и мини-превью изделия ──
@@ -105,10 +113,12 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
     depthMm.value == null ? null : depthMm.value + (num(form.value.vozv) ?? 0),
   )
 
+  /** Заголовок изделия. Разряды пробелами — как в прототипе: «КНС 3 000×11 900 мм». */
   const title = computed(() => {
     const dn = num(form.value.dn)
     if (dn == null || fullHeightMm.value == null) return 'КНС'
-    return `КНС ${dn}×${fullHeightMm.value} мм`
+    const f = (n: number) => n.toLocaleString('ru-RU')
+    return `КНС ${f(dn)}×${f(fullHeightMm.value)} мм`
   })
 
   /** Обязательные поля: без них «Создать расчёт» заблокирована. */
@@ -132,6 +142,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
     sn,
     pn,
     pipeGrade,
+    pipeMark,
     snExplain,
     gates,
     gatesCalc,

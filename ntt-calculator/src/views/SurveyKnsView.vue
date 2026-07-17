@@ -3,12 +3,17 @@
     <!-- ── Топбар ── -->
     <header class="ol-top">
       <div class="ol-top-l">
-        <span class="ol-name">{{ s.title.value }}</span>
-        <span class="ol-zayavka">Заявка № {{ form.zayavka }}</span>
+        <span class="ol-name">Опросный лист — насосная станция</span>
+        <span class="ol-zayavka">заявка {{ form.zayavka }} · черновик валиден в любом порядке</span>
       </div>
       <div class="ol-top-r">
-        <span class="ol-draft">черновик сохранён {{ draftTime }}</span>
-        <button class="ol-btn" :title="'Переключить тему'" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
+        <span class="ol-draft">сохранено {{ draftTime }}</span>
+        <RouterLink v-if="lastEstimateId" class="ol-lnk" :to="{ name: 'calculator', params: { id: lastEstimateId } }">
+          → Конфигуратор расчёта
+        </RouterLink>
+        <button class="ol-btn" title="Переключить тему" @click="toggle">
+          {{ theme === 'dark' ? '☾' : '☀' }} тема
+        </button>
       </div>
     </header>
 
@@ -22,9 +27,11 @@
           :class="{ 'is-active': activeSec === sec.n }"
           @click="goSection(sec.n)"
         >
-          <span class="ol-step-n">{{ sec.n }}</span>
+          <!-- ✓ секция заполнена · ● есть незаполненные обязательные -->
+          <span class="ol-step-m" :class="secDone(sec.n) ? 'ok' : 'todo'">{{ secDone(sec.n) ? '✓' : '●' }}</span>
           <span class="ol-step-t">{{ sec.title }}</span>
         </button>
+        <p class="ol-steps-hint">Секции заполняются в любом порядке. ● — есть незаполненные обязательные.</p>
       </nav>
 
       <!-- ── Форма ── -->
@@ -61,10 +68,12 @@
 
           <!-- Труба корпуса: PN/SN вычисляются, не задаются -->
           <div class="ol-card">
-            <div class="ol-card-h">Труба корпуса</div>
-            <div v-if="s.pipeGrade.value" class="ol-grade">{{ s.pipeGrade.value }}</div>
+            <div class="ol-card-h">Труба корпуса <span class="f-mark" title="PN и SN не задаются: они продиктованы глубиной и требованиями заказчика">ƒ</span></div>
+            <!-- Марка без префикса «Труба» — как в прототипе: подпись карточки
+                 уже говорит, что это труба корпуса. -->
+            <div v-if="s.pipeMark.value" class="ol-grade">{{ s.pipeMark.value }}</div>
             <div v-else class="ol-grade ol-grade--empty">— укажите DN и глубину</div>
-            <div v-if="s.snExplain.value" class="ol-explain">ƒ {{ s.snExplain.value }} · PN 0,1 — безнапорный корпус</div>
+            <div v-if="s.snExplain.value" class="ol-explain">{{ s.snExplain.value }}</div>
 
             <label class="ol-chk">
               <input v-model="form.pipeManual" type="checkbox" />
@@ -200,17 +209,19 @@
       <aside class="ol-live">
         <div class="ol-live-h">Подбор глубины</div>
 
-        <div class="ol-live-npodz" :title="'ƒ Нподз = ROUNDUP((лоток/1000 + hР)·1000, до 100 вверх)'">
-          {{ s.depthMm.value != null ? fmtInt(s.depthMm.value) : '—' }} <span class="ol-live-u">мм</span>
-        </div>
-        <div v-if="s.depthOverridden.value" class="ol-live-ovr">ручной ввод</div>
-
+        <!-- Порядок как в прототипе: сначала цепочка величин, затем итог. -->
         <dl class="ol-live-vals">
           <div v-for="v in liveValues" :key="v.k" class="ol-live-row" :title="v.f">
             <dt>{{ v.k }} <span class="ol-f">ƒ</span></dt>
             <dd>{{ v.v }}</dd>
           </div>
         </dl>
+
+        <div class="ol-live-lbl">Рекомендуемая глубина подземной части</div>
+        <div class="ol-live-npodz" title="ƒ Нподз = ROUNDUP((лоток/1000 + hР)·1000, до 100 вверх)">
+          {{ s.depthMm.value != null ? fmtInt(s.depthMm.value) : '—' }} <span class="ol-live-u">мм</span>
+        </div>
+        <div v-if="s.depthOverridden.value" class="ol-live-ovr">ручной ввод</div>
 
         <div class="ol-live-act">
           <button class="ol-btn ol-btn--acc" :disabled="s.depth.value.npodzMm == null" @click="acceptDepth">
@@ -219,14 +230,21 @@
           <label class="fld"><span>своя, мм</span><input v-model="form.npodzManual" class="num" placeholder="—" /></label>
         </div>
 
+        <div class="ol-live-h">Изделие</div>
         <div class="ol-live-prev">
           <div class="ol-prev-t">{{ s.title.value }}</div>
           <div class="ol-prev-s">
             подз. {{ s.depthMm.value != null ? fmtInt(s.depthMm.value) : '—' }} мм ·
-            {{ form.rashod }} {{ unitLabel }} ·
-            {{ form.nRab }}+{{ form.nRez }} насоса
+            {{ form.rashod }} {{ unitLabel }}
+          </div>
+          <div class="ol-prev-s">
+            {{ form.nRab }}+{{ form.nRez }} насоса · {{ blocksOn }} из {{ blocks.length }} блоков включено
           </div>
         </div>
+
+        <p class="ol-live-hint">
+          Значения пересчитываются при каждом вводе. Наведите на подпись — увидите формулу.
+        </p>
 
         <div class="ol-live-foot">
           <div v-if="!s.canCreate.value" class="ol-hint">
@@ -266,7 +284,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
 import CalcField from '@/components/survey/CalcField.vue'
@@ -275,6 +293,7 @@ import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { makeDefaultKnsSurvey } from '@/types/survey'
+import { tryEvalExpr } from '@/engines/expr'
 import { estimatesApi } from '@/api/estimates'
 import { KNS_SECTIONS } from '@/engines/template-kns'
 
@@ -288,7 +307,7 @@ const SECTIONS = [
   { n: 1, title: 'Общие' },
   { n: 2, title: 'Корпус' },
   { n: 3, title: 'Патрубки' },
-  { n: 4, title: 'Насосное оборудование' },
+  { n: 4, title: 'Насосное' },
   { n: 5, title: 'Автоматика' },
 ]
 
@@ -348,6 +367,34 @@ const blocks = computed(() => [
   { t: 'Шкаф управления и КИПиА', on: form.value.shu },
 ])
 
+const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)
+
+/** Расчёт, созданный в этой сессии — для ссылки «→ Конфигуратор расчёта». */
+const lastEstimateId = ref<string | null>(null)
+
+/**
+ * Секция заполнена: все её обязательные поля непусты.
+ * ✓ / ● в степпере — по прототипу.
+ */
+function secDone(n: number): boolean {
+  const f = form.value
+  const has = (v: string) => v.trim() !== ''
+  switch (n) {
+    case 1:
+      return has(f.zayavka) && has(f.zakazchik) && has(f.obekt)
+    case 2:
+      return has(f.dn)
+    case 3:
+      return has(f.podvLotok)
+    case 4:
+      return has(f.rashod) && has(f.napor) && (tryEvalExpr(f.nRab) ?? 0) >= 1
+    case 5:
+      return true // в автоматике обязательных полей нет
+    default:
+      return true
+  }
+}
+
 function goSection(n: number) {
   activeSec.value = n
   document.getElementById(`sec-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -402,6 +449,7 @@ async function createEstimate() {
         sections: KNS_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
       },
     })
+    lastEstimateId.value = est.id
     toast('Расчёт создан')
     await router.push({ name: 'calculator', params: { id: est.id } })
   } catch (e) {
@@ -433,7 +481,10 @@ async function createEstimate() {
   color: var(--muted); font-size: 12px; }
 .ol-step:hover { color: var(--text); background: var(--panel2); }
 .ol-step.is-active { border-left-color: var(--acc); background: var(--panel2); color: var(--text); }
-.ol-step-n { font-size: 10px; color: var(--faint); min-width: 10px; }
+.ol-step-m { font-size: 10px; min-width: 10px; }
+.ol-step-m.ok { color: var(--green); }
+.ol-step-m.todo { color: var(--acc); }
+.ol-steps-hint { padding: 10px 12px; font-size: 9.5px; color: var(--faint); line-height: 1.5; }
 .ol-step-t { flex: 1; }
 
 /* Форма */
@@ -477,7 +528,10 @@ async function createEstimate() {
 .ol-live { width: 300px; flex: none; border-left: 2px solid var(--line); background: var(--panel);
   padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .ol-live-h { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+.ol-live-lbl { font-size: 10.5px; color: var(--muted); }
 .ol-live-npodz { font-size: 22px; font-weight: 700; }
+.ol-live-hint { font-size: 9.5px; color: var(--faint); line-height: 1.5; }
+.f-mark { color: var(--faint); font-size: 9px; }
 .ol-live-u { font-size: 13px; font-weight: 400; color: var(--muted); }
 .ol-live-ovr { font-size: 10px; color: var(--blue); margin-top: -8px; }
 .ol-live-vals { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 8px; }
