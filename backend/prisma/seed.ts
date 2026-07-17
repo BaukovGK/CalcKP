@@ -1,13 +1,16 @@
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
-import { Pool } from 'pg'
 import bcrypt from 'bcryptjs'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-const adapter = new PrismaPg(pool)
+// Конфиг передаётся адаптеру напрямую — так же, как в src/utils/prisma.ts.
+// Раньше сюда передавался готовый `new Pool(...)`, и типы не сходились
+// (Pool из 'pg' против ожидаемого адаптером). Ошибку не было видно: tsconfig
+// собирает только src/**, а ts-node-dev --transpile-only типы игнорирует —
+// она всплыла лишь при компиляции сида для прод-образа.
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter } as never)
 
 const SEED_DATA = resolve(__dirname, 'seed-data')
