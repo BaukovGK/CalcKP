@@ -1,0 +1,28 @@
+# Окончания строк.
+#
+# По умолчанию git нормализует текст в LF при хранении, а на Windows
+# core.autocrlf=true отдаёт в рабочее дерево CRLF. Для файлов, которые
+# исполняются в Linux-контейнерах, это опасно: CRLF в Dockerfile или в
+# shell-строке даёт «\r» внутри команды и падение с «command not found».
+# Ниже LF закреплён явно — тогда он сохраняется и при клоне на Windows.
+
+* text=auto eol=lf
+
+# ── Исполняются в Linux: LF обязателен ───────────────────────────────────────
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+docker-compose.yml text eol=lf
+*.conf          text eol=lf
+*.sh            text eol=lf
+*.cjs           text eol=lf
+
+# ── PowerShell ───────────────────────────────────────────────────────────────
+# CRLF — родной для Windows; PowerShell 5.1 к тому же требует UTF-8 с BOM,
+# иначе кириллица читается как Windows-1251 и скрипт не парсится.
+*.ps1           text eol=crlf working-tree-encoding=UTF-8
+
+# ── Бинарные ─────────────────────────────────────────────────────────────────
+*.xlsx          binary
+*.png           binary
+*.ico           binary
+*.zip           binary
