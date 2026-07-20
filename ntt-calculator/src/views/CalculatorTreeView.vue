@@ -5,7 +5,7 @@
       <div class="tb-l">
         <span class="tb-t">Расчёт: {{ st.estimate?.title ?? '—' }}</span>
         <span v-if="customer" class="tb-cust">· Заказчик {{ customer }}</span>
-        <RouterLink class="tb-lnk" :to="{ name: 'survey-kns' }">← Опросный лист</RouterLink>
+        <RouterLink class="tb-lnk" :to="{ name: surveyRoute }">← Опросный лист</RouterLink>
         <span v-if="zayavka" class="tb-zv">· заявка {{ zayavka }}</span>
         <span class="badge">{{ st.estimate?.status ?? 'DRAFT' }}</span>
       </div>
@@ -245,6 +245,21 @@ const rentColor = computed(() => {
 })
 
 const anyFilter = computed(() => filters.q !== '' || filters.missing || filters.conflict || filters.override)
+
+/**
+ * Ссылка «← Опросный лист» ведёт на ОЛ СВОЕГО изделия: у трёх типов разные
+ * наборы полей, и отправлять расчёт ёмкости в ОЛ насосной станции нельзя.
+ */
+const surveyRoute = computed(() => {
+  switch (st.estimate?.deviceType) {
+    case 'EMK':
+      return 'survey-emk'
+    case 'KOL':
+      return 'survey-kol'
+    default:
+      return 'survey-kns'
+  }
+})
 
 // ── Топбар: заказчик и № заявки берутся из ОЛ (прототип показывает оба) ──
 const survey = computed(() => (st.estimate?.surveyData as { kns?: Record<string, string> } | undefined)?.kns)

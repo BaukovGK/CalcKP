@@ -41,10 +41,23 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      // Опросный лист КНС — вход в процесс: ОЛ → материализация → калькулятор.
+      // Опросные листы — вход в процесс: ОЛ → материализация → калькулятор.
+      // Три изделия, три набора полей (ТЗ §5.6); каркас экрана общий.
       path: '/survey/kns',
       name: 'survey-kns',
       component: () => import('@/views/SurveyKnsView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
+    },
+    {
+      path: '/survey/emk',
+      name: 'survey-emk',
+      component: () => import('@/views/SurveyEmkView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
+    },
+    {
+      path: '/survey/kol',
+      name: 'survey-kol',
+      component: () => import('@/views/SurveyKolView.vue'),
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
     },
     {
