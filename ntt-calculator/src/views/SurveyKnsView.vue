@@ -251,7 +251,7 @@
             Заполните: {{ s.missingRequired.value.join(', ') }}
           </div>
           <button class="ol-create" :disabled="!s.canCreate.value" @click="previewOpen = true">
-            Создать расчёт →
+            {{ isEdit ? 'Сохранить ОЛ →' : 'Создать расчёт →' }}
           </button>
         </div>
       </aside>
@@ -273,7 +273,7 @@
       <template #footer>
         <button class="ol-btn" @click="previewOpen = false">Отмена</button>
         <button class="ol-create" :disabled="creating" @click="createEstimate">
-          {{ creating ? 'Создаём…' : 'Создать расчёт → конфигуратор' }}
+          {{ creating ? 'Сохраняем…' : isEdit ? 'Сохранить ОЛ → конфигуратор' : 'Создать расчёт → конфигуратор' }}
         </button>
       </template>
     </BaseModal>
@@ -292,16 +292,36 @@ import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
-import { makeDefaultKnsSurvey } from '@/types/survey'
+import { makeDefaultKnsSurvey, pickCommon, type KnsSurveyForm } from '@/types/survey'
 import { tryEvalExpr } from '@/engines/expr'
 import { estimatesApi } from '@/api/estimates'
+import { projectsApi } from '@/api/projects'
 import { KNS_SECTIONS } from '@/engines/template-kns'
+
+/**
+ * Ветка КНС единого опросного листа (SurveyView).
+ *
+ * Три режима — по props:
+ *  - создание вне проекта (без props),
+ *  - создание в проекте (`projectId`),
+ *  - редактирование ОЛ существующего расчёта (`estimateId` + `initial`):
+ *    сохранение поднимает `surveyRev`, и конфигуратор рематериализует дерево
+ *    с пометкой конфликтов (Механика §8.3).
+ */
+const props = defineProps<{
+  estimateId?: string | null
+  projectId?: string | null
+  initial?: Partial<KnsSurveyForm> | null
+  surveyRev?: number
+}>()
 
 const router = useRouter()
 const { theme, toggle } = useTheme()
 
-const form = ref(makeDefaultKnsSurvey())
+const form = ref<KnsSurveyForm>({ ...makeDefaultKnsSurvey(), ...(props.initial ?? {}) })
 const s = useKnsSurvey(form)
+
+const isEdit = computed(() => Boolean(props.estimateId))
 
 const SECTIONS = [
   { n: 1, title: 'Общие' },
@@ -369,8 +389,8 @@ const blocks = computed(() => [
 
 const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)
 
-/** Расчёт, созданный в этой сессии — для ссылки «→ Конфигуратор расчёта». */
-const lastEstimateId = ref<string | null>(null)
+/** Расчёт, созданный в этой сессии или редактируемый — для ссылки «→ Конфигуратор расчёта». */
+const lastEstimateId = ref<string | null>(props.estimateId ?? null)
 
 /**
  * Секция заполнена: все её обязательные поля непусты.
@@ -427,33 +447,61 @@ function acceptDepth() {
   toast(`Нподз = ${fmtInt(v)} мм принята`)
 }
 
+/**
+ * Единый контракт surveyData (все три изделия пишут одинаково):
+ * `common` — общий блок для страниц, не знающих тип изделия;
+ * `kns|emk|kol` — параметры материализации; `form` — полная форма для
+ * повторного открытия ОЛ; `surveyRev` — маркер «ОЛ изменился» для
+ * рематериализации в конфигураторе.
+ */
+function surveyPayload() {
+  return {
+    common: pickCommon(form.value),
+    kns: { ...form.value },
+    form: { ...form.value },
+    derived: {
+      npodzMm: s.depthMm.value,
+      sn: s.sn.value,
+      pn: s.pn.value,
+      pipeGrade: s.pipeGrade.value,
+      fullHeightMm: s.fullHeightMm.value,
+      gates: s.gates.value,
+      balls: s.balls.value,
+    },
+    surveyRev: (props.surveyRev ?? 0) + 1,
+  }
+}
+
 async function createEstimate() {
   creating.value = true
   try {
-    const est = await estimatesApi.create({
-      title: s.title.value,
-      deviceType: 'KNS',
-      // Параметры ОЛ сохраняются целиком: расчёт самодостаточен, а
-      // материализация дерева произойдёт в конфигураторе (§9.1).
-      surveyData: {
-        kns: { ...form.value },
-        derived: {
-          npodzMm: s.depthMm.value,
-          sn: s.sn.value,
-          pn: s.pn.value,
-          pipeGrade: s.pipeGrade.value,
-          fullHeightMm: s.fullHeightMm.value,
-          gates: s.gates.value,
-          balls: s.balls.value,
+    let id: string
+    if (props.estimateId) {
+      // Редактирование ОЛ существующего расчёта — НЕ создаём дубль.
+      await estimatesApi.patchSurvey(props.estimateId, surveyPayload())
+      id = props.estimateId
+      toast('Опросный лист сохранён — расчёт будет пересчитан')
+    } else {
+      const dto = {
+        title: s.title.value,
+        deviceType: 'KNS' as const,
+        surveyData: {
+          ...surveyPayload(),
+          sections: KNS_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
         },
-        sections: KNS_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
-      },
-    })
-    lastEstimateId.value = est.id
-    toast('Расчёт создан')
-    await router.push({ name: 'calculator', params: { id: est.id } })
+      }
+      // Внутри проекта расчёт создаётся привязанным к нему (projectId),
+      // иначе он невидим в UI: Dashboard показывает только проекты.
+      const est = props.projectId
+        ? await projectsApi.addEstimate(props.projectId, dto)
+        : await estimatesApi.create(dto)
+      id = est.id
+      toast('Расчёт создан')
+    }
+    lastEstimateId.value = id
+    await router.push({ name: 'calculator', params: { id } })
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Не удалось создать расчёт', 'error')
+    toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error')
     creating.value = false
   }
 }

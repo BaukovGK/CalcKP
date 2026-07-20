@@ -5,7 +5,11 @@
       <div class="tb-l">
         <span class="tb-t">Расчёт: {{ st.estimate?.title ?? '—' }}</span>
         <span v-if="customer" class="tb-cust">· Заказчик {{ customer }}</span>
-        <RouterLink class="tb-lnk" :to="{ name: surveyRoute }">← Опросный лист</RouterLink>
+        <RouterLink
+          v-if="st.estimate"
+          class="tb-lnk"
+          :to="{ name: 'survey', params: { id: st.estimate.id } }"
+        >← Опросный лист</RouterLink>
         <span v-if="zayavka" class="tb-zv">· заявка {{ zayavka }}</span>
         <span class="badge">{{ st.estimate?.status ?? 'DRAFT' }}</span>
       </div>
@@ -246,23 +250,14 @@ const rentColor = computed(() => {
 
 const anyFilter = computed(() => filters.q !== '' || filters.missing || filters.conflict || filters.override)
 
-/**
- * Ссылка «← Опросный лист» ведёт на ОЛ СВОЕГО изделия: у трёх типов разные
- * наборы полей, и отправлять расчёт ёмкости в ОЛ насосной станции нельзя.
- */
-const surveyRoute = computed(() => {
-  switch (st.estimate?.deviceType) {
-    case 'EMK':
-      return 'survey-emk'
-    case 'KOL':
-      return 'survey-kol'
-    default:
-      return 'survey-kns'
-  }
+// ── Топбар: заказчик и № заявки — из единого блока `common` surveyData.
+// Fallback на `kns`/`form` — расчёты, сохранённые до унификации контракта.
+const survey = computed(() => {
+  const sd = st.estimate?.surveyData as
+    | { common?: Record<string, string>; kns?: Record<string, string>; form?: Record<string, string> }
+    | undefined
+  return sd?.common ?? sd?.kns ?? sd?.form
 })
-
-// ── Топбар: заказчик и № заявки берутся из ОЛ (прототип показывает оба) ──
-const survey = computed(() => (st.estimate?.surveyData as { kns?: Record<string, string> } | undefined)?.kns)
 const customer = computed(() => survey.value?.zakazchik ?? null)
 const zayavka = computed(() => survey.value?.zayavka ?? null)
 
@@ -341,10 +336,8 @@ function secProblems(code: string) {
 
 const secTitle = (code: string) => st.tree?.sections.find((s) => s.code === code)?.title ?? code
 
-const prevCalcOf = (id: string): number | null => {
-  const r = st.rows.find((x) => x.id === id)
-  return r?.qtyCalc ?? null
-}
+/** «Было» в плашке конфликта — старое расчётное из снимка, не текущее. */
+const prevCalcOf = (id: string): number | null => st.prevQtyCalc[id] ?? null
 
 function goSection(code: string) {
   activeSec.value = code

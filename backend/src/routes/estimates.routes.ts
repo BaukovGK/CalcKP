@@ -414,10 +414,18 @@ estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
     }
 
     const merged = { ...(estimate.surveyData as object ?? {}), ...req.body }
+
+    // Итог расчёта дублируется в колонку totalRub: карточки проекта и
+    // снапшоты читают её, а не разбирают JSON дерева. Раньше колонка не
+    // обновлялась никогда — суммы в списках всегда были пустыми.
+    const salePrice = (req.body?.totals as { salePriceRub?: unknown } | undefined)?.salePriceRub
+    const totalRub = typeof salePrice === 'number' && Number.isFinite(salePrice) ? salePrice : undefined
+
     const updated = await prisma.estimate.update({
       where: { id },
       data: {
         surveyData: merged,
+        ...(totalRub != null ? { totalRub } : {}),
         // DRAFT → CALC при первом сохранении — легальный переход (§4.3);
         // из REVIEW статус не трогаем, иначе правка молча откатывала бы
         // расчёт с проверки.

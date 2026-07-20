@@ -41,25 +41,19 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      // Опросные листы — вход в процесс: ОЛ → материализация → калькулятор.
-      // Три изделия, три набора полей (ТЗ §5.6); каркас экрана общий.
-      path: '/survey/kns',
-      name: 'survey-kns',
-      component: () => import('@/views/SurveyKnsView.vue'),
+      // Единый опросный лист — вход в процесс: ОЛ → материализация →
+      // калькулятор. Один экран, ветвление по типу изделия (ТЗ §5.6).
+      // Без :id — создание (?type=KNS|EMK|KOL, ?project=<id> привязывает
+      // к проекту); с :id — редактирование ОЛ существующего расчёта.
+      path: '/survey/:id?',
+      name: 'survey',
+      component: () => import('@/views/SurveyView.vue'),
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
     },
-    {
-      path: '/survey/emk',
-      name: 'survey-emk',
-      component: () => import('@/views/SurveyEmkView.vue'),
-      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
-    },
-    {
-      path: '/survey/kol',
-      name: 'survey-kol',
-      component: () => import('@/views/SurveyKolView.vue'),
-      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
-    },
+    // Прежние адреса трёх отдельных ОЛ — редиректы на единый экран.
+    { path: '/survey/kns', redirect: { name: 'survey', query: { type: 'KNS' } } },
+    { path: '/survey/emk', redirect: { name: 'survey', query: { type: 'EMK' } } },
+    { path: '/survey/kol', redirect: { name: 'survey', query: { type: 'KOL' } } },
     {
       // Конфигуратор расчёта по прототипу «Калькулятор v2»: материализованное
       // дерево «Сборка→Компонент→Строка» (§9).

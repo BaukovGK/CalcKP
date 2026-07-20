@@ -14,15 +14,37 @@ export type Grinder = 'корзина' | 'дробилка' | 'обе' | 'нет
 export type ShuType = 'внутренний' | 'уличный'
 export type ShuStart = 'стандартный' | 'плавный' | 'ЧП'
 
-export interface KnsSurveyForm {
-  // ── Общие ──
+/**
+ * Общая часть опросного листа — одинакова для всех трёх изделий (КНС/ЕМК/КОЛ).
+ *
+ * В сохранённом `surveyData` дублируется отдельным блоком `common`, чтобы
+ * страницы (топбар конфигуратора, карточки проекта) читали заказчика и
+ * № заявки, не зная типа изделия.
+ */
+export interface SurveyCommonForm {
   zayavka: string
-  tipNs: NsType
   stadiya: Stage
   zakazchik: string
   obekt: string
   region: string
   data: string
+}
+
+/** Выделяет общий блок из любой формы ОЛ — для записи в `surveyData.common`. */
+export function pickCommon(f: SurveyCommonForm): SurveyCommonForm {
+  return {
+    zayavka: f.zayavka,
+    stadiya: f.stadiya,
+    zakazchik: f.zakazchik,
+    obekt: f.obekt,
+    region: f.region,
+    data: f.data,
+  }
+}
+
+export interface KnsSurveyForm extends SurveyCommonForm {
+  // ── Специфика КНС ──
+  tipNs: NsType
 
   // ── Корпус ──
   dn: string

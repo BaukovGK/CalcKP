@@ -167,7 +167,9 @@
 
       <div class="ol-live-foot">
         <div v-if="!s.canCreate.value" class="ol-hint">Заполните: {{ s.missingRequired.value.join(', ') }}</div>
-        <button class="ol-create" :disabled="!s.canCreate.value" @click="previewOpen = true">Создать расчёт →</button>
+        <button class="ol-create" :disabled="!s.canCreate.value" @click="previewOpen = true">
+          {{ isEdit ? 'Сохранить ОЛ →' : 'Создать расчёт →' }}
+        </button>
       </div>
     </template>
 
@@ -181,7 +183,7 @@
       <template #footer>
         <button class="ol-btn" @click="previewOpen = false">Отмена</button>
         <button class="ol-create" :disabled="creating" @click="createEstimate">
-          {{ creating ? 'Создаём…' : 'Создать расчёт → конфигуратор' }}
+          {{ creating ? 'Сохраняем…' : isEdit ? 'Сохранить ОЛ → конфигуратор' : 'Создать расчёт → конфигуратор' }}
         </button>
       </template>
     </BaseModal>
@@ -197,13 +199,25 @@ import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
 import { useKolSurvey } from '@/composables/useEmkKolSurvey'
 import { toast } from '@/composables/useToast'
 import { tryEvalExpr } from '@/engines/expr'
-import { makeDefaultKolSurvey, resinGrade } from '@/types/survey-emk-kol'
+import { makeDefaultKolSurvey, resinGrade, type KolSurveyForm } from '@/types/survey-emk-kol'
+import { pickCommon } from '@/types/survey'
 import { estimatesApi } from '@/api/estimates'
+import { projectsApi } from '@/api/projects'
 import { KOL_SECTIONS } from '@/engines/template-emk-kol'
 
+/** Ветка КОЛ единого опросного листа — режимы как у КНС (см. SurveyKnsView). */
+const props = defineProps<{
+  estimateId?: string | null
+  projectId?: string | null
+  initial?: Partial<KolSurveyForm> | null
+  surveyRev?: number
+}>()
+
 const router = useRouter()
-const form = ref(makeDefaultKolSurvey())
+const form = ref<KolSurveyForm>({ ...makeDefaultKolSurvey(), ...(props.initial ?? {}) })
 const s = useKolSurvey(form)
+
+const isEdit = computed(() => Boolean(props.estimateId))
 
 const WELL_TYPES = ['Смотровой', 'Поворотный', 'Перепадный', 'Гаситель', 'Накопительный'] as const
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const
@@ -277,39 +291,59 @@ function resetPipe() {
   form.value.snManual = ''
 }
 
+/** Единый контракт surveyData — см. комментарий в SurveyKnsView. */
+function surveyPayload() {
+  return {
+    common: pickCommon(form.value),
+    // Ключ `kol` — по нему стор выбирает шаблон колодца (materializeByDevice).
+    kol: {
+      dn: num(form.value.dn) ?? 0,
+      workingDepthMm: num(form.value.depthMm) ?? 0,
+      elevationMm: num(form.value.elevationMm) ?? 0,
+      pnSurvey: s.pn.value,
+      hasNeck: form.value.hasNeck,
+      neckHeightMm: num(form.value.neckH) ?? 0,
+      neckDiameterMm: num(form.value.neckD) ?? 0,
+      inletDn: num(form.value.podvDn) ?? 0,
+      inletCount: num(form.value.podvKol) ?? 0,
+      outletDn: num(form.value.otvDn) ?? 0,
+      outletCount: num(form.value.otvKol) ?? 0,
+      hasBasket: form.value.grinder === 'корзина' || form.value.grinder === 'обе',
+      underRoadway: form.value.underRoadway,
+      insulationEnabled: form.value.insulation,
+      insulationDepthMm: num(form.value.tiGlubina) ?? 0,
+    },
+    form: { ...form.value },
+    surveyRev: (props.surveyRev ?? 0) + 1,
+  }
+}
+
 async function createEstimate() {
   creating.value = true
   try {
-    const est = await estimatesApi.create({
-      title: s.title.value,
-      deviceType: 'KOL',
-      // Ключ `kol` — по нему стор выбирает шаблон колодца (materializeByDevice).
-      surveyData: {
-        kol: {
-          dn: num(form.value.dn) ?? 0,
-          workingDepthMm: num(form.value.depthMm) ?? 0,
-          elevationMm: num(form.value.elevationMm) ?? 0,
-          pnSurvey: s.pn.value,
-          hasNeck: form.value.hasNeck,
-          neckHeightMm: num(form.value.neckH) ?? 0,
-          neckDiameterMm: num(form.value.neckD) ?? 0,
-          inletDn: num(form.value.podvDn) ?? 0,
-          inletCount: num(form.value.podvKol) ?? 0,
-          outletDn: num(form.value.otvDn) ?? 0,
-          outletCount: num(form.value.otvKol) ?? 0,
-          hasBasket: form.value.grinder === 'корзина' || form.value.grinder === 'обе',
-          underRoadway: form.value.underRoadway,
-          insulationEnabled: form.value.insulation,
-          insulationDepthMm: num(form.value.tiGlubina) ?? 0,
+    let id: string
+    if (props.estimateId) {
+      await estimatesApi.patchSurvey(props.estimateId, surveyPayload())
+      id = props.estimateId
+      toast('Опросный лист сохранён — расчёт будет пересчитан', 'success')
+    } else {
+      const dto = {
+        title: s.title.value,
+        deviceType: 'KOL' as const,
+        surveyData: {
+          ...surveyPayload(),
+          sections: KOL_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
         },
-        form: { ...form.value },
-        sections: KOL_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
-      },
-    })
-    toast('Расчёт колодца создан', 'success')
-    await router.push({ name: 'calculator', params: { id: est.id } })
+      }
+      const est = props.projectId
+        ? await projectsApi.addEstimate(props.projectId, dto)
+        : await estimatesApi.create(dto)
+      id = est.id
+      toast('Расчёт колодца создан', 'success')
+    }
+    await router.push({ name: 'calculator', params: { id } })
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Не удалось создать расчёт', 'error')
+    toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error')
     creating.value = false
   }
 }

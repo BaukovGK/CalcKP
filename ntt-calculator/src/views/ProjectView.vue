@@ -35,7 +35,7 @@
         </div>
         <div class="tb-spacer"></div>
         <button class="btn btn-g" @click="openEditProject">Редактировать</button>
-        <button class="btn" @click="surveyOpen = true">＋ Добавить единицу</button>
+        <button class="btn" @click="addUnit">＋ Добавить единицу</button>
       </div>
 
       <!-- Content -->
@@ -71,7 +71,7 @@
           <!-- Estimates list -->
           <div v-if="projects.current.estimates.length === 0" class="dash-state" style="height:auto;padding:32px 0;opacity:.5">
             <div class="dash-state-txt">Единиц оборудования нет</div>
-            <button class="btn" @click="surveyOpen = true">＋ Добавить первую единицу</button>
+            <button class="btn" @click="addUnit">＋ Добавить первую единицу</button>
           </div>
 
           <div v-else class="pv-units-grid">
@@ -102,14 +102,6 @@
         </template>
       </div>
     </div>
-
-    <!-- Опросный лист -->
-    <SurveyModal
-      :show="surveyOpen"
-      :project-id="projectId"
-      @close="surveyOpen = false"
-      @created="onEstimateCreated"
-    />
 
     <!-- Редактирование проекта -->
     <BaseModal :show="editOpen" title="Редактировать проект" @close="editOpen = false">
@@ -161,7 +153,6 @@ import { useProjectsStore } from '@/stores/projects'
 import { projectsApi } from '@/api/projects'
 import { estimatesApi, type EstimateStatus } from '@/api/estimates'
 import type { ProjectEstimate } from '@/api/projects'
-import SurveyModal  from '@/components/dashboard/SurveyModal.vue'
 import BaseModal    from '@/components/ui/BaseModal.vue'
 import ThemeToggle  from '@/components/ui/ThemeToggle.vue'
 import { fmt } from '@/engines/cost'
@@ -170,8 +161,16 @@ const route    = useRoute()
 const router   = useRouter()
 const projects = useProjectsStore()
 
-const projectId  = String(route.params.id)
-const surveyOpen = ref(false)
+const projectId = String(route.params.id)
+
+/**
+ * Новая единица создаётся через ЕДИНЫЙ опросный лист (/survey?project=…):
+ * прежний краткий модал сохранял surveyData в форме, которую материализатор
+ * не понимал, — расчёт открывался пустым.
+ */
+function addUnit() {
+  router.push({ name: 'survey', query: { project: projectId } })
+}
 
 // ── Edit project ────────────────────────────────────────────────────────────
 const editOpen  = ref(false)
@@ -249,21 +248,20 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+/** Чипы параметров — по единому контракту surveyData (kns/emk/kol + derived). */
 function techParams(e: ProjectEstimate): string[] {
   const sd = e.surveyData ?? {}
   const src = (sd.kns ?? sd.emk ?? sd.kol ?? {}) as Record<string, unknown>
+  const derived = (sd.derived ?? {}) as Record<string, unknown>
   const out: string[] = []
-  if (src.dn)   out.push(`DN${src.dn}`)
-  if (src.l)    out.push(`L=${src.l}м`)
-  if (src.pn)   out.push(`PN${src.pn}`)
-  if (src.sn)   out.push(`SN${src.sn}`)
-  if (src.h)    out.push(`H=${src.h}м`)
+  if (src.dn) out.push(`DN${src.dn}`)
+  // КНС: глубина подземной части из derived; ЕМК: объём; КОЛ: рабочая глубина.
+  if (derived.npodzMm) out.push(`подз. ${derived.npodzMm} мм`)
+  if (src.volumeM3) out.push(`V=${src.volumeM3} м³`)
+  if (src.workingDepthMm) out.push(`H=${src.workingDepthMm} мм`)
+  if (derived.pn ?? src.pnSurvey) out.push(`PN${derived.pn ?? src.pnSurvey}`)
+  if (derived.sn) out.push(`SN${derived.sn}`)
   return out
-}
-
-function onEstimateCreated(estimateId: string) {
-  surveyOpen.value = false
-  router.push(`/calculator/${estimateId}`)
 }
 
 onMounted(() => projects.fetchOne(projectId))

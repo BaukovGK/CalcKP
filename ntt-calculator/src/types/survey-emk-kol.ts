@@ -8,7 +8,7 @@
  */
 
 import type { Installation, Placement, TankType } from '@/engines/survey-emk-kol'
-import type { PipeMaterial, Stage } from './survey'
+import type { PipeMaterial, SurveyCommonForm } from './survey'
 
 /** Тип колодца (ТЗ §5.6: «тип колодца, в т.ч. гаситель»). */
 export type WellType = 'Смотровой' | 'Поворотный' | 'Перепадный' | 'Гаситель' | 'Накопительный'
@@ -21,15 +21,7 @@ export type EffluentType = 'Хозяйственно-бытовые' | 'Ливн
 
 // ─── ЕМК ─────────────────────────────────────────────────────────────────────
 
-export interface EmkSurveyForm {
-  // Общие
-  zayavka: string
-  stadiya: Stage
-  zakazchik: string
-  obekt: string
-  region: string
-  data: string
-
+export interface EmkSurveyForm extends SurveyCommonForm {
   /** Тип ёмкости: «Химстойкая» переключает материал СК/НПС → СК/ВЭС. */
   tankType: TankType
 
@@ -131,15 +123,8 @@ export function makeDefaultEmkSurvey(): EmkSurveyForm {
 
 // ─── КОЛ ─────────────────────────────────────────────────────────────────────
 
-export interface KolSurveyForm {
-  // Общие
-  zayavka: string
+export interface KolSurveyForm extends SurveyCommonForm {
   wellType: WellType
-  stadiya: Stage
-  zakazchik: string
-  obekt: string
-  region: string
-  data: string
 
   // Корпус
   dn: string
