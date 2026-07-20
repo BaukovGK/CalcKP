@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import type { EstimateListItem, EstimateStatus } from '@/api/estimates'
-import { fmt } from '@/engines/cost'
+import { fmt } from '@/engines/format'
 
 defineProps<{ estimate: EstimateListItem }>()
 defineEmits<{ open: [id: string] }>()

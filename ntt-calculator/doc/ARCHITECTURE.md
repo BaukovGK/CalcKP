@@ -1,243 +1,238 @@
 # НТТ Калькулятор — Архитектура системы
 
+> Актуализировано 2026-07-20 по фактическому коду. Прежняя редакция описывала
+> раннюю задумку (серверные движки BOM, свободное дерево связок) — реализация
+> ушла на другую модель, см. §4 и §6.
+
 ## 1. Обзор
 
-Веб-приложение для расчёта стоимости стеклокомпозитного ёмкостного оборудования.
+Веб-приложение для расчёта себестоимости стеклокомпозитного ёмкостного
+оборудования.
 
-**Типы оборудования:** КНС (канализационная насосная станция), Ёмкость, Колодец  
-**Материал:** стеклокомпозит (СК/НПС), не металл — все расчёты через нормо-часы и кг ламинации
+**Типы изделий:** КНС (KNS), Ёмкость (EMK), Колодец (KOL)
+**Материал:** стеклокомпозит (СК/НПС) — расчёты через нормо-часы и кг ламинации
 
-**Три рабочих пространства:**
-- Коммерческий отдел (менеджер) — создаёт и рассчитывает сметы
-- Технический отдел (инженер) — ведёт шаблоны и справочники
-- Отдел закупок (buyer) — обновляет прайс-лист независимо
-
----
+**Рабочие пространства:**
+- Коммерческий/технический отдел — проекты, опросные листы, расчёты, КП
+- Отдел закупок — прайс-лист (импорт xlsx), заявки на закупку
+- Админ — пользователи, аудит
 
 ## 2. Технологический стек
 
-### Frontend
-| Технология | Версия | Роль |
-|---|---|---|
-| Vue 3 | 3.6 | UI-фреймворк, Composition API |
-| TypeScript | 5.x | Типизация |
-| Vite | 6.x | Сборщик и dev-сервер |
-| Pinia | 2.x | Глобальное состояние |
-| Vue Router | 4.x | Маршрутизация SPA |
-| Axios | 1.x | HTTP-клиент |
-| ExcelJS | 4.x | Экспорт в Excel |
-
-### Backend
-| Технология | Версия | Роль |
-|---|---|---|
-| Node.js | 20 LTS | Runtime |
-| Express | 4.x | HTTP-сервер |
-| TypeScript | 5.x | Типизация |
-| Prisma ORM | 5.x | Работа с БД, миграции |
-| PostgreSQL | 16.x | Основная БД |
-| Redis | 7.x | Кэш расчётов |
-| Jose | 5.x | JWT RS256 |
-| Zod | 3.x | Валидация входных данных |
-
-### Инфраструктура
-| Компонент | Решение |
+| Слой | Технологии |
 |---|---|
-| Контейнеризация | Docker + Docker Compose |
-| Reverse proxy | Nginx |
-| SSL | Let's Encrypt |
-| CI/CD | GitHub Actions |
-| Бэкапы | pg_dump + cron |
+| Frontend | Vue 3.5 (Composition API), TypeScript, Vite, Pinia, Vue Router, Axios, Vitest |
+| Backend | Node.js 20, Express 4, TypeScript, Prisma ORM, Zod, JWT |
+| БД | PostgreSQL 16 (docker compose), справочники в таблицах |
+| Развёртывание | Docker Compose (`docker-compose.yml` в корне), проверка — `verify.ps1` |
 
----
-
-## 3. Структура монорепозитория
+## 3. Структура репозитория
 
 ```
-ntt-estimates/
-├── frontend/                        Vue 3 приложение
+сметы/
+├── ntt-calculator/              Vue 3 фронтенд
 │   └── src/
-│       ├── main.ts                  Точка входа
-│       ├── App.vue                  Корневой компонент
-│       ├── router/index.ts          Маршруты
-│       ├── assets/main.css          Все стили (CSS-переменные, dark theme)
-│       │
-│       ├── types/
-│       │   └── calculator.ts        Все TypeScript-типы
-│       │
-│       ├── data/
-│       │   └── nomenclature.ts      Справочник НН (NOM_DB), константы
-│       │
-│       ├── engines/
-│       │   └── cost.ts              Чистые функции расчёта (rowSum, recalcAuto...)
-│       │
-│       ├── stores/
-│       │   ├── calculator.ts        Состояние калькулятора (Pinia)
-│       │   ├── auth.ts              Авторизация, токен, роль
-│       │   └── prices.ts            Прайс-лист
-│       │
-│       ├── components/
-│       │   ├── calculator/
-│       │   │   ├── CalcRow.vue      Строка таблицы с автокомплитом
-│       │   │   ├── CalcSubgroup.vue Заголовок подгруппы (будущий компонент)
-│       │   │   ├── CalcGroup.vue    Заголовок группы (будущий компонент)
-│       │   │   └── CalcBundle.vue   Карточка связки (будущий компонент)
-│       │   └── ui/
-│       │       ├── ContextMenu.vue  Универсальное контекстное меню
-│       │       ├── BaseModal.vue    Базовый модальный диалог
-│       │       └── ColorPicker.vue  Выбор цвета связки
-│       │
+│       ├── api/                 HTTP-клиенты: client, estimates, projects,
+│       │                        prices, refs, admin
+│       ├── composables/         useKnsSurvey, useEmkKolSurvey, useTheme, useToast
+│       ├── engines/             ЧИСТАЯ расчётная библиотека (покрыта тестами):
+│       │   ├── row.ts           расчёт строки (qty/price/sum, overrides)
+│       │   ├── economics.ts     экономический хвост (корзины, ПЗР/СИЗ/ацетон,
+│       │   │                    наценка, цена продажи)
+│       │   ├── fot.ts           ФОТ-спутники (k = 0,28 / 0,56 / 1,0)
+│       │   ├── expr.ts          арифметика в полях («1,55*2+2,88*2»)
+│       │   ├── rounding.ts      ROUNDUP-семейство эталона
+│       │   ├── format.ts        форматирование чисел
+│       │   ├── survey-kns.ts    формулы ОЛ КНС (Нподз, SN по глубине…)
+│       │   ├── survey-emk-kol.ts формулы ОЛ ЕМК/КОЛ (геометрия, длина из объёма)
+│       │   ├── template-kns.ts  материализация дерева КНС (7 разделов)
+│       │   └── template-emk-kol.ts материализация ЕМК (8) и КОЛ (7);
+│       │                        общие узлы переиспользуются из template-kns
+│       ├── stores/              Pinia: auth, projects, estimates, prices,
+│       │   └── calcTree.ts      ГЛАВНЫЙ стор: загрузка расчёта, материализация,
+│       │                        рематериализация при изменении ОЛ, overrides,
+│       │                        конфликты, экономика, сохранение
+│       ├── types/               survey.ts (SurveyCommonForm, KnsSurveyForm),
+│       │                        survey-emk-kol.ts (Emk/KolSurveyForm), ui.ts
 │       └── views/
-│           ├── CalculatorView.vue   Главная страница (готова)
-│           ├── LoginView.vue        Страница входа
-│           ├── DashboardView.vue    Список смет
-│           ├── PricesView.vue       Реестр цен (отдел закупок)
-│           └── AdminView.vue        Управление пользователями
+│           ├── LoginView, DashboardView (проекты), ProjectView
+│           ├── SurveyView       ЕДИНЫЙ опросный лист /survey/:id? —
+│           │                    ветвление по типу изделия; ветки:
+│           ├── SurveyKnsView / SurveyEmkView / SurveyKolView
+│           ├── CalculatorTreeView конфигуратор расчёта /calculator/:id
+│           ├── PurchaseRequestView заявка на закупку /calculator/:id/purchase
+│           ├── PricesView       реестр цен + импорт xlsx
+│           └── AdminView        пользователи, аудит
 │
 ├── backend/
-│   └── src/
-│       ├── app.ts                   Express-приложение
-│       ├── middleware/
-│       │   ├── auth.ts              JWT-проверка
-│       │   ├── rbac.ts              Проверка ролей
-│       │   └── validate.ts          Zod-валидация
-│       ├── routes/
-│       │   ├── auth.routes.ts
-│       │   ├── estimates.routes.ts
-│       │   ├── prices.routes.ts
-│       │   └── refs.routes.ts
-│       ├── services/
-│       │   ├── calculation.service.ts   Серверный BOM-расчёт
-│       │   └── prices.service.ts
-│       ├── engines/                     Серверные движки (канонические)
-│       │   ├── BOMEngine.ts
-│       │   ├── CostEngine.ts
-│       │   └── rules/
-│       │       ├── kns.rules.ts
-│       │       ├── emk.rules.ts
-│       │       └── kol.rules.ts
-│       └── data/                        Справочные JSON-таблицы
-│           ├── pipeWeights.json
-│           ├── nozzleParams.json
-│           └── layoutConfigs.json
+│   ├── src/
+│   │   ├── app.ts               Express, монтирование роутеров
+│   │   ├── middleware/          auth (JWT), rbac, validate (Zod), errorHandler
+│   │   ├── routes/              auth, estimates, projects, prices, purchase,
+│   │   │                        refs, admin
+│   │   └── utils/               prisma, jwt, audit, logger, nn-sheet (импорт
+│   │                            прайса), estimate-tree (обход дерева для гейтов)
+│   └── prisma/
+│       ├── schema.prisma        схема БД
+│       ├── seed.ts + seed-data/ сид: пользователи, прайс (1043 позиции),
+│       │                        веса труб, инженерные матрицы, нормы патрубков
+│       └── migrations/
 │
-├── prisma/
-│   ├── schema.prisma
-│   └── migrations/
-│
+├── doc/ (в корне)               ТЗ, Механика_калькулятора, Библиотека, Реверс
 └── docker-compose.yml
 ```
 
----
+## 4. Где считается расчёт (ключевое решение)
 
-## 4. Модель данных — калькулятор
+**Вся расчётная математика — на клиенте** (`ntt-calculator/src/engines/*`).
+Сервер расчёт НЕ выполняет: он хранит `surveyData` (JSON) и валидирует
+инварианты на гейтах (строки без цены блокируют выпуск КП и переход
+CALC→REVIEW — `backend/src/utils/estimate-tree.ts`).
 
-### Иерархия (4 уровня)
+Обоснование: формулы итеративно сверяются с эталонными Excel; один движок
+на TypeScript с юнит-тестами (263 шт.) проще держать верным, чем два.
+Плата — итог (`totalRub`) приходит с клиента и фиксируется на сервере при
+сохранении; целостность обеспечивают снапшоты и аудит.
 
-```
-CalcBundle          ← Связка (цветная карточка)
-  └── CalcGroup[]   ← Группа (секция таблицы, sticky заголовок)
-        └── CalcSubgroup[]  ← Подгруппа (операция: труба, дно, ламинация...)
-              └── CalcRow[] ← Строки: МАТ → РАБ → ФОТ → ЗАК
-```
+## 5. Модель данных расчёта
 
-### Типы строк (RowType)
-
-| Тип | Цвет | Описание |
-|---|---|---|
-| МАТ | Янтарный | Материал собственного производства |
-| РАБ | Бирюзовый | Работа/ламинация/формовка |
-| ФОТ | Фиолетовый | Фонд оплаты труда 1207.8 руб/ч·ч |
-| ЗАК | Зелёный | Закупная позиция |
-
-### Автопересчёт ФОТ
+### Единый контракт `Estimate.surveyData` (JSON)
 
 ```
-row.isAuto        = true
-row.autoParentId  = id родительской строки (МАТ или РАБ)
-row.autoCoeff     = коэффициент
-
-qty_ФОТ = qty_родителя × autoCoeff
-
-Коэффициенты (из Excel-макросов):
-  мех. формовка   → 0.28
-  ламинирование   → 0.56
-  прочие работы   → 1.00
+{
+  common:   { zayavka, stadiya, zakazchik, obekt, region, data }  // общий блок ОЛ
+  kns|emk|kol: {…}          // параметры материализации своего типа
+  form:     {…}             // полная форма ОЛ — для повторного открытия
+  derived:  {…}             // производные ОЛ (Нподз, SN, PN…) — только КНС
+  surveyRev: number         // ревизия ОЛ, растёт при каждом сохранении ОЛ
+  tree:     CalcTree        // материализованное дерево (пишет конфигуратор)
+  treeSurveyRev: number     // ревизия ОЛ, из которой построено дерево
+  totals:   { costRub, salePriceRub, markup, tirage }
+  sections: […]             // каркас разделов (создание)
+}
 ```
 
----
+### Дерево расчёта (CalcTree)
 
-## 5. Роли и доступ
+```
+CalcTree
+  └── CalcSection[]        раздел («сборка»): code, title, enabled
+        └── CalcComponent[] компонент: title, enabled; id «custom-<код>» —
+              │             строки, добавленные вручную (только их можно удалять)
+              └── CalcRowNode[] строка: kind МАТЕРИАЛ|ОПЕРАЦИЯ|ФОТ,
+                            qtyCalc/qtyManual (выражение), priceCatalog/priceManual,
+                            parentId+fotK у ФОТ-спутников
+```
+
+Разделы: КНС — 7, ЕМК — 8 (+корзина, шахта; напорный только при насосах),
+КОЛ — 7 (без напорного, + горловина). Раздел «Оборудование» у ЕМК/КОЛ
+материализуется пустым — состав вариативен, строки добавляются вручную.
+
+### Рематериализация (Механика §8.3)
+
+Правка ОЛ существующего расчёта (`/survey/:id`) поднимает `surveyRev`.
+При `surveyRev > treeSurveyRev` конфигуратор строит свежее дерево и переносит
+в него ручные правки (`stores/calcTree.ts → reconcileTrees`): overrides
+количеств и цен, тумблеры разделов/компонентов, «Добавлено вручную» — целиком.
+Сопоставление строк — по стабильному ключу «вид+наименование+ЕИ» (id строк
+нестабильны между материализациями). Строка, где override лёг на изменившееся
+расчётное, получает конфликт «было → стало» с действиями
+[Оставить моё] / [Принять новое].
+
+### Экономика
+
+Пять корзин (Материалы на закупку / Труба, муфта / Формовка / Работы, ФОТ /
+Прочие) → себестоимость → наценка (0,43 по умолчанию) → цена продажи
+ROUNDUP до 100 ₽ → рентабельность. ПЗР входит в «Работы, ФОТ»; «Прочие» =
+ацетон + СИЗ + накладные. Ставки (ФОТ 1207,8; накладные 1584,73; ацетон
+109,4; СИЗ 122) — позиции прайса, константы кода — только fallback.
+Тираж ≥2: главные цифры за весь тираж, «за 1 корп.» — отдельный прогон
+экономики с tirage=1 (округления нелинейны).
+
+## 6. Жизненный цикл расчёта
+
+```
+проект → единый ОЛ (/survey?project=…) → расчёт (projectId) →
+конфигуратор (/calculator/:id) ⇄ правка ОЛ (/survey/:id) →
+[Сформировать КП] → гейт «нет строк без цены» (бэк) → снапшот
+```
+
+Статусы: DRAFT → CALC (первое сохранение) → REVIEW → APPROVED (снапшот,
+заморозка) / REJECTED. Переходы валидируются на бэке (`PATCH /:id/status`);
+точка фиксации реального процесса — выпуск КП, а не согласование
+(Механика §10, ред. 2026-07-16).
+
+## 7. Роли и доступ
 
 | Действие | manager | engineer | buyer | viewer | admin |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Создать/рассчитать смету | ✓ | — | — | — | ✓ |
-| Редактировать шаблоны | — | ✓ | — | — | ✓ |
-| Просмотр смет (своих) | ✓ | — | — | ✓ | ✓ |
-| Просмотр всех смет | — | — | — | — | ✓ |
-| Обновить прайс-лист | — | — | ✓ | — | ✓ |
-| Импорт цен из Excel | — | — | ✓ | — | ✓ |
-| Управление пользователями | — | — | — | — | ✓ |
-| Аудит-лог | — | — | — | — | ✓ |
+| Проекты, ОЛ, расчёты (создание/правка) | ✓ | ✓ | — | — | ✓ |
+| Просмотр чужих расчётов, CALC→REVIEW→APPROVED | ✓ | — | — | — | ✓ |
+| Прайс: правка, импорт xlsx | — | — | ✓ | — | ✓ |
+| Заявка на закупку (просмотр/выгрузка) | ✓ | ✓ | ✓ | — | ✓ |
+| Пользователи, аудит | — | — | — | — | ✓ |
 
----
+В схеме БД есть также роль `TECHNOLOG` (редактор каталога/шаблонов) — на
+фронте пока не используется, зарезервирована под редактор шаблонов.
 
-## 6. API — эндпоинты
+## 8. API
 
 ```
-POST   /api/auth/login
-POST   /api/auth/refresh
-DELETE /api/auth/logout
+POST   /api/auth/login | /refresh     GET /api/auth/me     DELETE /api/auth/logout
 
-GET    /api/estimates              список смет
-POST   /api/estimates              создать
-GET    /api/estimates/:id          смета + активный снапшот
-PATCH  /api/estimates/:id/survey   обновить → авторасчёт
+GET|POST /api/projects                GET|PATCH|DELETE /api/projects/:id
+POST   /api/projects/:id/estimates    создать расчёт в проекте
 
-GET    /api/prices                 реестр цен
-PATCH  /api/prices/:id             обновить цену
-POST   /api/prices/import          импорт xlsx
+GET|POST /api/estimates               GET|DELETE /api/estimates/:id
+PATCH  /api/estimates/:id/survey      мёрж surveyData + запись totalRub из totals
+PATCH  /api/estimates/:id/status      таблица переходов + гейт красных строк
+POST   /api/estimates/:id/snapshot    ручное версионирование
+POST   /api/estimates/:id/kp          выпуск КП: гейт + снапшот
+GET    /api/estimates/:id/kp/export   501 — ждём образец документа
+GET    /api/estimates/:id/snapshots   история версий
+POST   /api/estimates/:id/purchase-request/export   заявка на закупку (xlsx)
 
-GET    /api/refs/nomenclature      справочник НН
-GET    /api/refs/pipe-weights      веса труб
+GET    /api/prices                    PATCH /api/prices/:id
+POST   /api/prices/import             импорт xlsx (лист НН)
+
+GET    /api/refs/nomenclature | /pipe-weights | /engineering
+
+GET    /api/admin/users               POST/PATCH пользователи
+GET    /api/admin/audit               GET /api/health
 ```
 
----
-
-## 7. Схема БД (основные таблицы)
+## 9. Схема БД (Prisma)
 
 ```
-User            — пользователи, роли
-Estimate        — смета: deviceType, status, surveyData (JSON)
-EstimateSnapshot — снапшот расчёта: версия, priceListVersion, totalRub
-BOMRow          — строка BOM: ruleId, category, name, qty, price, sum
-PriceItem       — прайс-позиция: lookupKey (unique), priceRub, supplier
-PriceHistory    — история изменений цен (append-only)
-AuditLog        — аудит всех действий (append-only)
+User             роли: ADMIN MANAGER ENGINEER TECHNOLOG BUYER VIEWER
+Project          проект: title, customer, address; 1→N Estimate
+Estimate         deviceType KNS|EMK|KOL, status, surveyData Json (ОЛ + дерево),
+                 totalRub (дублирует итог для списков), projectId?
+EstimateSnapshot version, priceListVersion, totalRub, bundlesJson (append-only)
+PriceItem        @@unique(category, name, unit); priceBaseRub, discountPct,
+                 priceRub; включает ставки экономблока (ФОТ, накладные,
+                 ацетон, СИЗ)
+PriceListVersion версия прайса целиком
+PriceHistory     история изменений цен (append-only)
+PipeWeight       веса труб GRP: (dn, pn, sn) → кг/м
+PePipe           веса ПЭ-труб
+EngineeringMatrix матрица «Для расчетов» (enum MatrixKind)
+NozzleNorm       нормы патрубков: DN → масса формовки гильзы
+AuditLog         аудит действий (append-only)
 ```
 
----
+## 10. Текущий статус
 
-## 8. Текущий статус
+### Готово
+- Полный поток: проекты → единый ОЛ (ветвление КНС/ЕМК/КОЛ, создание и
+  редактирование) → материализация → конфигуратор (overrides, конфликты,
+  каталог, экономика, тираж) → КП (гейт+снапшот) → заявка на закупку (xlsx)
+- Рематериализация при изменении ОЛ с переносом правок и конфликтами
+- Backend: авторизация JWT, RBAC, все роутеры, аудит, сид справочников
+- Docker Compose, verify.ps1; движки покрыты юнит-тестами (263)
 
-### Готово ✓
-- Vue 3 проект с TypeScript, Pinia, Vue Router
-- `src/types/calculator.ts` — все типы
-- `src/data/nomenclature.ts` — справочник НН (~60 позиций)
-- `src/engines/cost.ts` — расчётные функции + recalcAuto
-- `src/stores/calculator.ts` — полный CRUD (строки/подгруппы/группы/связки)
-- `src/components/calculator/CalcRow.vue` — строка с автокомплитом
-- `src/views/CalculatorView.vue` — главная страница
-- `src/assets/main.css` — dark theme, все компоненты
-- Drag & Drop на всех 4 уровнях (только за иконку ⠿)
-- Авто-пересчёт ФОТ при изменении qty
-
-### В разработке / Следующие шаги
-1. `LoginView.vue` — страница входа
-2. Backend: Node.js + Express + Prisma + PostgreSQL
-3. `DashboardView.vue` — список смет
-4. `PricesView.vue` — реестр цен (отдел закупок)
-5. Сохранение смет на сервере (API-интеграция)
-6. `SurveyView.vue` — опросный лист (DN, PN, SN, глубина...)
-7. Авто-генерация BOM из опросного листа
-8. Экспорт в Excel (ExcelJS)
-9. Docker Compose + деплой
+### Не сделано / отложено
+- Печатная форма КП (501 — ждём образец от заказчика)
+- Экран истории снапшотов (бэк готов, UI нет)
+- Редактор шаблонов для роли TECHNOLOG
+- Массы днищ/шахты ЕМК — ручной ввод (нет матрицы масс от завода)

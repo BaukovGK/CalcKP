@@ -10398,5 +10398,35 @@
     "currency": "руб",
     "priceRub": 0,
     "comment": "цена по запросу"
+  },
+  {
+    "category": "ФОТ",
+    "name": "Накладные расходы",
+    "unit": "чел. ч",
+    "priceBaseRub": 1584.73,
+    "discountPct": null,
+    "currency": "руб",
+    "priceRub": 1584.73,
+    "comment": "Ставка экономического блока (Механика §9)"
+  },
+  {
+    "category": "Прочие материалы",
+    "name": "Ацетон",
+    "unit": "кг",
+    "priceBaseRub": 109.4,
+    "discountPct": null,
+    "currency": "руб",
+    "priceRub": 109.4,
+    "comment": "Ставка экономического блока (Механика §9)"
+  },
+  {
+    "category": "Прочие материалы",
+    "name": "СИЗ и РМ",
+    "unit": "ед.",
+    "priceBaseRub": 122,
+    "discountPct": null,
+    "currency": "руб",
+    "priceRub": 122,
+    "comment": "Ставка экономического блока (Механика §9)"
   }
 ]

@@ -155,7 +155,7 @@ import { estimatesApi, type EstimateStatus } from '@/api/estimates'
 import type { ProjectEstimate } from '@/api/projects'
 import BaseModal    from '@/components/ui/BaseModal.vue'
 import ThemeToggle  from '@/components/ui/ThemeToggle.vue'
-import { fmt } from '@/engines/cost'
+import { fmt } from '@/engines/format'
 
 const route    = useRoute()
 const router   = useRouter()

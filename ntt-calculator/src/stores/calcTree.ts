@@ -98,11 +98,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       const weightIdx = new Map<string, number>()
       for (const w of weights.grp) weightIdx.set(`${w.dn}|${w.pn}|${w.sn}`, w.kgPerM)
 
+      // Все четыре ставки — позиции прайса (Механика §9): обновление прайса
+      // меняет экономику новых расчётов. Fallback — если позиции в базе нет
+      // (например, БД засеяна до их добавления).
       rates.value = {
         fotRub: priceIdx.get('ФОТ|ФОТ|чел. ч') ?? FALLBACK_RATES.fotRub,
-        overheadRub: FALLBACK_RATES.overheadRub,
-        acetoneRub: FALLBACK_RATES.acetoneRub,
-        ppeRub: FALLBACK_RATES.ppeRub,
+        overheadRub: priceIdx.get('ФОТ|Накладные расходы|чел. ч') ?? FALLBACK_RATES.overheadRub,
+        acetoneRub: priceIdx.get('Прочие материалы|Ацетон|кг') ?? FALLBACK_RATES.acetoneRub,
+        ppeRub: priceIdx.get('Прочие материалы|СИЗ и РМ|ед.') ?? FALLBACK_RATES.ppeRub,
       }
 
       // Нормы патрубков — источник массы формовки гильз (лист «Для расчетов»).
@@ -322,6 +325,20 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     ),
   )
 
+  /**
+   * Экономика ОДНОГО корпуса при тираже ≥2 — отдельный прогон с tirage=1:
+   * ПЗР/СИЗ/округления нелинейны, делить итог на N нельзя.
+   */
+  const economicsUnit = computed(() =>
+    tirage.value >= 2
+      ? computeEconomics(
+          aggregateRows(rows.value, { sectionEnabled: enabledFor.value, tirage: 1 }),
+          rates.value,
+          { markup: markup.value },
+        )
+      : economics.value,
+  )
+
   /** Строки без цены — блокируют выпуск КП (Механика §10). */
   const missingPriceIds = computed(
     () => new Set(rows.value.filter((r) => results.value.get(r.id)?.missingPrice).map((r) => r.id)),
@@ -480,7 +497,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
   return {
     estimate, tree, rates, markup, tirage, loading, error, catalog,
-    rows, results, economics, missingPriceIds, conflictIds, overrideIds, enabledFor, prevQtyCalc,
+    rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, enabledFor, prevQtyCalc,
     load, save, clear, recalcAll,
     setQtyManual, setPriceManual, resetQty, resetPrice,
     toggleSection, toggleComponent, keepOverride, dropOverride, fotKOf,

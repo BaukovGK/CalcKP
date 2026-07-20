@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import type { ProjectListItem } from '@/api/projects'
 import type { EstimateStatus }  from '@/api/estimates'
-import { fmt } from '@/engines/cost'
+import { fmt } from '@/engines/format'
 
 defineProps<{ project: ProjectListItem; canDelete?: boolean }>()
 defineEmits<{ open: [id: string]; delete: [id: string] }>()

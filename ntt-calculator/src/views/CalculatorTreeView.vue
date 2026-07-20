@@ -153,8 +153,11 @@
           <span>Корпусов</span>
           <input v-model="tirageText" class="tot-in num" @change="onTirage" />
         </div>
+        <!-- При тираже ≥2 главные цифры — за весь тираж (согласованы с
+             таблицей, где количества умножены на N); строка ниже показывает
+             цену одного корпуса отдельным прогоном экономики (tirage=1). -->
         <div v-if="st.tirage >= 2" class="tot-r tot-n">
-          <span>за {{ st.tirage }} корп.</span><span class="num">{{ fmtInt(e.salePriceRub) }}</span>
+          <span>за 1 корп.</span><span class="num">{{ fmtInt(st.economicsUnit.salePriceRub) }}</span>
         </div>
 
         <!-- Разложение «Прочих»: прототип его не показывает, но без него

@@ -5,7 +5,6 @@ import type { UserRole } from '@/stores/auth'
 // ── Views (lazy-loaded except the most common ones) ────────────────────────
 import LoginView      from '@/views/LoginView.vue'
 import DashboardView  from '@/views/DashboardView.vue'
-import CalculatorView from '@/views/CalculatorView.vue'
 const ProjectView = () => import('@/views/ProjectView.vue')
 const PricesView  = () => import('@/views/PricesView.vue')
 const AdminView   = () => import('@/views/AdminView.vue')
@@ -69,14 +68,6 @@ const router = createRouter({
       name: 'purchase-request',
       component: () => import('@/views/PurchaseRequestView.vue'),
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER', 'BUYER'] },
-    },
-    {
-      // Прежний экран свободного дерева — оставлен до переноса ручных строк
-      // и DnD, недоступен из навигации.
-      path: '/calculator-legacy/:id?',
-      name: 'calculator-legacy',
-      component: CalculatorView,
-      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
     },
     {
       path: '/prices',
