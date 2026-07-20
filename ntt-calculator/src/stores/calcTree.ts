@@ -13,6 +13,12 @@ import {
   type KnsSurveyParams,
   type MaterializeContext,
 } from '@/engines/template-kns'
+import {
+  materializeEmk,
+  materializeKol,
+  type EmkSurveyParams,
+  type KolSurveyParams,
+} from '@/engines/template-emk-kol'
 import { estimatesApi, type EstimateDetail } from '@/api/estimates'
 import { refsApi } from '@/api/refs'
 import type { RowResult } from '@/engines/types'
@@ -111,12 +117,18 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       if (saved.tree && typeof saved.tree === 'object') {
         tree.value = saved.tree as CalcTree
       } else {
-        const params = surveyToParams(saved)
-        if (!params) {
-          error.value = 'В расчёте нет параметров опросного листа — материализация невозможна'
+        // Шаблон выбирается по типу изделия: структура разделов у КНС (7),
+        // ЕМК (8) и КОЛ (7 без напорного) РАЗНАЯ — материализовать ёмкость
+        // шаблоном КНС нельзя.
+        const built = materializeByDevice(ctx, est.deviceType, saved)
+        if (!built) {
+          error.value =
+            est.deviceType === 'KNS'
+              ? 'В расчёте нет параметров опросного листа — материализация невозможна'
+              : `В расчёте нет параметров ОЛ для изделия ${est.deviceType} — заполните опросный лист`
           return
         }
-        tree.value = materializeKns(ctx, params)
+        tree.value = built
         recalcAll()
       }
 
@@ -128,7 +140,34 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     }
   }
 
-  /** Параметры ОЛ из surveyData, сохранённые экраном опросного листа. */
+  /**
+   * Материализация по типу изделия.
+   *
+   * Возвращает `null`, если параметров ОЛ нет — тогда экран показывает
+   * объяснение, а не пустое дерево.
+   */
+  function materializeByDevice(
+    ctx: MaterializeContext,
+    deviceType: string,
+    saved: Record<string, unknown>,
+  ): CalcTree | null {
+    switch (deviceType) {
+      case 'EMK': {
+        const p = saved.emk as EmkSurveyParams | undefined
+        return p ? materializeEmk(ctx, p) : null
+      }
+      case 'KOL': {
+        const p = saved.kol as KolSurveyParams | undefined
+        return p ? materializeKol(ctx, p) : null
+      }
+      default: {
+        const p = surveyToParams(saved)
+        return p ? materializeKns(ctx, p) : null
+      }
+    }
+  }
+
+  /** Параметры ОЛ КНС из surveyData, сохранённые экраном опросного листа. */
   function surveyToParams(saved: Record<string, unknown>): KnsSurveyParams | null {
     const kns = saved.kns as Record<string, string | boolean> | undefined
     const derived = saved.derived as Record<string, number | null> | undefined

@@ -105,10 +105,16 @@ export interface CalcSection {
   components: CalcComponent[]
 }
 
+/** Тип изделия (ТЗ §3). */
+export type DeviceType = 'KNS' | 'EMK' | 'KOL'
+
 export interface CalcTree {
-  deviceType: 'KNS'
-  /** Параметры ОЛ на момент материализации — расчёт самодостаточен. */
-  survey: KnsSurveyParams
+  deviceType: DeviceType
+  /**
+   * Параметры ОЛ на момент материализации — расчёт самодостаточен.
+   * Тип зависит от изделия: KnsSurveyParams / EmkSurveyParams / KolSurveyParams.
+   */
+  survey: Record<string, unknown>
   /** Версия прайса, применённая при материализации (ТЗ §3). */
   priceListVersion: number
   sections: CalcSection[]
@@ -154,14 +160,15 @@ export const KNS_SECTIONS: ReadonlyArray<{ code: string; title: string }> = [
 // ─── Хелперы построения строк ───────────────────────────────────────────────
 
 let seq = 0
-const nextId = (prefix: string) => `${prefix}-${(++seq).toString(36)}`
+/** Общий генератор id узлов: переиспользуется шаблонами ЕМК и КОЛ. */
+export const nextId = (prefix: string) => `${prefix}-${(++seq).toString(36)}`
 
 /** Сбрасывает счётчик id — только для детерминированных тестов. */
 export function __resetIds(): void {
   seq = 0
 }
 
-interface RowSpec {
+export interface RowSpec {
   kind: EngineRow['kind']
   category: EngineRow['category']
   name: string
@@ -172,7 +179,7 @@ interface RowSpec {
   note?: string
 }
 
-function makeRow(ctx: MaterializeContext, spec: RowSpec): CalcRowNode {
+export function makeRow(ctx: MaterializeContext, spec: RowSpec): CalcRowNode {
   return {
     id: nextId('r'),
     kind: spec.kind,
@@ -192,7 +199,7 @@ function makeRow(ctx: MaterializeContext, spec: RowSpec): CalcRowNode {
 }
 
 /** Операция + парный ФОТ-спутник: ФОТ — производная, не отдельный ввод. */
-function operationWithFot(
+export function operationWithFot(
   ctx: MaterializeContext,
   spec: Omit<RowSpec, 'kind'> & { fotK: number },
 ): CalcRowNode[] {
@@ -394,7 +401,7 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
 
 // ─── Раздел 2: Лестница (Библиотека B1) ─────────────────────────────────────
 
-function buildLadder(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+export function buildLadder(ctx: MaterializeContext, s: { depthMm: number }): CalcComponent[] {
   const heightM = s.depthMm / 1000
   const l = ladder(heightM)
 
@@ -428,7 +435,7 @@ function buildLadder(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
 
 // ─── Раздел 3: Перекрытие, площадка, несущие балки (B2, B6) ─────────────────
 
-function buildSlab(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: number }): CalcComponent[] {
   const slabMass = topSlabMassKg(s.dn)
   // Наружный диаметр ≈ DN + 300 (по геометрии формовки, Реверс §4.3).
   const outerD = (s.dn + 300) / 1000
@@ -497,7 +504,7 @@ function buildSlab(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[]
 
 // ─── Раздел 4: Вентиляционный стояк (C1) ────────────────────────────────────
 
-function buildVent(ctx: MaterializeContext): CalcComponent[] {
+export function buildVent(ctx: MaterializeContext): CalcComponent[] {
   // Ø вентстояка в ОЛ не задаётся; типовой ПЭ Ду110 — под него есть дефлектор.
   const VENT_D = 110
 
@@ -538,7 +545,10 @@ function buildVent(ctx: MaterializeContext): CalcComponent[] {
 
 // ─── Раздел 5: Напорный трубопровод (C2) ────────────────────────────────────
 
-function buildPressurePipe(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+export function buildPressurePipe(
+  ctx: MaterializeContext,
+  s: { depthMm: number; pumpsWorking: number; pumpsReserve: number; outletDn: number; outletCount: number },
+): CalcComponent[] {
   const guides = pumpGuidesM(s.depthMm / 1000, s.pumpsWorking, s.pumpsReserve)
 
   return [
@@ -594,7 +604,7 @@ export function boltFullName(bolt: string): string {
 
 // ─── Раздел 6: Крепёж (C3) ──────────────────────────────────────────────────
 
-function buildFasteners(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+export function buildFasteners(ctx: MaterializeContext, s: { outletDn: number; outletCount: number }): CalcComponent[] {
   // Норма болтов на фланцевое соединение = f(DN) из матрицы «Для расчетов».
   const norm = ctx.nozzleNormOf?.(s.outletDn) ?? null
   const joints = s.outletCount
@@ -734,7 +744,7 @@ export function materializeKns(ctx: MaterializeContext, survey: KnsSurveyParams)
 
   return {
     deviceType: 'KNS',
-    survey,
+    survey: survey as unknown as Record<string, unknown>,
     priceListVersion: ctx.priceListVersion,
     sections,
   }
