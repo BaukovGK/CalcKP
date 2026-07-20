@@ -106,54 +106,36 @@ estimatesRouter.patch('/:id/status', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
 
     const from = estimate.status
     const role = auth.userRole!
-    const managerUp   = ['MANAGER', 'ADMIN'].includes(role)
-    const engineerUp  = ['ENGINEER', 'MANAGER', 'ADMIN'].includes(role)
+    const engineerUp = ['ENGINEER', 'MANAGER', 'ADMIN'].includes(role)
+
+    // Согласование в системе отменено (решение 2026-07-20): точка фиксации —
+    // выпуск КП (POST /:id/kp, гейт + снапшот), а не статусы. REVIEW/APPROVED
+    // остаются в enum только ради старых расчётов — новые переходы в них
+    // запрещены.
+    if (to === 'REVIEW' || to === 'APPROVED') {
+      res.status(422).json({
+        message: 'Согласование через статусы отменено: фиксация выполняется выпуском КП',
+        code: 'STATUS_FLOW_REMOVED',
+      })
+      return
+    }
 
     const allowed =
-      (from === 'DRAFT'   && to === 'CALC'     && engineerUp) ||
-      (from === 'CALC'    && to === 'REVIEW'   && managerUp)  ||
-      (from === 'REVIEW'  && to === 'APPROVED' && managerUp)  ||
-      (from === 'REVIEW'  && to === 'CALC'     && managerUp)  ||
-      (to   === 'REJECTED'                     && role === 'ADMIN')
+      (from === 'DRAFT' && to === 'CALC' && engineerUp) ||
+      (to === 'REJECTED' && role === 'ADMIN')
 
     if (!allowed) {
       res.status(422).json({ message: `Переход ${from}→${to} недопустим для роли ${role}` }); return
     }
 
-    // Красные строки (нет цены) блокируют переход CALC → REVIEW (Механика §10).
-    // Проверка обязана быть на бэке: гейт на фронте — это подсказка, а не контроль.
-    if (from === 'CALC' && to === 'REVIEW') {
-      const unpriced = rowsWithoutPrice(estimate.surveyData)
-      if (unpriced.length > 0) {
-        res.status(422).json({
-          message: `Нельзя отправить на проверку: ${unpriced.length} ${plural(unpriced.length)} без цены`,
-          code: 'ROWS_WITHOUT_PRICE',
-          rows: unpriced.slice(0, 20).map((r) => ({ id: r.id, name: r.name, unit: r.unit })),
-          count: unpriced.length,
-        })
-        return
-      }
-    }
-
     const updated = await prisma.estimate.update({
       where: { id },
-      data: { status: to as 'DRAFT' | 'CALC' | 'REVIEW' | 'APPROVED' | 'REJECTED' },
+      data: { status: to as 'DRAFT' | 'CALC' | 'REJECTED' },
     })
 
-    // APPROVED замораживает расчёт: снапшот создаётся автоматически
-    // (ТЗ §3, Механика §10).
-    let snapshotVersion: number | undefined
-    if (to === 'APPROVED') {
-      snapshotVersion = (await createSnapshot(id, updated.surveyData, updated.totalRub ?? 0)).version
-    }
+    await audit(auth.userId, 'estimate.status_change', 'Estimate', id, { from, to })
 
-    await audit(auth.userId, 'estimate.status_change', 'Estimate', id, {
-      from,
-      to,
-      ...(snapshotVersion != null ? { snapshotVersion } : {}),
-    })
-
-    res.json({ ...updated, ...(snapshotVersion != null ? { snapshotVersion } : {}) })
+    res.json(updated)
   } catch (e) { next(e) }
 })
 

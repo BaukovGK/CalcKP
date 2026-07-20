@@ -24,6 +24,12 @@ export type AuditAction =
   | 'user.create'
   /** Выгрузка Заявки на закупку (ТЗ §9.6). */
   | 'purchase.export'
+  /** Редактор шаблонов (TECHNOLOG): правки справочников материализации. */
+  | 'template.nozzle_norm.upsert'
+  | 'template.nozzle_norm.delete'
+  | 'template.pipe_weight.upsert'
+  | 'template.pipe_weight.delete'
+  | 'template.engineering.upsert'
 
 export async function audit(
   userId: string | null | undefined,

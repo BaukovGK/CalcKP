@@ -133,9 +133,10 @@ const users        = ref<AdminUser[]>([])
 const usersLoading = ref(false)
 const usersError   = ref('')
 
-const ROLES = ['ADMIN', 'MANAGER', 'ENGINEER', 'BUYER', 'VIEWER'] as const
+const ROLES = ['ADMIN', 'MANAGER', 'ENGINEER', 'TECHNOLOG', 'BUYER', 'VIEWER'] as const
 const ROLE_LABELS: Record<AdminUser['role'], string> = {
-  ADMIN: 'Администратор', MANAGER: 'Менеджер', ENGINEER: 'Инженер', BUYER: 'Снабженец', VIEWER: 'Наблюдатель',
+  ADMIN: 'Администратор', MANAGER: 'Менеджер', ENGINEER: 'Инженер',
+  TECHNOLOG: 'Технолог', BUYER: 'Снабженец', VIEWER: 'Наблюдатель',
 }
 
 async function loadUsers() {

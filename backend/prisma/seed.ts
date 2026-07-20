@@ -61,10 +61,11 @@ interface EngineeringSeed {
 // ─── Пользователи ────────────────────────────────────────────────────────────
 // Пароли демонстрационные и предназначены только для локальной разработки.
 
-const USERS: Array<{ email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGINEER'; password: string }> = [
+const USERS: Array<{ email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG'; password: string }> = [
   { email: 'admin@ntt.local', name: 'Администратор', role: 'ADMIN', password: 'admin123' },
   { email: 'manager@ntt.local', name: 'Менеджер', role: 'MANAGER', password: 'manager123' },
   { email: 'engineer@ntt.local', name: 'Инженер', role: 'ENGINEER', password: 'engineer123' },
+  { email: 'technolog@ntt.local', name: 'Технолог', role: 'TECHNOLOG', password: 'technolog123' },
 ]
 
 async function seedUsers() {

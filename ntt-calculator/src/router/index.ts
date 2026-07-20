@@ -76,6 +76,14 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN', 'BUYER'] },
     },
     {
+      // Редактор шаблонов (ТЗ §2): технолог правит справочники, из которых
+      // материализуются шаблоны — нормы патрубков, веса труб, матрицы.
+      path: '/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplatesView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'TECHNOLOG'] },
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: AdminView,
