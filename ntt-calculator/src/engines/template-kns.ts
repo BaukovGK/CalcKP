@@ -105,8 +105,9 @@ export interface CalcSection {
   components: CalcComponent[]
 }
 
-/** Тип изделия (ТЗ §3). */
-export type DeviceType = 'KNS' | 'EMK' | 'KOL'
+/** Тип изделия (ТЗ §3) — определение в `types/device.ts`, здесь реэкспорт. */
+export type { DeviceType } from '@/types/device'
+import type { DeviceType } from '@/types/device'
 
 export interface CalcTree {
   deviceType: DeviceType

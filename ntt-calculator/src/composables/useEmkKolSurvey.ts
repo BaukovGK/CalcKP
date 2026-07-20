@@ -7,7 +7,8 @@ import {
   type Installation,
   type Placement,
 } from '@/engines/survey-emk-kol'
-import { PN_SURVEY_DEFAULT, snByDepth } from '@/engines/survey-kns'
+import { snByDepth } from '@/engines/survey-kns'
+import { usePipeOverride } from './usePipeOverride'
 import type { EmkSurveyForm, KolSurveyForm } from '@/types/survey-emk-kol'
 
 /**
@@ -42,12 +43,7 @@ export function useEmkSurvey(form: Ref<EmkSurveyForm>) {
   )
 
   const snCalc = computed(() => (overallMm.value == null ? null : snByDepth(overallMm.value)))
-  const sn = computed<number | null>(() =>
-    form.value.pipeManual ? (num(form.value.snManual) ?? snCalc.value) : snCalc.value,
-  )
-  const pn = computed<number>(() =>
-    form.value.pipeManual ? (num(form.value.pnManual) ?? PN_SURVEY_DEFAULT) : PN_SURVEY_DEFAULT,
-  )
+  const { sn, pn } = usePipeOverride(form, snCalc)
 
   /** Материал зависит от среды: химстойкая → СК/ВЭС (эталон D8). */
   const material = computed(() => tankMaterial(form.value.tankType))
@@ -101,12 +97,7 @@ export function useKolSurvey(form: Ref<KolSurveyForm>) {
   )
 
   const snCalc = computed(() => geo.value.sn)
-  const sn = computed<number | null>(() =>
-    form.value.pipeManual ? (num(form.value.snManual) ?? snCalc.value) : snCalc.value,
-  )
-  const pn = computed<number>(() =>
-    form.value.pipeManual ? (num(form.value.pnManual) ?? PN_SURVEY_DEFAULT) : PN_SURVEY_DEFAULT,
-  )
+  const { sn, pn } = usePipeOverride(form, snCalc)
 
   const pipeMark = computed(() => {
     const dn = num(form.value.dn)

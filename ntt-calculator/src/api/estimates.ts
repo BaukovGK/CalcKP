@@ -1,6 +1,7 @@
 import { api } from './client'
 
-export type DeviceType = 'KNS' | 'EMK' | 'KOL'
+export type { DeviceType } from '@/types/device'
+import type { DeviceType } from '@/types/device'
 export type EstimateStatus = 'DRAFT' | 'CALC' | 'REVIEW' | 'APPROVED' | 'REJECTED'
 
 export interface SurveyMeta {
@@ -25,6 +26,22 @@ export interface EstimateDetail extends EstimateListItem {
   projectId: string | null
   surveyData: Record<string, unknown>
   snapshots: Array<{ id: string; version: number; createdAt: string }>
+}
+
+/** Снапшот расчёта — строка истории версий (ТЗ §7). */
+export interface EstimateSnapshotInfo {
+  id: string
+  version: number
+  priceListVersion: number
+  totalRub: number
+  createdAt: string
+}
+
+/** Ответ выпуска КП: что зафиксировано и каким снапшотом. */
+export interface KpResult {
+  estimate: { id: string; title: string; deviceType: DeviceType; totalRub: number | null }
+  project: { title: string; customer: string | null; address: string | null } | null
+  snapshot: { version: number; priceListVersion: number; createdAt: string }
 }
 
 export interface CreateEstimateDto {
@@ -58,5 +75,18 @@ export const estimatesApi = {
     return api.delete(`/estimates/${id}`).then(() => undefined)
   },
 
-  // TODO: POST /api/estimates/:id/snapshot — версионирование расчётов
+  /** История версий (без содержимого деревьев — они тяжёлые). */
+  snapshots(id: string): Promise<EstimateSnapshotInfo[]> {
+    return api.get<EstimateSnapshotInfo[]>(`/estimates/${id}/snapshots`).then((r) => r.data)
+  },
+
+  /** Ручная фиксация версии: снимает текущее состояние расчёта на сервере. */
+  createSnapshot(id: string): Promise<EstimateSnapshotInfo> {
+    return api.post<EstimateSnapshotInfo>(`/estimates/${id}/snapshot`, {}).then((r) => r.data)
+  },
+
+  /** Выпуск КП: серверный гейт «нет строк без цены» + снапшот. */
+  kp(id: string): Promise<KpResult> {
+    return api.post<KpResult>(`/estimates/${id}/kp`).then((r) => r.data)
+  },
 }

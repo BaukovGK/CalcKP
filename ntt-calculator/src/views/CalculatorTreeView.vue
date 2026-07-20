@@ -25,6 +25,7 @@
         </button>
         <span class="tb-pl">прайс {{ priceListLabel }}</span>
         <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
+        <button class="btn" title="История версий расчёта" @click="openVersions">Версии</button>
         <button class="btn" title="Заявка на закупку" @click="onExport">Экспорт ▾</button>
         <button class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
         <button class="btn" title="Переключить тему" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
@@ -205,6 +206,40 @@
       </div>
     </BaseModal>
 
+    <!-- ── Модал «История версий» (ТЗ §7) ── -->
+    <BaseModal
+      :show="versionsOpen"
+      title="История версий"
+      :close-on-backdrop="true"
+      @close="versionsOpen = false"
+    >
+      <p class="ver-sub">
+        Версия фиксирует дерево, итог и версию прайса на момент снимка.
+        Снапшоты создаются при выпуске КП, при утверждении и вручную.
+      </p>
+      <div v-if="versionsLoading" class="ver-state">Загрузка…</div>
+      <div v-else-if="!versions.length" class="ver-state">Версий пока нет</div>
+      <table v-else class="ver-tbl">
+        <thead>
+          <tr><th>Версия</th><th>Дата</th><th>Прайс</th><th class="num">Итог ₽</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="v in versions" :key="v.id">
+            <td>v{{ v.version }}</td>
+            <td>{{ fmtDateTime(v.createdAt) }}</td>
+            <td>НН v{{ v.priceListVersion }}</td>
+            <td class="num">{{ v.totalRub ? fmtInt(v.totalRub) : '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <template #footer>
+        <button class="btn" @click="versionsOpen = false">Закрыть</button>
+        <button class="btn btn-acc" :disabled="snapBusy" @click="onManualSnapshot">
+          {{ snapBusy ? 'Фиксируем…' : '＋ Зафиксировать версию' }}
+        </button>
+      </template>
+    </BaseModal>
+
     <ToastHost />
   </div>
 </template>
@@ -221,7 +256,7 @@ import { toast } from '@/composables/useToast'
 import { COST_BUCKETS } from '@/engines/economics'
 import { tryEvalExpr } from '@/engines/expr'
 import type { CalcComponent, CalcRowNode } from '@/engines/template-kns'
-import { api } from '@/api/client'
+import { estimatesApi, type EstimateSnapshotInfo } from '@/api/estimates'
 
 const route = useRoute()
 const router = useRouter()
@@ -230,6 +265,44 @@ const { theme, toggle } = useTheme()
 
 const saving = ref(false)
 const kpBusy = ref(false)
+
+// ── История версий (ТЗ §7): список снапшотов + ручная фиксация ──
+const versionsOpen = ref(false)
+const versionsLoading = ref(false)
+const versions = ref<EstimateSnapshotInfo[]>([])
+const snapBusy = ref(false)
+
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+async function openVersions() {
+  if (!st.estimate) return
+  versionsOpen.value = true
+  versionsLoading.value = true
+  try {
+    versions.value = await estimatesApi.snapshots(st.estimate.id)
+  } catch (err) {
+    toast(err instanceof Error ? err.message : 'Не удалось загрузить версии', 'error')
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+/** Ручная фиксация: сначала сохраняем текущее состояние, потом снимаем его. */
+async function onManualSnapshot() {
+  if (!st.estimate) return
+  snapBusy.value = true
+  try {
+    await st.save()
+    const snap = await estimatesApi.createSnapshot(st.estimate.id)
+    toast(`Версия v${snap.version} зафиксирована`, 'success')
+    versions.value = await estimatesApi.snapshots(st.estimate.id)
+  } catch (err) {
+    toast(err instanceof Error ? err.message : 'Не удалось зафиксировать версию', 'error')
+  } finally {
+    snapBusy.value = false
+  }
+}
 const activeSec = ref('1')
 const tableEl = ref<HTMLElement | null>(null)
 
@@ -456,7 +529,7 @@ async function onKp() {
   kpBusy.value = true
   try {
     await st.save()
-    const { data } = await api.post(`/estimates/${st.estimate.id}/kp`)
+    const data = await estimatesApi.kp(st.estimate.id)
     toast(`КП сформировано · снапшот v${data.snapshot.version} (прайс v${data.snapshot.priceListVersion})`, 'success')
   } catch (err) {
     const r = (err as { response?: { data?: { code?: string; count?: number; message?: string } } }).response
@@ -511,6 +584,15 @@ onMounted(() => {
 
 .state { padding: 24px; color: var(--muted); font-size: 12px; }
 .state-err { color: var(--acc); }
+
+/* История версий */
+.ver-sub { font-size: 11px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+.ver-state { font-size: 12px; color: var(--faint); padding: 12px 0; }
+.ver-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ver-tbl th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--faint); padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.ver-tbl td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.ver-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .body { flex: 1; display: flex; min-height: 0; }
 

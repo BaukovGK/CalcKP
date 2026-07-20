@@ -4,10 +4,10 @@ import {
   computeDepth,
   gateValveCount,
   pipeGradeName,
-  PN_SURVEY_DEFAULT,
   snByDepth,
 } from '@/engines/survey-kns'
 import { tryEvalExpr } from '@/engines/expr'
+import { usePipeOverride } from './usePipeOverride'
 import type { KnsSurveyForm } from '@/types/survey'
 
 /**
@@ -44,13 +44,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
       : snByDepth(depthMm.value, { underRoadway: form.value.underRoadway, mvk: form.value.mvk }),
   )
 
-  const sn = computed<number | null>(() =>
-    form.value.pipeManual ? (num(form.value.snManual) ?? snCalc.value) : snCalc.value,
-  )
-
-  const pn = computed<number>(() =>
-    form.value.pipeManual ? (num(form.value.pnManual) ?? PN_SURVEY_DEFAULT) : PN_SURVEY_DEFAULT,
-  )
+  const { sn, pn } = usePipeOverride(form, snCalc)
 
   /** Марка трубы корпуса: PN здесь — из ОЛ, а не подобранная (ТЗ §9.4). */
   const pipeGrade = computed(() => {
