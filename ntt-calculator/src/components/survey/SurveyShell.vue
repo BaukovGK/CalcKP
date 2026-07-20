@@ -3,6 +3,7 @@
     <!-- ── Топбар ── -->
     <header class="ol-top">
       <div class="ol-top-l">
+        <RouterLink v-if="backTo" class="ol-back" :to="backTo">{{ backLabel ?? '←' }}</RouterLink>
         <span class="ol-name">{{ title }}</span>
         <span class="ol-zayavka">заявка {{ zayavka }} · черновик валиден в любом порядке</span>
       </div>
@@ -51,6 +52,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { useTheme } from '@/composables/useTheme'
 
@@ -67,6 +69,9 @@ defineProps<{
   draftTime: string
   activeSec: number
   sections: ReadonlyArray<{ n: number; title: string; done: boolean }>
+  /** Навигация назад (в проект / к списку) — необязательная. */
+  backTo?: RouteLocationRaw
+  backLabel?: string
 }>()
 
 defineEmits<{ go: [n: number]; scroll: [] }>()
@@ -81,6 +86,8 @@ defineExpose({ formEl })
 <style scoped>
 .ol { display: flex; flex-direction: column; height: 100vh; background: var(--bg); color: var(--text); }
 
+.ol-back { font-size: 11px; color: var(--muted); text-decoration: none; margin-right: 4px; }
+.ol-back:hover { color: var(--text); }
 .ol-top { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 8px 14px; border-bottom: 2px solid var(--line); background: var(--panel); flex: none; }
 .ol-top-l { display: flex; flex-direction: column; gap: 1px; min-width: 0; }

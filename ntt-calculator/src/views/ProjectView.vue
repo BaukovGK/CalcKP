@@ -85,7 +85,7 @@
                 <span class="pv-uc-status" :class="`pv-uc-status--${e.status.toLowerCase()}`">{{ STATUS_LABELS[e.status] }}</span>
                 <span class="pv-uc-date">{{ fmtDate(e.updatedAt) }}</span>
                 <button
-                  v-if="e.status === 'DRAFT' || e.status === 'REJECTED'"
+                  v-if="e.status === 'DRAFT' || e.status === 'CALC' || e.status === 'REJECTED'"
                   class="pv-uc-del"
                   title="Удалить"
                   @click.stop="askDeleteEstimate(e)"

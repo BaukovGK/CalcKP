@@ -3,6 +3,7 @@
     <!-- ── Топбар ── -->
     <header class="ol-top">
       <div class="ol-top-l">
+        <RouterLink class="ol-lnk" :to="backTarget">{{ backLabel }}</RouterLink>
         <span class="ol-name">Опросный лист — насосная станция</span>
         <span class="ol-zayavka">заявка {{ form.zayavka }} · черновик валиден в любом порядке</span>
       </div>
@@ -322,6 +323,12 @@ const form = ref<KnsSurveyForm>({ ...makeDefaultKnsSurvey(), ...(props.initial ?
 const s = useKnsSurvey(form)
 
 const isEdit = computed(() => Boolean(props.estimateId))
+
+// «← Проект» — если ОЛ открыт в контексте проекта, иначе к списку проектов.
+const backTarget = computed(() =>
+  props.projectId ? { name: 'project', params: { id: props.projectId } } : { name: 'dashboard' },
+)
+const backLabel = computed(() => (props.projectId ? '← Проект' : '← Проекты'))
 
 const SECTIONS = [
   { n: 1, title: 'Общие' },

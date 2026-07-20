@@ -3,6 +3,7 @@
     <!-- ── Топбар ── -->
     <header class="tb">
       <div class="tb-l">
+        <RouterLink class="tb-lnk" :to="backTarget">{{ backLabel }}</RouterLink>
         <span class="tb-t">Расчёт: {{ st.estimate?.title ?? '—' }}</span>
         <span v-if="customer" class="tb-cust">· Заказчик {{ customer }}</span>
         <RouterLink
@@ -11,7 +12,7 @@
           :to="{ name: 'survey', params: { id: st.estimate.id } }"
         >← Опросный лист</RouterLink>
         <span v-if="zayavka" class="tb-zv">· заявка {{ zayavka }}</span>
-        <span class="badge">{{ st.estimate?.status ?? 'DRAFT' }}</span>
+        <span class="badge">{{ statusLabel }}</span>
       </div>
       <div class="tb-r">
         <button
@@ -325,6 +326,20 @@ const rentColor = computed(() => {
 })
 
 const anyFilter = computed(() => filters.q !== '' || filters.missing || filters.conflict || filters.override)
+
+// ── Навигация назад: в проект расчёта, а без проекта — к списку проектов ──
+const backTarget = computed(() =>
+  st.estimate?.projectId
+    ? { name: 'project', params: { id: st.estimate.projectId } }
+    : { name: 'dashboard' },
+)
+const backLabel = computed(() => (st.estimate?.projectId ? '← Проект' : '← Проекты'))
+
+/** Русские подписи статусов; REVIEW/APPROVED — только у старых расчётов. */
+const STATUS_RU: Record<string, string> = {
+  DRAFT: 'Черновик', CALC: 'Расчёт', REVIEW: 'Проверка', APPROVED: 'Утверждено', REJECTED: 'Отклонён',
+}
+const statusLabel = computed(() => STATUS_RU[st.estimate?.status ?? 'DRAFT'] ?? st.estimate?.status)
 
 // ── Топбар: заказчик и № заявки — из единого блока `common` surveyData.
 // Fallback на `kns`/`form` — расчёты, сохранённые до унификации контракта.

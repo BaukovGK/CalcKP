@@ -189,8 +189,12 @@ estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) =>
     if (auth.userRole !== 'ADMIN' && estimate.authorId !== auth.userId) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
-    if (!['DRAFT', 'REJECTED'].includes(estimate.status)) {
-      res.status(422).json({ message: 'Удалить можно только расчёт в статусе Черновик или Отклонён' }); return
+    // После отмены согласования (2026-07-20) рабочие статусы — DRAFT и CALC;
+    // прежний запрет «только DRAFT/REJECTED» делал расчёт неудаляемым навсегда
+    // после первого же сохранения. Защита от потери зафиксированного:
+    // APPROVED-расчёты (legacy) по-прежнему неудаляемы.
+    if (!['DRAFT', 'CALC', 'REJECTED'].includes(estimate.status)) {
+      res.status(422).json({ message: 'Утверждённый расчёт удалить нельзя' }); return
     }
 
     await prisma.estimate.delete({ where: { id } })

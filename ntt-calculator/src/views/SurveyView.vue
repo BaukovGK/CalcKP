@@ -74,10 +74,13 @@ const estimateId = computed(() => {
   const id = route.params.id
   return typeof id === 'string' && id ? id : null
 })
-const projectId = computed(() => {
+const queryProjectId = computed(() => {
   const p = route.query.project
   return typeof p === 'string' && p ? p : null
 })
+/** Проект редактируемого расчёта — для навигации «← Проект» в ветках. */
+const estimateProjectId = ref<string | null>(null)
+const projectId = computed(() => queryProjectId.value ?? estimateProjectId.value)
 
 const deviceType = ref<DeviceType>(
   ['KNS', 'EMK', 'KOL'].includes(String(route.query.type)) ? (String(route.query.type) as DeviceType) : 'KNS',
@@ -104,6 +107,7 @@ onMounted(async () => {
     try {
       const est = await estimatesApi.get(estimateId.value)
       deviceType.value = est.deviceType
+      estimateProjectId.value = est.projectId
       const sd = est.surveyData as Record<string, unknown>
       surveyRev.value = typeof sd.surveyRev === 'number' ? sd.surveyRev : 0
 

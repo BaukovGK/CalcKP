@@ -6,6 +6,8 @@
     :draft-time="draftTime"
     :active-sec="activeSec"
     :sections="steps"
+    :back-to="backTarget"
+    :back-label="backLabel"
     @go="goSection"
     @scroll="onScroll"
   >
@@ -218,6 +220,11 @@ const form = ref<KolSurveyForm>({ ...makeDefaultKolSurvey(), ...(props.initial ?
 const s = useKolSurvey(form)
 
 const isEdit = computed(() => Boolean(props.estimateId))
+
+const backTarget = computed(() =>
+  props.projectId ? { name: 'project', params: { id: props.projectId } } : { name: 'dashboard' },
+)
+const backLabel = computed(() => (props.projectId ? '← Проект' : '← Проекты'))
 
 const WELL_TYPES = ['Смотровой', 'Поворотный', 'Перепадный', 'Гаситель', 'Накопительный'] as const
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const

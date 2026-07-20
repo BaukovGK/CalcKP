@@ -120,6 +120,13 @@ router.beforeEach(async (to) => {
     return { name: 'dashboard' }
   }
 
+  // Домашний экран роли: дашборд проектов бесполезен тем, кто не работает
+  // с расчётами — технолог живёт в «Шаблонах», снабженец — в прайсе.
+  if (to.name === 'dashboard') {
+    if (auth.role === 'TECHNOLOG') return { name: 'templates' }
+    if (auth.role === 'BUYER') return { name: 'prices' }
+  }
+
   return true
 })
 
