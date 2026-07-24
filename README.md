@@ -102,26 +102,24 @@ docker compose down -v            # + удалить том с базой
 
 ## Развёртывание через GitHub
 
-Репозиторий: `git@github.com:BaukovGK/CalcKP.git`. CI/CD — в
-`.github/workflows/ci-cd.yml`.
+Репозиторий: `https://github.com/BaukovGK/CalcKP.git`. CI/CD — в
+`.github/workflows/ci-cd.yml`. Пошаговый runbook — `РАЗВЁРТЫВАНИЕ.md`.
 
-**Первая публикация** (под аккаунтом-владельцем):
-
-```bash
-git push -u origin master
-```
+**Релиз:** `git push` в `master` (доступ по HTTPS + токен). Каждый push
+запускает CI, а при зелёных тестах — авто-деплой на сервер.
 
 **CI** (на каждый push и pull request): typecheck фронта + 263 теста;
 на бэке — `prisma migrate deploy` и сид против сервисного Postgres, затем
 сборка. Ловит расхождение схемы и миграций до деплоя.
 
-**Деплой по SSH** (автоматически при push в `master` после зелёного CI):
-GitHub заходит на сервер и выполняет `git reset --hard origin/master` +
-`docker compose up -d --build`. Требуется один раз:
+**Деплой** (автоматически при push в `master` после зелёного CI): GitHub
+заходит на сервер по SSH и выполняет `git reset --hard origin/master` +
+`docker compose up -d --build`. Настройка — один раз (подробно в
+`РАЗВЁРТЫВАНИЕ.md`):
 
-1. На сервере: `git clone`, `cp .env.example .env` (заполнить
-   `POSTGRES_PASSWORD`, `JWT_SECRET`, `PUBLIC_URL`), проверить `docker compose up`.
-2. В репозитории **Settings → Secrets and variables → Actions** задать секреты:
+1. Сервер: Docker, `git clone` по HTTPS с токеном на чтение, `cp .env.example .env`
+   (заполнить `POSTGRES_PASSWORD`, `JWT_SECRET`, `PUBLIC_URL`), `docker compose up`.
+2. **Settings → Secrets and variables → Actions** — секреты доступа к серверу:
 
    | Секрет | Назначение |
    |---|---|
