@@ -18,11 +18,19 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial()
 
+/**
+ * Чтение всех проектов: ADMIN; MANAGER — проверяет чужие расчёты (§4.3);
+ * VIEWER — наблюдатель (просмотр расчёта, вкладка Битрикс24).
+ */
+function seesAllProjects(role: string | undefined): boolean {
+  return role === 'ADMIN' || role === 'MANAGER' || role === 'VIEWER'
+}
+
 // GET /api/projects
 projectsRouter.get('/', async (req, res: Response, next: NextFunction) => {
   try {
     const auth  = req as AuthRequest
-    const where = auth.userRole === 'ADMIN' ? {} : { authorId: auth.userId }
+    const where = seesAllProjects(auth.userRole) ? {} : { authorId: auth.userId }
     const projects = await prisma.project.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
@@ -70,7 +78,7 @@ projectsRouter.get('/:id', async (req, res: Response, next: NextFunction) => {
       },
     })
     if (!project) { res.status(404).json({ message: 'Проект не найден' }); return }
-    if (auth.userRole !== 'ADMIN' && project.authorId !== auth.userId) {
+    if (!seesAllProjects(auth.userRole) && project.authorId !== auth.userId) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
     res.json(project)

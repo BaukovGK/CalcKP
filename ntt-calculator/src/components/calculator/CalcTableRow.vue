@@ -11,12 +11,12 @@
 
     <!-- Кол-во -->
     <div class="c-qty">
-      <button v-if="res.qtyOverridden" class="rst" :title="qtyResetTitle" @click="$emit('resetQty', row.id)">↺</button>
+      <button v-if="res.qtyOverridden && !readonly" class="rst" :title="qtyResetTitle" @click="$emit('resetQty', row.id)">↺</button>
       <input
         class="cell num"
         :class="{ 'is-ovr': res.qtyOverridden, 'is-conflict': conflict }"
         :value="qtyText"
-        :disabled="disabled"
+        :disabled="disabled || readonly"
         :title="qtyTitle"
         @focus="onFocus"
         @change="onQty"
@@ -28,12 +28,12 @@
 
     <!-- Цена -->
     <div class="c-price">
-      <button v-if="res.priceOverridden" class="rst" :title="`↺ вернуть цену прайса: ${fmt(row.priceCatalog)}`" @click="$emit('resetPrice', row.id)">↺</button>
+      <button v-if="res.priceOverridden && !readonly" class="rst" :title="`↺ вернуть цену прайса: ${fmt(row.priceCatalog)}`" @click="$emit('resetPrice', row.id)">↺</button>
       <input
         class="cell num"
         :class="{ 'is-ovr': res.priceOverridden, 'is-missing': res.missingPrice }"
         :value="priceText"
-        :disabled="disabled"
+        :disabled="disabled || readonly"
         :placeholder="res.missingPrice ? 'цена?' : ''"
         :title="priceTitle"
         @focus="onFocus"
@@ -49,15 +49,17 @@
     <div class="c-note">
       <template v-if="conflict">
         <span class="was">было {{ fmt(prevCalc) }}</span>
-        <button class="btn-amber" @click="$emit('keep', row.id)">Оставить моё</button>
-        <button class="btn-plain" @click="$emit('drop', row.id)">Принять новое</button>
+        <template v-if="!readonly">
+          <button class="btn-amber" @click="$emit('keep', row.id)">Оставить моё</button>
+          <button class="btn-plain" @click="$emit('drop', row.id)">Принять новое</button>
+        </template>
       </template>
       <span v-else-if="res.missingPrice" class="note-red">указать цену</span>
       <span v-else class="note" :title="row.note ?? ''">{{ row.note ?? '' }}</span>
 
       <!-- Удалять можно только строки, добавленные вручную: строки шаблона
            лишь выключаются (Механика §12.5). -->
-      <button v-if="row.isCustom" class="rm" title="удалить строку" @click="emit('remove', row.id)">✕</button>
+      <button v-if="row.isCustom && !readonly" class="rm" title="удалить строку" @click="emit('remove', row.id)">✕</button>
     </div>
   </div>
 </template>
@@ -82,6 +84,8 @@ const props = defineProps<{
   prevCalc: number | null
   fotK: number | null
   disabled: boolean
+  /** Режим наблюдателя (VIEWER): значения видны, правка недоступна. */
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{

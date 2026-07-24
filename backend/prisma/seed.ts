@@ -61,11 +61,13 @@ interface EngineeringSeed {
 // ─── Пользователи ────────────────────────────────────────────────────────────
 // Пароли демонстрационные и предназначены только для локальной разработки.
 
-const USERS: Array<{ email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG'; password: string }> = [
+const USERS: Array<{ email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'VIEWER'; password: string }> = [
   { email: 'admin@ntt.local', name: 'Администратор', role: 'ADMIN', password: 'admin123' },
   { email: 'manager@ntt.local', name: 'Менеджер', role: 'MANAGER', password: 'manager123' },
   { email: 'engineer@ntt.local', name: 'Инженер', role: 'ENGINEER', password: 'engineer123' },
   { email: 'technolog@ntt.local', name: 'Технолог', role: 'TECHNOLOG', password: 'technolog123' },
+  // Наблюдатель: просмотр расчётов без правки (вкладка «Расчёт» в Битрикс24).
+  { email: 'viewer@ntt.local', name: 'Наблюдатель', role: 'VIEWER', password: 'viewer123' },
 ]
 
 async function seedUsers() {

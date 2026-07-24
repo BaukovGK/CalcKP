@@ -6,8 +6,9 @@
         <RouterLink class="tb-lnk" :to="backTarget">{{ backLabel }}</RouterLink>
         <span class="tb-t">Расчёт: {{ st.estimate?.title ?? '—' }}</span>
         <span v-if="customer" class="tb-cust">· Заказчик {{ customer }}</span>
+        <!-- Экран ОЛ — редактирующий, наблюдателю недоступен (роут не пустит). -->
         <RouterLink
-          v-if="st.estimate"
+          v-if="st.estimate && !readOnly"
           class="tb-lnk"
           :to="{ name: 'survey', params: { id: st.estimate.id } }"
         >← Опросный лист</RouterLink>
@@ -15,6 +16,7 @@
         <span class="badge">{{ statusLabel }}</span>
       </div>
       <div class="tb-r">
+        <span v-if="readOnly" class="tb-ro" title="Роль «Наблюдатель»: расчёт открыт только для просмотра">👁 просмотр</span>
         <button
           v-if="hasProblems"
           class="tb-prob"
@@ -25,10 +27,13 @@
           {{ problemsText }}
         </button>
         <span class="tb-pl">прайс {{ priceListLabel }}</span>
-        <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
-        <button class="btn" title="История версий расчёта" @click="openVersions">Версии</button>
-        <button class="btn" title="Заявка на закупку" @click="onExport">Экспорт ▾</button>
-        <button class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
+        <template v-if="!readOnly">
+          <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
+          <button class="btn" title="История версий расчёта" @click="openVersions">Версии</button>
+          <button class="btn" title="Заявка на закупку" @click="onExport">Экспорт ▾</button>
+          <button class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
+        </template>
+        <button v-else class="btn" title="История версий расчёта" @click="openVersions">Версии</button>
         <button class="btn" title="Переключить тему" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
       </div>
     </header>
@@ -64,7 +69,7 @@
           :class="{ active: activeSec === sec.code, off: !sec.enabled }"
         >
           <label class="tr-chk" @click.stop>
-            <input :checked="sec.enabled" type="checkbox" @change="st.toggleSection(sec.code)" />
+            <input :checked="sec.enabled" type="checkbox" :disabled="readOnly" @change="st.toggleSection(sec.code)" />
           </label>
           <button class="tr-n" @click="goSection(sec.code)">
             <span class="tr-t">{{ sec.code }} {{ sec.title }}</span>
@@ -102,6 +107,7 @@
               :prev-calc="prevCalcOf(row.id)"
               :fot-k="st.fotKOf(row)"
               :disabled="!sec.enabled || !c.enabled"
+              :readonly="readOnly"
               @qty="st.setQtyManual"
               @price="st.setPriceManual"
               @reset-qty="st.resetQty"
@@ -118,7 +124,7 @@
           </div>
 
           <!-- Добавление строк — в каждую сборку (прототип: пунктирные кнопки). -->
-          <div class="add">
+          <div v-if="!readOnly" class="add">
             <button class="add-b" @click="openCatalog(sec.code)">+ Компонент из каталога…</button>
             <button class="add-b" @click="addFreeRow(sec.code)">+ Свободная строка</button>
           </div>
@@ -138,8 +144,8 @@
         </div>
 
         <div class="tot-r">
-          <span>Наценка ✎</span>
-          <input v-model="markupText" class="tot-in num" @change="onMarkup" />
+          <span>Наценка {{ readOnly ? '' : '✎' }}</span>
+          <input v-model="markupText" class="tot-in num" :disabled="readOnly" @change="onMarkup" />
         </div>
 
         <div class="tot-r tot-price">
@@ -153,7 +159,7 @@
 
         <div class="tot-r">
           <span>Корпусов</span>
-          <input v-model="tirageText" class="tot-in num" @change="onTirage" />
+          <input v-model="tirageText" class="tot-in num" :disabled="readOnly" @change="onTirage" />
         </div>
         <!-- При тираже ≥2 главные цифры — за весь тираж (согласованы с
              таблицей, где количества умножены на N); строка ниже показывает
@@ -235,7 +241,7 @@
       </table>
       <template #footer>
         <button class="btn" @click="versionsOpen = false">Закрыть</button>
-        <button class="btn btn-acc" :disabled="snapBusy" @click="onManualSnapshot">
+        <button v-if="!readOnly" class="btn btn-acc" :disabled="snapBusy" @click="onManualSnapshot">
           {{ snapBusy ? 'Фиксируем…' : '＋ Зафиксировать версию' }}
         </button>
       </template>
@@ -252,6 +258,7 @@ import CalcTableRow from '@/components/calculator/CalcTableRow.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { useCalcTreeStore } from '@/stores/calcTree'
+import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { COST_BUCKETS } from '@/engines/economics'
@@ -262,7 +269,15 @@ import { estimatesApi, type EstimateSnapshotInfo } from '@/api/estimates'
 const route = useRoute()
 const router = useRouter()
 const st = useCalcTreeStore()
+const auth = useAuthStore()
 const { theme, toggle } = useTheme()
+
+/**
+ * VIEWER — наблюдатель: расчёт открыт только для просмотра (ТЗ §2).
+ * Роль нужна вкладке «Расчёт» в Битрикс24. Запись заблокирована и на бэке —
+ * здесь только прячем/выключаем органы управления.
+ */
+const readOnly = computed(() => auth.role === 'VIEWER')
 
 const saving = ref(false)
 const kpBusy = ref(false)
@@ -578,6 +593,7 @@ onMounted(() => {
 .tb-lnk:hover { color: var(--text); }
 .badge { font-size: 9.5px; border: 1px solid var(--line2); color: var(--muted); padding: 1px 6px; }
 .tb-r { display: flex; align-items: center; gap: 7px; flex: none; }
+.tb-ro { font-size: 10.5px; color: var(--amber); border: 1px solid var(--amber); padding: 2px 8px; }
 .tb-prob { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 11px; padding: 4px 9px; }
 .tb-prob.on { border-color: var(--amber); color: var(--amber); }
 .tb-pl { font-size: 10.5px; color: var(--faint); }

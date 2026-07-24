@@ -27,6 +27,16 @@ function canAccessEstimate(role: string | undefined, authorId: string, userId: s
   return authorId === userId
 }
 
+/**
+ * Чтение шире записи: VIEWER — наблюдатель (ТЗ §2), видит расчёты и их
+ * версии, но не меняет ничего. Роль нужна вкладке «Расчёт» в Битрикс24:
+ * менеджер сделки открывает расчёт на просмотр.
+ */
+function canReadEstimate(role: string | undefined, authorId: string, userId: string | undefined): boolean {
+  if (role === 'VIEWER') return true
+  return canAccessEstimate(role, authorId, userId)
+}
+
 const createSchema = z.object({
   title:      z.string().min(1),
   deviceType: z.enum(['KNS', 'EMK', 'KOL']),
@@ -37,9 +47,9 @@ const createSchema = z.object({
 estimatesRouter.get('/', async (req, res: Response, next: NextFunction) => {
   try {
     const auth  = req as AuthRequest
-    // MANAGER проверяет и утверждает чужие расчёты (§2, §4.3) — значит должен
-    // их видеть. Раньше список был ограничен своими для всех, кроме ADMIN.
-    const seesAll = auth.userRole === 'ADMIN' || auth.userRole === 'MANAGER'
+    // MANAGER проверяет чужие расчёты (§2), VIEWER — наблюдатель: оба видят
+    // весь список. Раньше список был ограничен своими для всех, кроме ADMIN.
+    const seesAll = ['ADMIN', 'MANAGER', 'VIEWER'].includes(auth.userRole ?? '')
     const where = seesAll ? {} : { authorId: auth.userId }
     const estimates = await prisma.estimate.findMany({
       where,
@@ -80,7 +90,7 @@ estimatesRouter.get('/:id', async (req, res: Response, next: NextFunction) => {
       include: { snapshots: { orderBy: { version: 'desc' }, take: 1 } },
     })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
-    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+    if (!canReadEstimate(auth.userRole, estimate.authorId, auth.userId)) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
     res.json(estimate)
@@ -358,7 +368,7 @@ estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunct
 
     const estimate = await prisma.estimate.findUnique({ where: { id }, select: { authorId: true } })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
-    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+    if (!canReadEstimate(auth.userRole, estimate.authorId, auth.userId)) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
 

@@ -22,7 +22,7 @@
       <div class="topbar">
         <div class="tb-title">Проекты</div>
         <div class="tb-spacer"></div>
-        <button class="btn" @click="newOpen = true">＋ Новый проект</button>
+        <button v-if="auth.role !== 'VIEWER'" class="btn" @click="newOpen = true">＋ Новый проект</button>
       </div>
 
       <div class="dash-filters">
@@ -40,7 +40,7 @@
         </div>
         <div v-else-if="filtered.length === 0" class="dash-state">
           <div class="dash-state-txt">{{ projects.list.length === 0 ? 'Проектов пока нет. Создайте первый!' : 'Ничего не найдено.' }}</div>
-          <button v-if="projects.list.length === 0" class="btn" @click="newOpen = true">＋ Создать проект</button>
+          <button v-if="projects.list.length === 0 && auth.role !== 'VIEWER'" class="btn" @click="newOpen = true">＋ Создать проект</button>
         </div>
         <div v-else class="dash-grid">
           <ProjectCard

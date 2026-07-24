@@ -55,11 +55,12 @@ const router = createRouter({
     { path: '/survey/kol', redirect: { name: 'survey', query: { type: 'KOL' } } },
     {
       // Конфигуратор расчёта по прототипу «Калькулятор v2»: материализованное
-      // дерево «Сборка→Компонент→Строка» (§9).
+      // дерево «Сборка→Компонент→Строка» (§9). VIEWER — наблюдатель, экран
+      // открывается в режиме «только просмотр» (вкладка «Расчёт» в Битрикс24).
       path: '/calculator/:id?',
       name: 'calculator',
       component: () => import('@/views/CalculatorTreeView.vue'),
-      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER', 'VIEWER'] },
     },
     {
       // Заявка на закупку — отчёт поверх расчёта (ТЗ §9.6), поэтому вложена

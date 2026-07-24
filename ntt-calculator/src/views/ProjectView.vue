@@ -34,8 +34,11 @@
           <div v-if="projects.current?.address" class="tb-sub">{{ projects.current.address }}</div>
         </div>
         <div class="tb-spacer"></div>
-        <button class="btn btn-g" @click="openEditProject">Редактировать</button>
-        <button class="btn" @click="addUnit">＋ Добавить единицу</button>
+        <template v-if="canEdit">
+          <button class="btn btn-g" @click="openEditProject">Редактировать</button>
+          <button class="btn" @click="addUnit">＋ Добавить единицу</button>
+        </template>
+        <span v-else class="pv-ro" title="Роль «Наблюдатель»: только просмотр">👁 просмотр</span>
       </div>
 
       <!-- Content -->
@@ -71,7 +74,7 @@
           <!-- Estimates list -->
           <div v-if="projects.current.estimates.length === 0" class="dash-state" style="height:auto;padding:32px 0;opacity:.5">
             <div class="dash-state-txt">Единиц оборудования нет</div>
-            <button class="btn" @click="addUnit">＋ Добавить первую единицу</button>
+            <button v-if="canEdit" class="btn" @click="addUnit">＋ Добавить первую единицу</button>
           </div>
 
           <div v-else class="pv-units-grid">
@@ -85,7 +88,7 @@
                 <span class="pv-uc-status" :class="`pv-uc-status--${e.status.toLowerCase()}`">{{ STATUS_LABELS[e.status] }}</span>
                 <span class="pv-uc-date">{{ fmtDate(e.updatedAt) }}</span>
                 <button
-                  v-if="e.status === 'DRAFT' || e.status === 'CALC' || e.status === 'REJECTED'"
+                  v-if="canEdit && (e.status === 'DRAFT' || e.status === 'CALC' || e.status === 'REJECTED')"
                   class="pv-uc-del"
                   title="Удалить"
                   @click.stop="askDeleteEstimate(e)"
@@ -147,9 +150,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/stores/projects'
+import { useAuthStore } from '@/stores/auth'
 import { projectsApi } from '@/api/projects'
 import { estimatesApi, type EstimateStatus } from '@/api/estimates'
 import type { ProjectEstimate } from '@/api/projects'
@@ -160,6 +164,10 @@ import { fmt } from '@/engines/format'
 const route    = useRoute()
 const router   = useRouter()
 const projects = useProjectsStore()
+const auth     = useAuthStore()
+
+/** VIEWER — наблюдатель: проект и расчёты открыты только для просмотра. */
+const canEdit = computed(() => auth.role !== 'VIEWER')
 
 const projectId = String(route.params.id)
 
@@ -268,6 +276,8 @@ onMounted(() => projects.fetchOne(projectId))
 </script>
 
 <style scoped>
+.pv-ro { font-size: 10px; color: var(--tx3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; }
+
 .pv-unit-link {
   display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 4px;
   cursor: pointer; transition: background .12s;
