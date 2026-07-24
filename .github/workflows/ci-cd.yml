@@ -1,0 +1,98 @@
+# CI + деплой по SSH.
+#
+# Тесты (frontend, backend) — на каждый push и pull request.
+# Деплой — только при push в master и ТОЛЬКО после зелёных тестов:
+#   на сервере git pull + docker compose up -d --build (стек проверен, см.
+#   docker-compose.yml). Требуемые секреты репозитория перечислены в job deploy.
+
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+
+# Параллельные пуши в одну ветку не должны деплоить одновременно.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  frontend:
+    name: Фронт — typecheck + тесты
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ntt-calculator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ntt-calculator/package-lock.json
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm test
+
+  backend:
+    name: Бэк — typecheck + миграции + сид
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ntt
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ntt_estimates
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ntt -d ntt_estimates"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://ntt:ci@localhost:5432/ntt_estimates
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      # Тот же путь, что в проде (CMD Dockerfile): миграции применяются с нуля.
+      # Ловит расхождение schema.prisma ↔ migrations до деплоя.
+      - run: npx prisma migrate deploy
+      # Сид проверяет, что справочники и прайс грузятся в свежую БД.
+      - run: npm run db:seed
+      # tsc собирает src/** — компиляция без ошибок типов.
+      - run: npm run build
+
+  deploy:
+    name: Деплой на сервер (SSH)
+    needs: [frontend, backend]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: docker compose up на сервере
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          # DEPLOY_PATH — каталог с репозиторием и .env на сервере.
+          # .env НЕ в git: он создаётся на сервере один раз (см. .env.example).
+          script: |
+            set -e
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git fetch --all
+            git reset --hard origin/master
+            docker compose pull || true
+            docker compose up -d --build --remove-orphans
+            docker image prune -f

@@ -100,6 +100,43 @@ docker compose down -v            # + удалить том с базой
 
 ---
 
+## Развёртывание через GitHub
+
+Репозиторий: `git@github.com:BaukovGK/CalcKP.git`. CI/CD — в
+`.github/workflows/ci-cd.yml`.
+
+**Первая публикация** (под аккаунтом-владельцем):
+
+```bash
+git push -u origin master
+```
+
+**CI** (на каждый push и pull request): typecheck фронта + 263 теста;
+на бэке — `prisma migrate deploy` и сид против сервисного Postgres, затем
+сборка. Ловит расхождение схемы и миграций до деплоя.
+
+**Деплой по SSH** (автоматически при push в `master` после зелёного CI):
+GitHub заходит на сервер и выполняет `git reset --hard origin/master` +
+`docker compose up -d --build`. Требуется один раз:
+
+1. На сервере: `git clone`, `cp .env.example .env` (заполнить
+   `POSTGRES_PASSWORD`, `JWT_SECRET`, `PUBLIC_URL`), проверить `docker compose up`.
+2. В репозитории **Settings → Secrets and variables → Actions** задать секреты:
+
+   | Секрет | Назначение |
+   |---|---|
+   | `DEPLOY_SSH_HOST` | адрес сервера |
+   | `DEPLOY_SSH_USER` | пользователь SSH |
+   | `DEPLOY_SSH_KEY` | приватный ключ (публичный — в `authorized_keys` сервера) |
+   | `DEPLOY_SSH_PORT` | порт SSH (необязательно, по умолчанию 22) |
+   | `DEPLOY_PATH` | путь к каталогу репозитория на сервере |
+
+`.env` в git не хранится (только `.env.example`) — он живёт на сервере и
+переживает деплой. Для вкладки в Битрикс24 (ТЗ §10.1) `PUBLIC_URL` — домен с
+валидным TLS.
+
+---
+
 ## Справочники
 
 Прайс, веса труб и списки извлекаются из мастер-шаблона
