@@ -72,6 +72,8 @@ jobs:
       - run: npm run db:seed
       # tsc собирает src/** — компиляция без ошибок типов.
       - run: npm run build
+      # Юнит-тесты чистых модулей (vitest) — не требуют БД.
+      - run: npm test
 
   deploy:
     name: Деплой на сервер (SSH)
