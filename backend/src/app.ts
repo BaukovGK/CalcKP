@@ -10,6 +10,7 @@ import { pricesRouter }    from './routes/prices.routes'
 import { refsRouter }      from './routes/refs.routes'
 import { purchaseRouter }  from './routes/purchase.routes'
 import { templatesRouter } from './routes/templates.routes'
+import { pumpStationRouter } from './routes/pump-station.routes'
 
 const app  = express()
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000
@@ -49,6 +50,7 @@ app.use('/api/refs',      refsRouter)
 // Редактор шаблонов (TECHNOLOG): запись в справочники, из которых
 // материализуются шаблоны; чтение — через /api/refs.
 app.use('/api/templates', templatesRouter)
+app.use('/api/pump-station', pumpStationRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: process.env.npm_package_version })
