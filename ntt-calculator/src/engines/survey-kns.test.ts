@@ -10,6 +10,7 @@ import {
   PN_SURVEY_DEFAULT,
   sleeveDiameter,
   snByDepth,
+  snDesignation,
   toLps,
   type DepthInput,
 } from './survey-kns'
@@ -83,36 +84,49 @@ describe('конвертация притока', () => {
   })
 })
 
-describe('snByDepth', () => {
+// Правило подтверждено заводом: реальных жёсткостей две — 5000 и 10000, порог
+// по глубине 7000 мм. Прежняя лестница 1250/2500/5000/10000 с порогами
+// 3000/5000/8000 была прототипом, собранным без точных данных.
+describe('snByDepth — расчётная жёсткость', () => {
   it.each([
     [11600, 10000],
-    [8001, 10000],
-    [8000, 5000],
-    [5001, 5000],
-    [5000, 2500],
-    [3001, 2500],
-    [3000, 1250],
-    [1000, 1250],
+    [7001, 10000],
+    [7000, 5000],
+    [5000, 5000],
+    [3000, 5000],
+    [0, 5000],
   ])('глубина %i мм → SN %i', (depth, expected) => {
     expect(snByDepth(depth)).toBe(expected)
   })
 
-  it('«под проезжей частью» поднимает SN на ступень', () => {
-    expect(snByDepth(3000, { underRoadway: true })).toBe(2500) // 1250 → 2500
-    expect(snByDepth(4000, { underRoadway: true })).toBe(5000) // 2500 → 5000
+  it('«под проезжей частью» поднимает жёсткость на ступень: 5000 → 10000', () => {
+    expect(snByDepth(3000, { underRoadway: true })).toBe(10000)
+    expect(snByDepth(7000, { underRoadway: true })).toBe(10000)
   })
 
-  it('«по ТТ МВК» поднимает SN на ступень', () => {
-    expect(snByDepth(4000, { mvk: true })).toBe(5000)
+  it('выше порога поднимать некуда — остаётся 10000', () => {
+    expect(snByDepth(11600, { underRoadway: true })).toBe(10000)
   })
 
-  it('потолок SN — 10000', () => {
-    expect(snByDepth(11600, { underRoadway: true, mvk: true })).toBe(10000)
-    expect(snByDepth(9000, { mvk: true })).toBe(10000)
+  it('ТТ МВК расчётную жёсткость НЕ меняет', () => {
+    // Реальный ОЛ3487: глубина 11 600 при действующих ТТ МВК показывает 10000.
+    expect(snByDepth(11600)).toBe(10000)
+  })
+})
+
+describe('snDesignation — обозначение жёсткости для заказчика', () => {
+  it('без ТТ МВК обозначение совпадает с расчётным', () => {
+    expect(snDesignation(5000)).toBe(5000)
+    expect(snDesignation(10000)).toBe(10000)
   })
 
-  it('ОЛ3487: глубина 11 600 + ТТ МВК → SN 10000', () => {
-    expect(snByDepth(11600, { mvk: true })).toBe(10000)
+  it('под ТТ МВК: 5000 → 8000, 10000 → 12000 (та же труба + 2 нитки ровинга)', () => {
+    expect(snDesignation(5000, { mvk: true })).toBe(8000)
+    expect(snDesignation(10000, { mvk: true })).toBe(12000)
+  })
+
+  it('незнакомое значение под ТТ МВК возвращается как есть', () => {
+    expect(snDesignation(2500, { mvk: true })).toBe(2500)
   })
 })
 
@@ -165,6 +179,13 @@ describe('pipeGradeName — PN_ОЛ идёт в наименование, а н�
     const name = pipeGradeName(3000, 0.1, 10000)
     expect(name).toContain('0,1')
     expect(pnForWeightLookup(0.1, 3000, 10000)).toBe(0.6)
+  })
+
+  it('под ТТ МВК в марку идёт обозначение 12000, а вес ищется по 10000', () => {
+    expect(pipeGradeName(3000, PN_SURVEY_DEFAULT, 10000, { mvk: true })).toBe(
+      'Труба СК/НПС-К 3000-0,1-12000',
+    )
+    expect(pipeGradeName(3000, PN_SURVEY_DEFAULT, 5000, { mvk: true })).toContain('-8000')
   })
 })
 

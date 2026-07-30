@@ -41,7 +41,8 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const snCalc = computed(() =>
     depthMm.value == null
       ? null
-      : snByDepth(depthMm.value, { underRoadway: form.value.underRoadway, mvk: form.value.mvk }),
+      // ТТ МВК жёсткость НЕ меняет — только её обозначение в марке трубы.
+      : snByDepth(depthMm.value, { underRoadway: form.value.underRoadway }),
   )
 
   const { sn, pn } = usePipeOverride(form, snCalc)
@@ -50,7 +51,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const pipeGrade = computed(() => {
     const dn = num(form.value.dn)
     if (dn == null || sn.value == null) return null
-    return pipeGradeName(dn, pn.value, sn.value)
+    return pipeGradeName(dn, pn.value, sn.value, { mvk: form.value.mvk })
   })
 
   /**

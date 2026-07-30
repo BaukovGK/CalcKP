@@ -97,7 +97,9 @@ const OL3487: KnsSurveyParams = {
   dn: 3000,
   depthMm: depth.npodzMm!,
   pnSurvey: PN_SURVEY_DEFAULT,
-  sn: snByDepth(depth.npodzMm!, { mvk: true }),
+  // ОЛ3487 идёт по ТТ МВК: расчётная жёсткость 10000, в марке трубы — 12000.
+  sn: snByDepth(depth.npodzMm!),
+  mvk: true,
   inletDn: 250,
   inletCount: 1,
   outletDn: 150,
@@ -233,8 +235,12 @@ describe('раздел 1 «Корпус»', () => {
   const rows = korpus.components.flatMap((c) => c.rows)
   const byName = (n: string) => rows.find((r) => r.name === n)!
 
+  // ОЛ3487 идёт по ТТ МВК, поэтому в МАРКЕ стоит обозначение 12000, тогда как
+  // вес и трудоёмкость считаются по расчётной жёсткости 10000 — это одна труба.
+  const PIPE_NAME = 'Труба СК/НПС-К 3000-0,1-12000'
+
   it('труба корпуса названа по PN_ОЛ, а вес найден по PN_ТРУБЫ', () => {
-    const pipe = byName('Труба СК/НПС-К 3000-0,1-10000')
+    const pipe = byName(PIPE_NAME)
     expect(pipe).toBeDefined()
     expect(pipe.qtyCalc).toBe(11.6)
     // В примечании зафиксирован автоподбор: PN_ОЛ 0,1 → PN_трубы 0,6.
@@ -243,7 +249,7 @@ describe('раздел 1 «Корпус»', () => {
   })
 
   it('труба корпуса рождается «красной»: цена договорная (Механика §5.2)', () => {
-    const pipe = byName('Труба СК/НПС-К 3000-0,1-10000')
+    const pipe = byName(PIPE_NAME)
     const r = computeRow(pipe)
     expect(r.missingPrice).toBe(true)
     expect(r.sum).toBe(0)

@@ -126,28 +126,50 @@ export function computeDepth(input: DepthInput): DepthResult {
 /** PN опросного листа: корпус КНС безнапорный (README хендоффа, эталон G8). */
 export const PN_SURVEY_DEFAULT = 0.1
 
-/** Ступени SN (прототип; таблица весов знает только 2500/5000/10000). */
-const SN_LADDER = [1250, 2500, 5000, 10000] as const
+/**
+ * Реальные ступени кольцевой жёсткости корпуса. Их всего две: производство
+ * делает трубу SN 5000 либо SN 10000. Обозначения 8000 и 12000 — то же изделие
+ * с двумя дополнительными нитками ровинга, см. {@link snDesignation}.
+ */
+export const SN_BASE = { normal: 5000, raised: 10000 } as const
+
+/** Порог глубины, мм: выше него — SN 10000. */
+export const SN_DEPTH_THRESHOLD_MM = 7000
 
 /**
- * SN по глубине подземной части (решение дизайн-сессии, подтверждено всеми
- * шестью реальными ОЛ):
+ * Реальная кольцевая жёсткость корпуса по глубине.
  *
- * `> 8000 мм → 10000 · > 5000 → 5000 · > 3000 → 2500 · иначе 1250`
+ * `глубина > 7000 мм → 10000 · иначе 5000`
  *
- * Флаги «под проезжей частью» или «по ТТ МВК» поднимают SN на ступень,
- * потолок — 10000.
+ * Флаг «под проезжей частью» поднимает жёсткость на ступень (5000 → 10000):
+ * помимо этого он требует разгрузочной плиты, дорожного люка и особых
+ * требований к обратной засыпке — это состав спецификации, а не жёсткость.
+ *
+ * Возвращает именно РАСЧЁТНУЮ жёсткость: от неё зависят вес трубы в справочнике
+ * и трудоёмкость. Обозначение для заказчика по ТТ МВК берётся отдельно
+ * ({@link snDesignation}) — так реальный ОЛ3487 и показывает SN 10000 при
+ * действующих ТТ МВК.
+ *
+ * Подбор предварительный: окончательная жёсткость подтверждается расчётом
+ * прочности (его делает отдельная программа).
  */
-export function snByDepth(
-  depthMm: number,
-  opts: { underRoadway?: boolean; mvk?: boolean } = {},
-): number {
-  const base = depthMm > 8000 ? 10000 : depthMm > 5000 ? 5000 : depthMm > 3000 ? 2500 : 1250
+export function snByDepth(depthMm: number, opts: { underRoadway?: boolean } = {}): number {
+  return depthMm > SN_DEPTH_THRESHOLD_MM || opts.underRoadway ? SN_BASE.raised : SN_BASE.normal
+}
 
-  if (!opts.underRoadway && !opts.mvk) return base
+/** Обозначения жёсткости по ТТ МВК: та же труба плюс две нитки ровинга. */
+const SN_MVK_LABEL: Record<number, number> = { 5000: 8000, 10000: 12000 }
 
-  const i = SN_LADDER.indexOf(base as (typeof SN_LADDER)[number])
-  return SN_LADDER[Math.min(i + 1, SN_LADDER.length - 1)]!
+/**
+ * Обозначение жёсткости для заказчика.
+ *
+ * По требованиям МВК труба маркируется как 8000 или 12000 — конструктивно это
+ * SN 5000 и 10000 с двумя дополнительными нитками ровинга, по массе и габаритам
+ * изделия одинаковы. Поэтому обозначение влияет только на марку в документах,
+ * а вес и трудоёмкость считаются по реальной жёсткости.
+ */
+export function snDesignation(sn: number, opts: { mvk?: boolean } = {}): number {
+  return opts.mvk ? (SN_MVK_LABEL[sn] ?? sn) : sn
 }
 
 /**
@@ -183,10 +205,21 @@ export function pnForWeightLookup(pnSurvey: number, dn: number, sn: number): num
   return 1
 }
 
-/** Марка трубы корпуса: `Труба СК/НПС-К {DN}-{PN_ОЛ}-{SN}` (Механика §5.3). */
-export function pipeGradeName(dn: number, pnSurvey: number, sn: number): string {
+/**
+ * Марка трубы корпуса: `Труба СК/НПС-К {DN}-{PN_ОЛ}-{SN}` (Механика §5.3).
+ *
+ * В марку идёт ОБОЗНАЧЕНИЕ жёсткости: под ТТ МВК заказчик видит 8000/12000
+ * вместо расчётных 5000/10000 ({@link snDesignation}). Вес и трудоёмкость при
+ * этом считаются по расчётной жёсткости — изделие то же.
+ */
+export function pipeGradeName(
+  dn: number,
+  pnSurvey: number,
+  sn: number,
+  opts: { mvk?: boolean } = {},
+): string {
   const pn = pnSurvey.toLocaleString('ru-RU')
-  return `Труба СК/НПС-К ${dn}-${pn}-${sn}`
+  return `Труба СК/НПС-К ${dn}-${pn}-${snDesignation(sn, opts)}`
 }
 
 // ─── Гильзы ──────────────────────────────────────────────────────────────────

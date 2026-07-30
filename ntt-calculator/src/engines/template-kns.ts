@@ -49,8 +49,13 @@ export interface KnsSurveyParams {
   depthMm: number
   /** PN опросного листа (для КНС — 0,1, безнапорный). Идёт в НАИМЕНОВАНИЕ. */
   pnSurvey: number
-  /** Номинальная жёсткость. */
+  /** Расчётная жёсткость (5000 или 10000) — от неё вес и трудоёмкость. */
   sn: number
+  /**
+   * Объект по ТТ МВК: в МАРКЕ трубы жёсткость обозначается как 8000/12000
+   * (та же труба плюс две нитки ровинга). На массу и габариты не влияет.
+   */
+  mvk?: boolean
 
   /** Подводящие патрубки. */
   inletDn: number
@@ -231,7 +236,7 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
   // A1 — Обечайка корпуса.
   const pnPipe = pnForWeightLookup(s.pnSurvey, s.dn, s.sn)
   const kgPerM = ctx.pipeWeightOf(s.dn, pnPipe, s.sn)
-  const pipeName = pipeGradeName(s.dn, s.pnSurvey, s.sn)
+  const pipeName = pipeGradeName(s.dn, s.pnSurvey, s.sn, { mvk: s.mvk })
 
   components.push({
     id: nextId('c'),

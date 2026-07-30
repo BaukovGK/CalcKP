@@ -212,6 +212,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       depthMm: derived.npodzMm,
       pnSurvey: derived.pn ?? 0.1,
       sn: derived.sn ?? 10000,
+      // Влияет только на обозначение жёсткости в марке трубы (8000/12000).
+      mvk: Boolean(kns.mvk),
       inletDn: n(kns.podvDn),
       inletCount: n(kns.podvKol),
       outletDn: n(kns.napDn),
