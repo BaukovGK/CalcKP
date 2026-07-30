@@ -65,7 +65,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick } from 'vue'
+import { tryEvalExpr } from '@/engines/expr'
 import type { CalcRowNode } from '@/engines/template-kns'
 import type { RowResult } from '@/engines/types'
 
@@ -132,16 +133,38 @@ const priceTitle = computed(() => {
 function onFocus(e: FocusEvent) {
   ;(e.target as HTMLInputElement).select()
 }
+/**
+ * Возвращает в поле то, что показывает модель.
+ *
+ * Нужно, потому что отвергнутый ввод часто НЕ меняет состояние: «мусор» в цене
+ * даёт priceManual = null, а он и был null — присвоение того же значения не
+ * запускает реактивность, перерисовки нет, и напечатанное застревает в ячейке
+ * (выглядит как «форматирование не работает»). nextTick — чтобы отработать
+ * после перерисовки, когда она всё же случилась.
+ */
+function resync(el: HTMLInputElement, text: () => string) {
+  void nextTick(() => {
+    el.value = text()
+  })
+}
+
 function onQty(e: Event) {
   // Ввод сохраняется ВЫРАЖЕНИЕМ («1,55*2+2,88*2») — вычисляет движок
   // (Механика §5.1). Пустая строка сбрасывает override к расчётному.
-  emit('qty', props.row.id, (e.target as HTMLInputElement).value)
+  const el = e.target as HTMLInputElement
+  emit('qty', props.row.id, el.value)
+  resync(el, () =>qtyText.value)
 }
 
 function onPrice(e: Event) {
-  const raw = (e.target as HTMLInputElement).value.trim().replace(/\s/g, '').replace(',', '.')
-  const v = raw === '' ? null : Number(raw)
-  emit('price', props.row.id, v != null && Number.isFinite(v) ? v : null)
+  // Цена принимает арифметику наравне с количеством («1200*2», «=1 200,5»):
+  // движок сам разбирает запятую, ведущий «=» и разряды с неразрывным
+  // пробелом. В отличие от количества хранится РЕЗУЛЬТАТ, а не выражение —
+  // priceManual по модели число (Механика §5.2). Пусто и некорректный ввод
+  // дают null, то есть возврат к цене прайса.
+  const el = e.target as HTMLInputElement
+  emit('price', props.row.id, tryEvalExpr(el.value))
+  resync(el, () =>priceText.value)
 }
 </script>
 
