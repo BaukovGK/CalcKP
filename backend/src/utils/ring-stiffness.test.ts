@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { calcRingStiffnessPa } from './ring-stiffness'
 
-describe('calcRingStiffnessPa — матрица глубина×МГЭ', () => {
-  it('глубина+2 > 7, МГЭ=false → SN 10000', () => {
+describe('calcRingStiffnessPa — матрица глубина×МВК', () => {
+  it('глубина+2 > 7, МВК=false → SN 10000', () => {
     expect(calcRingStiffnessPa(false, 6)).toBe(10000) // 6+2=8 > 7
   })
 
-  it('глубина+2 > 7, МГЭ=true → SN 12000', () => {
+  it('глубина+2 > 7, МВК=true → SN 12000', () => {
     expect(calcRingStiffnessPa(true, 6)).toBe(12000)
   })
 
-  it('глубина+2 <= 7, МГЭ=false → SN 5000', () => {
+  it('глубина+2 <= 7, МВК=false → SN 5000', () => {
     expect(calcRingStiffnessPa(false, 4)).toBe(5000) // 4+2=6 <= 7
   })
 
-  it('глубина+2 <= 7, МГЭ=true → SN 8000', () => {
+  it('глубина+2 <= 7, МВК=true → SN 8000', () => {
     expect(calcRingStiffnessPa(true, 4)).toBe(8000)
   })
 

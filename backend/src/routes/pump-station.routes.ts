@@ -40,7 +40,7 @@ pumpStationRouter.post('/dimensions', (req, res, next) => {
 })
 
 const ringStiffnessSchema = z.object({
-  mge: z.boolean(),
+  mvk: z.boolean(),
   inletPipeDepthM: z.number().min(0),
 })
 
@@ -51,8 +51,8 @@ const ringStiffnessSchema = z.object({
  */
 pumpStationRouter.post('/ring-stiffness', (req, res, next) => {
   try {
-    const { mge, inletPipeDepthM } = ringStiffnessSchema.parse(req.body)
-    res.json({ ringStiffnessPa: calcRingStiffnessPa(mge, inletPipeDepthM) })
+    const { mvk, inletPipeDepthM } = ringStiffnessSchema.parse(req.body)
+    res.json({ ringStiffnessPa: calcRingStiffnessPa(mvk, inletPipeDepthM) })
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
