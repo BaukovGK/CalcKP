@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAuth } from '../middleware/auth'
 import { calcPumpStationDimensions } from '../utils/pump-station-dimensions'
 import { calcRingStiffnessPa } from '../utils/ring-stiffness'
+import { calcDischargePipeDiameterMm } from '../utils/pipe-hydraulics'
 
 export const pumpStationRouter = Router()
 pumpStationRouter.use('/', requireAuth)
@@ -53,6 +54,30 @@ pumpStationRouter.post('/ring-stiffness', (req, res, next) => {
   try {
     const { mge, inletPipeDepthM } = ringStiffnessSchema.parse(req.body)
     res.json({ ringStiffnessPa: calcRingStiffnessPa(mge, inletPipeDepthM) })
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
+      return
+    }
+    next(e)
+  }
+})
+
+const pipeDiameterSchema = z.object({
+  flowM3h: z.number().positive(),
+  designVelocityMs: z.number().positive().optional(),
+})
+
+/**
+ * POST /api/pump-station/discharge-pipe-diameter — диаметр напорного
+ * трубопровода, мм, по расходу.
+ *
+ * Чистый расчёт `calcDischargePipeDiameterMm` (см. `utils/pipe-hydraulics.ts`).
+ */
+pumpStationRouter.post('/discharge-pipe-diameter', (req, res, next) => {
+  try {
+    const { flowM3h, designVelocityMs } = pipeDiameterSchema.parse(req.body)
+    res.json(calcDischargePipeDiameterMm(flowM3h, designVelocityMs))
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
