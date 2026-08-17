@@ -39,6 +39,7 @@ interface PriceSeed {
 }
 interface PipeWeightSeed { dn: number; pn: number; sn: number; wallMm: number | null; kgPerM: number }
 interface PePipeSeed { dn: number; name: string; odMm: number; wallMm: string | null; kgPerM: number }
+interface PumpSeed { name: string; capacityMinM3h: number; capacityMaxM3h: number; nozzleDiameterMm: number }
 
 interface MatrixCellSeed { d: number; lengthMm: number; massKg: number; thicknessMm: number | null }
 interface NozzleNormSeed {
@@ -157,6 +158,19 @@ async function seedEngineering() {
   console.log(`  инженерные матрицы: корпус ${eng.shell.length}, днища ${eng.ellipticBottom.length}, патрубки ${nozzleCount}`)
 }
 
+// ─── Каталог насосов (utils/pump-selection.ts) ────────────────────────────────
+
+async function seedPumps() {
+  const pumps = load<PumpSeed[]>('pumps.json')
+
+  await prisma.pump.createMany({ data: pumps, skipDuplicates: true })
+
+  const count = await prisma.pump.count()
+  if (count !== pumps.length) throw new Error(`насосы: в JSON ${pumps.length}, в БД ${count} — потеря при сиде`)
+
+  console.log(`  каталог насосов: ${count} позиций`)
+}
+
 // ─── Проверки: сид обязан оставить БД пригодной для расчёта ──────────────────
 
 async function verify() {
@@ -179,6 +193,13 @@ async function verify() {
   if (!n250) errors.push('не найдена норма патрубка DN250')
   else console.log(`  контроль нормы патрубка DN250 = ${n250.moldingMassKg} кг ✓`)
 
+  // Контроль подбора насоса: 45,234 м³/ч (ОЛ3487, 1 насос) -> GROSSEN GS 100.
+  const pump = await prisma.pump.findFirst({
+    where: { capacityMinM3h: { lte: 45.234 }, capacityMaxM3h: { gte: 45.234 }, nozzleDiameterMm: 100 },
+  })
+  if (!pump) errors.push('не найден насос для 45,234 м³/ч / ⌀100мм (ожидался GROSSEN GS 100)')
+  else console.log(`  контроль подбора насоса (45,234 м³/ч; ⌀100мм) = ${pump.name} ✓`)
+
   if (errors.length) {
     errors.forEach((e) => console.error(`  ✗ ${e}`))
     throw new Error('Сид завершился, но проверки не пройдены')
@@ -191,6 +212,7 @@ async function main() {
   await seedPrices()
   await seedPipeWeights()
   await seedEngineering()
+  await seedPumps()
   await verify()
 
   console.log('\nГотово. Учётные записи (только для локальной разработки):')

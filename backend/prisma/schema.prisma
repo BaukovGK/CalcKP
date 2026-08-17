@@ -236,6 +236,22 @@ model PePipe {
   @@index([dn])
 }
 
+/// Каталог насосного оборудования — подбор по притоку и диаметру напорного
+/// патрубка (utils/pump-selection.ts). Диапазоны производительности не
+/// перекрываются, вместе покрывают 5…700 м³/ч.
+model Pump {
+  id Int @id @default(autoincrement())
+  /// Марка/модель насоса — то, что возвращает функция подбора.
+  name String @unique
+  /// Диапазон производительности, м³/ч.
+  capacityMinM3h Float
+  capacityMaxM3h Float
+  /// Диаметр напорного патрубка насоса, мм — точное совпадение при подборе.
+  nozzleDiameterMm Int
+
+  @@index([nozzleDiameterMm])
+}
+
 // ── Audit log ──────────────────────────────────────────────────────────────
 
 model AuditLog {

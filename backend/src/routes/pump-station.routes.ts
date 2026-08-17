@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth'
 import { calcPumpStationDimensions } from '../utils/pump-station-dimensions'
 import { calcRingStiffnessPa } from '../utils/ring-stiffness'
 import { calcDischargePipeDiameterMm } from '../utils/pipe-hydraulics'
+import { selectPump } from '../utils/pump-selection'
+import { prisma } from '../utils/prisma'
 
 export const pumpStationRouter = Router()
 pumpStationRouter.use('/', requireAuth)
@@ -78,6 +80,32 @@ pumpStationRouter.post('/discharge-pipe-diameter', (req, res, next) => {
   try {
     const { flowM3h, designVelocityMs } = pipeDiameterSchema.parse(req.body)
     res.json(calcDischargePipeDiameterMm(flowM3h, designVelocityMs))
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
+      return
+    }
+    next(e)
+  }
+})
+
+const pumpSelectionSchema = z.object({
+  flowM3h: z.number().positive(),
+  nozzleDiameterMm: z.number().positive(),
+})
+
+/**
+ * POST /api/pump-station/select-pump — подбор марки насоса по расходу и
+ * диаметру напорного патрубка.
+ *
+ * Каталог берётся из БД (`Pump`, см. `prisma/seed-data/pumps.json`), отбор —
+ * чистая функция `selectPump` (см. `utils/pump-selection.ts`).
+ */
+pumpStationRouter.post('/select-pump', async (req, res, next) => {
+  try {
+    const { flowM3h, nozzleDiameterMm } = pumpSelectionSchema.parse(req.body)
+    const pumps = await prisma.pump.findMany()
+    res.json(selectPump(flowM3h, nozzleDiameterMm, pumps))
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })

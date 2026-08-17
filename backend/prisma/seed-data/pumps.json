@@ -1,0 +1,8 @@
+[
+  { "name": "GROSSEN GS 65", "capacityMinM3h": 5, "capacityMaxM3h": 24, "nozzleDiameterMm": 65 },
+  { "name": "GROSSEN GS 80", "capacityMinM3h": 24, "capacityMaxM3h": 44, "nozzleDiameterMm": 80 },
+  { "name": "GROSSEN GS 100", "capacityMinM3h": 44, "capacityMaxM3h": 90, "nozzleDiameterMm": 100 },
+  { "name": "GROSSEN GS 150", "capacityMinM3h": 90, "capacityMaxM3h": 250, "nozzleDiameterMm": 150 },
+  { "name": "GROSSEN GS 200", "capacityMinM3h": 250, "capacityMaxM3h": 450, "nozzleDiameterMm": 200 },
+  { "name": "GROSSEN GS 250", "capacityMinM3h": 450, "capacityMaxM3h": 700, "nozzleDiameterMm": 250 }
+]
