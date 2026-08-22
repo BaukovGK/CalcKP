@@ -39,7 +39,14 @@ interface PriceSeed {
 }
 interface PipeWeightSeed { dn: number; pn: number; sn: number; wallMm: number | null; kgPerM: number }
 interface PePipeSeed { dn: number; name: string; odMm: number; wallMm: string | null; kgPerM: number }
-interface PumpSeed { name: string; capacityMinM3h: number; capacityMaxM3h: number; nozzleDiameterMm: number }
+interface PumpSeed {
+  name: string
+  capacityMinM3h: number
+  capacityMaxM3h: number
+  headMinM: number
+  headMaxM: number
+  nozzleDiameterMm: number
+}
 
 interface MatrixCellSeed { d: number; lengthMm: number; massKg: number; thicknessMm: number | null }
 interface NozzleNormSeed {
@@ -193,12 +200,16 @@ async function verify() {
   if (!n250) errors.push('не найдена норма патрубка DN250')
   else console.log(`  контроль нормы патрубка DN250 = ${n250.moldingMassKg} кг ✓`)
 
-  // Контроль подбора насоса: 45,234 м³/ч (ОЛ3487, 1 насос) -> GROSSEN GS 100.
+  // Контроль подбора насоса: реальная рабочая точка Q=41,65 м³/ч; H=12,96 м
+  // (том ИМИП-ДУДС31и, насос Vandjord VSL.80.37.4.5.0D).
   const pump = await prisma.pump.findFirst({
-    where: { capacityMinM3h: { lte: 45.234 }, capacityMaxM3h: { gte: 45.234 }, nozzleDiameterMm: 100 },
+    where: {
+      capacityMinM3h: { lte: 41.65 }, capacityMaxM3h: { gte: 41.65 },
+      headMinM: { lte: 12.96 }, headMaxM: { gte: 12.96 },
+    },
   })
-  if (!pump) errors.push('не найден насос для 45,234 м³/ч / ⌀100мм (ожидался GROSSEN GS 100)')
-  else console.log(`  контроль подбора насоса (45,234 м³/ч; ⌀100мм) = ${pump.name} ✓`)
+  if (!pump) errors.push('не найден насос для Q=41,65 м³/ч; H=12,96 м (ожидался Vandjord VSL.80.37.4.5.0D)')
+  else console.log(`  контроль подбора насоса (Q=41,65 м³/ч; H=12,96 м) = ${pump.name} ✓`)
 
   if (errors.length) {
     errors.forEach((e) => console.error(`  ✗ ${e}`))

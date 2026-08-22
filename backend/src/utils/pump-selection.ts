@@ -1,15 +1,29 @@
 /**
- * Подбор марки насоса из каталога по расходу и диаметру напорного патрубка.
+ * Подбор марки насоса из каталога по расходу и напору (рабочей точке).
+ *
+ * По томам проекта (папка «Работа/Примеры/Проекты», особенно
+ * ИМИП-ДУДС24и-П-В0100-ТКР.02.01.03.ДК.ТХ.pdf): «необходимо выполнить
+ * гидравлический расчёт для определения напора для подбора насосного
+ * оборудования» — реальный подбор ведётся программой производителя (Vandjord,
+ * VJ Select) по пересечению характеристики насоса с характеристикой сети,
+ * т.е. ПО РАСХОДУ И НАПОРУ ВМЕСТЕ, а не по расходу и диаметру патрубка (как
+ * было в предыдущей версии этого модуля). Диаметр патрубка — атрибут
+ * конкретного насоса (справочно в результате), а не критерий отбора: в одном
+ * из томов внутренний напорный трубопровод в КНС сделан на DN65 при насосе с
+ * патрубком DN50 — узел собирается через переходник, диаметры не обязаны
+ * совпадать 1-в-1.
  *
  * Критерии отбора (оба обязательны):
- *  - расход попадает в диапазон производительности насоса (`capacityMinM3h`
- *    … `capacityMaxM3h` включительно);
- *  - диаметр патрубка насоса совпадает С ТОЧНОСТЬЮ до мм с заданным (в отличие
- *    от диапазона производительности это не интервал, а типоразмер фланца).
+ *  - расход попадает в диапазон `capacityMinM3h` … `capacityMaxM3h` насоса;
+ *  - напор попадает в диапазон `headMinM` … `headMaxM` насоса.
  *
- * Каталог передаётся аргументом (по умолчанию — встроенная копия из 6 позиций,
- * см. {@link DEFAULT_PUMPS}, зеркало сидированной таблицы `Pump` в БД). Для
- * реального подбора передавайте `prisma.pump.findMany()`.
+ * Оба диапазона — прямоугольная аппроксимация паспортной характеристики
+ * (кривой) насоса, а не сама кривая: полных кривых Q–H в проде не будет (по
+ * договорённости с заказчиком функции), только диапазоны по каталогу.
+ *
+ * Каталог передаётся аргументом (по умолчанию — встроенная копия из 6
+ * позиций, см. {@link DEFAULT_PUMPS}, зеркало сидированной таблицы `Pump` в
+ * БД). Для реального подбора передавайте `prisma.pump.findMany()`.
  *
  * @module utils/pump-selection
  */
@@ -17,27 +31,39 @@
 export interface PumpCatalogEntry {
   /** Марка/модель насоса. */
   name: string
-  /** Минимум диапазона производительности, м³/ч. */
+  /** Минимум диапазона расхода, м³/ч. */
   capacityMinM3h: number
-  /** Максимум диапазона производительности, м³/ч. */
+  /** Максимум диапазона расхода, м³/ч. */
   capacityMaxM3h: number
-  /** Диаметр напорного патрубка насоса, мм. */
+  /** Минимум диапазона напора, м. */
+  headMinM: number
+  /** Максимум диапазона напора, м. */
+  headMaxM: number
+  /** Диаметр напорного патрубка насоса, мм (справочно). */
   nozzleDiameterMm: number
 }
 
 /**
- * Каталог насосов по умолчанию — 6 позиций, зеркало сидированной таблицы
- * `Pump` (`prisma/seed-data/pumps.json`). Диапазоны производительности не
- * перекрываются и вместе покрывают 5…700 м³/ч; патрубки — стандартный ряд
- * фланцевых DN дренажных/канализационных насосов.
+ * Каталог насосов по умолчанию — 6 реальных моделей Vandjord VSL (погружные
+ * канализационные, закрытое рабочее колесо), найденных в томах проекта
+ * (зеркало сидированной таблицы `Pump`, `prisma/seed-data/pumps.json`).
+ *
+ * Диапазоны DN80/100/200×2 взяты из паспортов VJ Select (поля «Номинальный
+ * расход/напор» … «Макс. расход/напор»), скорректированы вниз там, где
+ * реальная рабочая точка проекта оказалась ниже номинала (напр. DN100:
+ * реальные 45,36 и 50,59 м³/ч ниже каталожного номинала 65 м³/ч — граница
+ * снижена, иначе диапазон не покрывал бы фактические проекты).
+ * Диапазоны DN50/DN65 — по единственной найденной в томах рабочей точке
+ * (полного паспорта с макс. расходом/напором для них в изученных документах
+ * нет) — это демонстрационные значения, не официальный каталог производителя.
  */
 export const DEFAULT_PUMPS: readonly PumpCatalogEntry[] = [
-  { name: 'GROSSEN GS 65', capacityMinM3h: 5, capacityMaxM3h: 24, nozzleDiameterMm: 65 },
-  { name: 'GROSSEN GS 80', capacityMinM3h: 24, capacityMaxM3h: 44, nozzleDiameterMm: 80 },
-  { name: 'GROSSEN GS 100', capacityMinM3h: 44, capacityMaxM3h: 90, nozzleDiameterMm: 100 },
-  { name: 'GROSSEN GS 150', capacityMinM3h: 90, capacityMaxM3h: 250, nozzleDiameterMm: 150 },
-  { name: 'GROSSEN GS 200', capacityMinM3h: 250, capacityMaxM3h: 450, nozzleDiameterMm: 200 },
-  { name: 'GROSSEN GS 250', capacityMinM3h: 450, capacityMaxM3h: 700, nozzleDiameterMm: 250 },
+  { name: 'Vandjord VSL.50.22.2.5.0D', capacityMinM3h: 15, capacityMaxM3h: 30, headMinM: 13.5, headMaxM: 20.5, nozzleDiameterMm: 50 },
+  { name: 'Vandjord VSL.65.30.2.5.0D', capacityMinM3h: 30, capacityMaxM3h: 40, headMinM: 15, headMaxM: 20, nozzleDiameterMm: 65 },
+  { name: 'Vandjord VSL.80.37.4.5.0D', capacityMinM3h: 40, capacityMaxM3h: 91, headMinM: 12.5, headMaxM: 17, nozzleDiameterMm: 80 },
+  { name: 'Vandjord VSL.100.55.4.5.0D', capacityMinM3h: 45, capacityMaxM3h: 150, headMinM: 12.5, headMaxM: 19, nozzleDiameterMm: 100 },
+  { name: 'Vandjord VSL.200.190.4.5.1D', capacityMinM3h: 300, capacityMaxM3h: 525, headMinM: 12, headMaxM: 24, nozzleDiameterMm: 200 },
+  { name: 'Vandjord VSL.200.220.4.5.1D', capacityMinM3h: 250, capacityMaxM3h: 550, headMinM: 17, headMaxM: 26, nozzleDiameterMm: 200 },
 ]
 
 export interface PumpSelectionWarning {
@@ -54,22 +80,22 @@ export interface PumpSelectionResult {
 }
 
 /**
- * Подобрать насос по расходу и диаметру патрубка.
+ * Подобрать насос по расходу и напору (рабочей точке).
  *
- * @param flowM3h Расход (производительность), м³/ч. Обязателен, > 0.
- * @param nozzleDiameterMm Требуемый диаметр напорного патрубка, мм. Обязателен, > 0.
+ * @param flowM3h Расход, м³/ч. Обязателен, > 0.
+ * @param headM Требуемый напор, м. Обязателен, > 0.
  * @param pumps Каталог насосов (по умолчанию {@link DEFAULT_PUMPS}).
  */
 export function selectPump(
   flowM3h: number,
-  nozzleDiameterMm: number,
+  headM: number,
   pumps: readonly PumpCatalogEntry[] = DEFAULT_PUMPS,
 ): PumpSelectionResult {
   if (!(flowM3h > 0)) {
     throw new Error('flowM3h (расход, м³/ч) обязателен и должен быть > 0.')
   }
-  if (!(nozzleDiameterMm > 0)) {
-    throw new Error('nozzleDiameterMm (диаметр патрубка, мм) обязателен и должен быть > 0.')
+  if (!(headM > 0)) {
+    throw new Error('headM (напор, м) обязателен и должен быть > 0.')
   }
 
   const warnings: PumpSelectionWarning[] = []
@@ -78,19 +104,19 @@ export function selectPump(
   if (byCapacity.length === 0) {
     warnings.push({
       code: 'NO_CAPACITY_MATCH',
-      message: `В каталоге нет насоса с диапазоном производительности, покрывающим ${flowM3h} м³/ч.`,
+      message: `В каталоге нет насоса с диапазоном расхода, покрывающим ${flowM3h} м³/ч.`,
     })
     return { name: null, pump: null, warnings }
   }
 
-  const matches = byCapacity.filter((p) => p.nozzleDiameterMm === nozzleDiameterMm)
+  const matches = byCapacity.filter((p) => headM >= p.headMinM && headM <= p.headMaxM)
   if (matches.length === 0) {
     warnings.push({
-      code: 'NO_NOZZLE_MATCH',
+      code: 'NO_HEAD_MATCH',
       message:
-        `Расходу ${flowM3h} м³/ч соответствует патрубок ` +
-        `${byCapacity.map((p) => `${p.name} (⌀${p.nozzleDiameterMm} мм)`).join(', ')}, ` +
-        `а не заданный ⌀${nozzleDiameterMm} мм.`,
+        `Расходу ${flowM3h} м³/ч соответствует напор ` +
+        `${byCapacity.map((p) => `${p.name} (${p.headMinM}…${p.headMaxM} м)`).join(', ')}, ` +
+        `а не заданные ${headM} м.`,
     })
     return { name: null, pump: null, warnings }
   }

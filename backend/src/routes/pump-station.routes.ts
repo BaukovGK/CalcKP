@@ -91,21 +91,21 @@ pumpStationRouter.post('/discharge-pipe-diameter', (req, res, next) => {
 
 const pumpSelectionSchema = z.object({
   flowM3h: z.number().positive(),
-  nozzleDiameterMm: z.number().positive(),
+  headM: z.number().positive(),
 })
 
 /**
  * POST /api/pump-station/select-pump — подбор марки насоса по расходу и
- * диаметру напорного патрубка.
+ * напору (рабочей точке).
  *
  * Каталог берётся из БД (`Pump`, см. `prisma/seed-data/pumps.json`), отбор —
  * чистая функция `selectPump` (см. `utils/pump-selection.ts`).
  */
 pumpStationRouter.post('/select-pump', async (req, res, next) => {
   try {
-    const { flowM3h, nozzleDiameterMm } = pumpSelectionSchema.parse(req.body)
+    const { flowM3h, headM } = pumpSelectionSchema.parse(req.body)
     const pumps = await prisma.pump.findMany()
-    res.json(selectPump(flowM3h, nozzleDiameterMm, pumps))
+    res.json(selectPump(flowM3h, headM, pumps))
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
