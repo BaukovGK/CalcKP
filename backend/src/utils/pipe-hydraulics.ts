@@ -43,24 +43,39 @@ export interface PipeDiameterResult {
   velocityMs: number
   /** Целевая скорость, заложенная в расчёт, м/с. */
   designVelocityMs: number
+  /** Расход на ОДИН насос, м³/ч (`flowM3h / workingPumps`) — то, что реально легло в расчёт. */
+  flowPerPumpM3h: number
   warnings: PipeDiameterWarning[]
 }
 
 /**
  * Рассчитать диаметр напорного трубопровода насосной станции по расходу.
  *
- * @param flowM3h Расход (производительность), м³/ч. Обязателен, > 0.
+ * Внутренний напорный трубопровод в КНС — это отдельный подъёмный участок на
+ * КАЖДЫЙ насос (см. лист `ОЛ_НАСОСНАЯ_СТАНЦИЯ`: скорость там считается по
+ * B4 = E51/(3.6·E55), т.е. по притоку на один насос, не по общему притоку на
+ * станцию). Поэтому диаметр считается по `flowM3h / workingPumps`, а не по
+ * общему притоку — та же логика деления, что и в `pump-selection.ts` и
+ * `pump-station-dimensions.ts`.
+ *
+ * @param flowM3h Общий приток на станцию (все рабочие насосы вместе), м³/ч. Обязателен, > 0.
+ * @param workingPumps Количество рабочих насосов (не считая резервных), шт.
+ *   По умолчанию 1 (весь приток — на один насос, как было до этого параметра).
  * @param designVelocityMs Целевая скорость течения, м/с (по умолчанию 1,5).
  * @param standardSizesMm Ряд стандартных диаметров для округления, мм
  *   (по умолчанию — каталог ПЭ-труб {@link STANDARD_PE_OD_MM}).
  */
 export function calcDischargePipeDiameterMm(
   flowM3h: number,
+  workingPumps = 1,
   designVelocityMs: number = DEFAULT_DESIGN_VELOCITY_MS,
   standardSizesMm: readonly number[] = STANDARD_PE_OD_MM,
 ): PipeDiameterResult {
   if (!(flowM3h > 0)) {
-    throw new Error('flowM3h (расход, м³/ч) обязателен и должен быть > 0.')
+    throw new Error('flowM3h (общий приток, м³/ч) обязателен и должен быть > 0.')
+  }
+  if (!(workingPumps > 0) || !Number.isInteger(workingPumps)) {
+    throw new Error('workingPumps (количество рабочих насосов) должен быть целым числом > 0.')
   }
   if (!(designVelocityMs > 0)) {
     throw new Error('designVelocityMs (расчётная скорость, м/с) должен быть > 0.')
@@ -68,7 +83,8 @@ export function calcDischargePipeDiameterMm(
 
   const warnings: PipeDiameterWarning[] = []
 
-  const flowM3s = flowM3h / 3600
+  const flowPerPumpM3h = flowM3h / workingPumps
+  const flowM3s = flowPerPumpM3h / 3600
   const theoreticalDiameterM = Math.sqrt((4 * flowM3s) / (Math.PI * designVelocityMs))
   const theoreticalDiameterMm = theoreticalDiameterM * 1000
 
@@ -86,5 +102,5 @@ export function calcDischargePipeDiameterMm(
 
   const velocityMs = (4 * flowM3s) / (Math.PI * (diameterMm / 1000) ** 2)
 
-  return { diameterMm, theoreticalDiameterMm, velocityMs, designVelocityMs, warnings }
+  return { diameterMm, theoreticalDiameterMm, velocityMs, designVelocityMs, flowPerPumpM3h, warnings }
 }

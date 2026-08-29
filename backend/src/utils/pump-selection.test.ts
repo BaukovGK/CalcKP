@@ -89,8 +89,22 @@ describe('selectPump — каталог по умолчанию (61 модель
 
   it('свой (пользовательский) каталог вместо дефолтного', () => {
     const custom = [{ name: 'Тестовый насос', capacityMinM3h: 0, capacityMaxM3h: 1000, headMinM: 0, headMaxM: 100, nozzleDiameterMm: 50 }]
-    const r = selectPump(500, 50, custom)
+    const r = selectPump(500, 50, 1, custom)
     expect(r.name).toBe('Тестовый насос')
+  })
+
+  it('ОЛ3487: общий приток 90,468 м³/ч на 2 насоса даёт тот же результат, что и 45,234 м³/ч на 1 насос', () => {
+    const total = selectPump(90.468, 13.66, 2)
+    const perPump = selectPump(45.234, 13.66, 1)
+    expect(total.flowPerPumpM3h).toBeCloseTo(45.234, 9)
+    expect(total.name).toBe(perPump.name)
+    expect(total.name).toBe('Vandjord VSL.80.37.4.5.0D')
+  })
+
+  it('workingPumps по умолчанию = 1 (весь приток — на один насос, как до появления параметра)', () => {
+    const withDefault = selectPump(29.48, 13.66)
+    const explicit = selectPump(29.48, 13.66, 1)
+    expect(withDefault).toEqual(explicit)
   })
 
   it('flowM3h = 0 → бросает ошибку', () => {
@@ -99,5 +113,13 @@ describe('selectPump — каталог по умолчанию (61 модель
 
   it('headM = 0 → бросает ошибку', () => {
     expect(() => selectPump(15, 0)).toThrow(/headM/)
+  })
+
+  it('workingPumps = 0 → бросает ошибку', () => {
+    expect(() => selectPump(15, 10, 0)).toThrow(/workingPumps/)
+  })
+
+  it('workingPumps дробное → бросает ошибку', () => {
+    expect(() => selectPump(15, 10, 1.5)).toThrow(/workingPumps/)
   })
 })

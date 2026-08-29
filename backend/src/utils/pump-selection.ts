@@ -1,9 +1,12 @@
 /**
- * Подбор марки насоса из каталога по расходу и напору (рабочей точке).
+ * Подбор марки насоса из каталога по расходу, напору и числу рабочих
+ * насосов (рабочей точке одного насоса при их параллельной работе).
  *
- * Критерии отбора (оба обязательны):
- *  - расход попадает в диапазон `capacityMinM3h` … `capacityMaxM3h` насоса;
- *  - напор попадает в диапазон `headMinM` … `headMaxM` насоса.
+ * Критерии отбора (оба обязательны, сравниваются с расходом на ОДИН насос —
+ * `flowM3h / workingPumps`, а не с общим притоком):
+ *  - расход на насос попадает в диапазон `capacityMinM3h` … `capacityMaxM3h`;
+ *  - напор попадает в диапазон `headMinM` … `headMaxM` насоса (напор не
+ *    делится — параллельно работающие насосы создают один и тот же напор).
  *
  * Оба диапазона — прямоугольная аппроксимация паспортной характеристики
  * (кривой) насоса, а не сама кривая (полных кривых Q–H в проде не будет —
@@ -133,37 +136,56 @@ export interface PumpSelectionResult {
   name: string | null
   /** Полная запись каталога подобранного насоса (для справки), либо `null`. */
   pump: PumpCatalogEntry | null
+  /** Расход на ОДИН насос, м³/ч (`flowM3h / workingPumps`) — то, что реально сравнивалось с каталогом. */
+  flowPerPumpM3h: number
   warnings: PumpSelectionWarning[]
 }
 
 /**
- * Подобрать насос по расходу и напору (рабочей точке).
+ * Подобрать насос по общему притоку, напору и числу рабочих насосов.
  *
- * @param flowM3h Расход, м³/ч. Обязателен, > 0.
+ * Насосы КНС работают параллельно на общий приток: при `workingPumps` рабочих
+ * насосах каждый берёт на себя `flowM3h / workingPumps` — именно эта величина
+ * (а не общий приток) сравнивается с диапазоном расхода каждой модели
+ * каталога. Напор при этом НЕ делится: насосы, работающие параллельно на
+ * общий трубопровод, все создают один и тот же напор, каждый — свою долю
+ * расхода (как и в листе `ОЛ_НАСОСНАЯ_СТАНЦИЯ`: E51/E55 — та же логика деления
+ * притока на число насосов, что и в `pump-station-dimensions.ts`/`pipe-hydraulics.ts`).
+ *
+ * @param flowM3h Общий приток на станцию (все рабочие насосы вместе), м³/ч. Обязателен, > 0.
  * @param headM Требуемый напор, м. Обязателен, > 0.
+ * @param workingPumps Количество рабочих насосов (не считая резервных), шт.
+ *   По умолчанию 1 (весь приток — на один насос, как было до этого параметра).
  * @param pumps Каталог насосов (по умолчанию {@link DEFAULT_PUMPS}).
  */
 export function selectPump(
   flowM3h: number,
   headM: number,
+  workingPumps = 1,
   pumps: readonly PumpCatalogEntry[] = DEFAULT_PUMPS,
 ): PumpSelectionResult {
   if (!(flowM3h > 0)) {
-    throw new Error('flowM3h (расход, м³/ч) обязателен и должен быть > 0.')
+    throw new Error('flowM3h (общий приток, м³/ч) обязателен и должен быть > 0.')
   }
   if (!(headM > 0)) {
     throw new Error('headM (напор, м) обязателен и должен быть > 0.')
   }
+  if (!(workingPumps > 0) || !Number.isInteger(workingPumps)) {
+    throw new Error('workingPumps (количество рабочих насосов) должен быть целым числом > 0.')
+  }
 
   const warnings: PumpSelectionWarning[] = []
+  const flowPerPumpM3h = flowM3h / workingPumps
 
-  const byCapacity = pumps.filter((p) => flowM3h >= p.capacityMinM3h && flowM3h <= p.capacityMaxM3h)
+  const byCapacity = pumps.filter((p) => flowPerPumpM3h >= p.capacityMinM3h && flowPerPumpM3h <= p.capacityMaxM3h)
   if (byCapacity.length === 0) {
     warnings.push({
       code: 'NO_CAPACITY_MATCH',
-      message: `В каталоге нет насоса с диапазоном расхода, покрывающим ${flowM3h} м³/ч.`,
+      message:
+        `В каталоге нет насоса с диапазоном расхода, покрывающим ${flowPerPumpM3h} м³/ч ` +
+        `на один насос (приток ${flowM3h} м³/ч на ${workingPumps} рабочих насос(а/ов)).`,
     })
-    return { name: null, pump: null, warnings }
+    return { name: null, pump: null, flowPerPumpM3h, warnings }
   }
 
   const matches = byCapacity.filter((p) => headM >= p.headMinM && headM <= p.headMaxM)
@@ -171,11 +193,11 @@ export function selectPump(
     warnings.push({
       code: 'NO_HEAD_MATCH',
       message:
-        `Расходу ${flowM3h} м³/ч соответствует напор ` +
+        `Расходу ${flowPerPumpM3h} м³/ч на насос соответствует напор ` +
         `${byCapacity.map((p) => `${p.name} (${p.headMinM}…${p.headMaxM} м)`).join(', ')}, ` +
         `а не заданные ${headM} м.`,
     })
-    return { name: null, pump: null, warnings }
+    return { name: null, pump: null, flowPerPumpM3h, warnings }
   }
 
   if (matches.length > 1) {
@@ -186,5 +208,5 @@ export function selectPump(
   }
 
   const pump = matches[0]!
-  return { name: pump.name, pump, warnings }
+  return { name: pump.name, pump, flowPerPumpM3h, warnings }
 }
