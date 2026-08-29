@@ -1,29 +1,39 @@
 /**
  * Подбор марки насоса из каталога по расходу и напору (рабочей точке).
  *
- * По томам проекта (папка «Работа/Примеры/Проекты», особенно
- * ИМИП-ДУДС24и-П-В0100-ТКР.02.01.03.ДК.ТХ.pdf): «необходимо выполнить
- * гидравлический расчёт для определения напора для подбора насосного
- * оборудования» — реальный подбор ведётся программой производителя (Vandjord,
- * VJ Select) по пересечению характеристики насоса с характеристикой сети,
- * т.е. ПО РАСХОДУ И НАПОРУ ВМЕСТЕ, а не по расходу и диаметру патрубка (как
- * было в предыдущей версии этого модуля). Диаметр патрубка — атрибут
- * конкретного насоса (справочно в результате), а не критерий отбора: в одном
- * из томов внутренний напорный трубопровод в КНС сделан на DN65 при насосе с
- * патрубком DN50 — узел собирается через переходник, диаметры не обязаны
- * совпадать 1-в-1.
- *
  * Критерии отбора (оба обязательны):
  *  - расход попадает в диапазон `capacityMinM3h` … `capacityMaxM3h` насоса;
  *  - напор попадает в диапазон `headMinM` … `headMaxM` насоса.
  *
  * Оба диапазона — прямоугольная аппроксимация паспортной характеристики
- * (кривой) насоса, а не сама кривая: полных кривых Q–H в проде не будет (по
- * договорённости с заказчиком функции), только диапазоны по каталогу.
+ * (кривой) насоса, а не сама кривая (полных кривых Q–H в проде не будет —
+ * решение согласовано с заказчиком функции). Для каждой модели:
+ *  - `headMaxM` = «Макс. напор» (напор при Q≈0, срыв потока) — безопасный
+ *    потолок: любой достижимый на кривой напор при любом расходе ≤ Qmax не
+ *    может превышать его;
+ *  - `headMinM` = 0 — по той же логике снизу (напор при Q≈Qmax стремится к 0);
+ *  - `capacityMaxM3h` = «Макс. расход» (расход при H≈0);
+ *  - `capacityMinM3h` = «Номинальный расход» для 56 моделей, для которых он
+ *    официально известен (DN80…DN400) — не жёсткий физический предел, а
+ *    типовая нижняя граница экономичной работы; реальная рабочая точка
+ *    иногда оказывается чуть ниже (см. находки в тестах).
  *
- * Каталог передаётся аргументом (по умолчанию — встроенная копия из 6
- * позиций, см. {@link DEFAULT_PUMPS}, зеркало сидированной таблицы `Pump` в
+ * Каталог передаётся аргументом (по умолчанию — встроенная копия из 61
+ * позиции, см. {@link DEFAULT_PUMPS}, зеркало сидированной таблицы `Pump` в
  * БД). Для реального подбора передавайте `prisma.pump.findMany()`.
+ *
+ * Источники данных ({@link DEFAULT_PUMPS}):
+ *  - 56 моделей DN80…DN400 (2–90 кВт) — выгружены напрямую из бэкенда
+ *    программы подбора производителя (VJ Select, vandjord.com/product_selection/)
+ *    самим пользователем через собственный скрейпер; для каждой модели есть
+ *    официальные Макс./Номинальный расход и напор — самый надёжный источник
+ *    во всём модуле;
+ *  - 5 моделей DN50/DN65 (0,75–3,0 кВт) — VJ Select их не отдал (в выгрузке
+ *    отсутствуют), поэтому взяты из вторичных источников (карточки товара
+ *    дистрибьютора dn.ru и реальные рабочие точки из проектных томов
+ *    «Работа/Примеры/Проекты») и помечены как менее надёжные; без них ниже
+ *    ~45 м³/ч (Qnom младшей DN80) в каталоге была бы дыра, а именно там лежат
+ *    почти все реальные КНС из «Работа/Примеры» (15…35 м³/ч).
  *
  * @module utils/pump-selection
  */
@@ -44,26 +54,73 @@ export interface PumpCatalogEntry {
 }
 
 /**
- * Каталог насосов по умолчанию — 6 реальных моделей Vandjord VSL (погружные
- * канализационные, закрытое рабочее колесо), найденных в томах проекта
- * (зеркало сидированной таблицы `Pump`, `prisma/seed-data/pumps.json`).
- *
- * Диапазоны DN80/100/200×2 взяты из паспортов VJ Select (поля «Номинальный
- * расход/напор» … «Макс. расход/напор»), скорректированы вниз там, где
- * реальная рабочая точка проекта оказалась ниже номинала (напр. DN100:
- * реальные 45,36 и 50,59 м³/ч ниже каталожного номинала 65 м³/ч — граница
- * снижена, иначе диапазон не покрывал бы фактические проекты).
- * Диапазоны DN50/DN65 — по единственной найденной в томах рабочей точке
- * (полного паспорта с макс. расходом/напором для них в изученных документах
- * нет) — это демонстрационные значения, не официальный каталог производителя.
+ * Каталог насосов по умолчанию — 61 реальная модель Vandjord VSL (погружные
+ * канализационные, закрытое рабочее колесо). Зеркало сидированной таблицы
+ * `Pump` (`prisma/seed-data/pumps.json`) — см. заголовок модуля про
+ * происхождение данных (VJ Select для DN80+, вторичные источники для DN50/65).
  */
 export const DEFAULT_PUMPS: readonly PumpCatalogEntry[] = [
-  { name: 'Vandjord VSL.50.22.2.5.0D', capacityMinM3h: 15, capacityMaxM3h: 30, headMinM: 13.5, headMaxM: 20.5, nozzleDiameterMm: 50 },
-  { name: 'Vandjord VSL.65.30.2.5.0D', capacityMinM3h: 30, capacityMaxM3h: 40, headMinM: 15, headMaxM: 20, nozzleDiameterMm: 65 },
-  { name: 'Vandjord VSL.80.37.4.5.0D', capacityMinM3h: 40, capacityMaxM3h: 91, headMinM: 12.5, headMaxM: 17, nozzleDiameterMm: 80 },
-  { name: 'Vandjord VSL.100.55.4.5.0D', capacityMinM3h: 45, capacityMaxM3h: 150, headMinM: 12.5, headMaxM: 19, nozzleDiameterMm: 100 },
-  { name: 'Vandjord VSL.200.190.4.5.1D', capacityMinM3h: 300, capacityMaxM3h: 525, headMinM: 12, headMaxM: 24, nozzleDiameterMm: 200 },
-  { name: 'Vandjord VSL.200.220.4.5.1D', capacityMinM3h: 250, capacityMaxM3h: 550, headMinM: 17, headMaxM: 26, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.50.075.2.5.0D", capacityMinM3h: 14, capacityMaxM3h: 25, headMinM: 0, headMaxM: 12, nozzleDiameterMm: 50 },
+  { name: "Vandjord VSL.50.11.2.5.0D", capacityMinM3h: 16, capacityMaxM3h: 29, headMinM: 0, headMaxM: 18, nozzleDiameterMm: 50 },
+  { name: "Vandjord VSL.50.22.2.5.0D", capacityMinM3h: 15, capacityMaxM3h: 30, headMinM: 0, headMaxM: 21, nozzleDiameterMm: 50 },
+  { name: "Vandjord VSL.65.11L.2.5.0D", capacityMinM3h: 22, capacityMaxM3h: 40, headMinM: 0, headMaxM: 13, nozzleDiameterMm: 65 },
+  { name: "Vandjord VSL.65.30.2.5.0D", capacityMinM3h: 30, capacityMaxM3h: 40, headMinM: 0, headMaxM: 20, nozzleDiameterMm: 65 },
+  { name: "Vandjord VSL.80.22.4.5.0D", capacityMinM3h: 45, capacityMaxM3h: 73, headMinM: 0, headMaxM: 12, nozzleDiameterMm: 80 },
+  { name: "Vandjord VSL.80.37.4.5.0D", capacityMinM3h: 45, capacityMaxM3h: 91, headMinM: 0, headMaxM: 17, nozzleDiameterMm: 80 },
+  { name: "Vandjord VSL.80.75.15.4.5.0D", capacityMinM3h: 48, capacityMaxM3h: 75, headMinM: 0, headMaxM: 11, nozzleDiameterMm: 80 },
+  { name: "Vandjord VSL.80.75.22.4.5.0D", capacityMinM3h: 48, capacityMaxM3h: 85, headMinM: 0, headMaxM: 13, nozzleDiameterMm: 80 },
+  { name: "Vandjord VSL.80.75.37.4.5.0D", capacityMinM3h: 70, capacityMaxM3h: 102, headMinM: 0, headMaxM: 18, nozzleDiameterMm: 80 },
+  { name: "Vandjord VSL.100.75.15.4.5.0D", capacityMinM3h: 60, capacityMaxM3h: 96, headMinM: 0, headMaxM: 11, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.22.4.5.0D", capacityMinM3h: 60, capacityMaxM3h: 98, headMinM: 0, headMaxM: 12, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.37.4.5.0D", capacityMinM3h: 60, capacityMaxM3h: 130, headMinM: 0, headMaxM: 16, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.55.4.5.0D", capacityMinM3h: 65, capacityMaxM3h: 150, headMinM: 0, headMaxM: 19, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.75.22.4.5.0D", capacityMinM3h: 70, capacityMaxM3h: 115, headMinM: 0, headMaxM: 13, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.75.37.4.5.0D", capacityMinM3h: 85, capacityMaxM3h: 135, headMinM: 0, headMaxM: 18, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.75.55.4.5.0D", capacityMinM3h: 100, capacityMaxM3h: 162, headMinM: 0, headMaxM: 20, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.75.4.5.0D", capacityMinM3h: 100, capacityMaxM3h: 172, headMinM: 0, headMaxM: 24, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.110.4.5.1D", capacityMinM3h: 100, capacityMaxM3h: 190, headMinM: 0, headMaxM: 31, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.150.4.5.1D", capacityMinM3h: 100, capacityMaxM3h: 210, headMinM: 0, headMaxM: 35, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.190.4.5.1D", capacityMinM3h: 100, capacityMaxM3h: 200, headMinM: 0, headMaxM: 38, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.220.4.5.1D", capacityMinM3h: 100, capacityMaxM3h: 220, headMinM: 0, headMaxM: 44, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.100.75.75.4.5.0D", capacityMinM3h: 122, capacityMaxM3h: 185, headMinM: 0, headMaxM: 24, nozzleDiameterMm: 100 },
+  { name: "Vandjord VSL.150.75.55.4.5.0D", capacityMinM3h: 100, capacityMaxM3h: 204, headMinM: 0, headMaxM: 20, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.110.2.5.0D", capacityMinM3h: 100, capacityMaxM3h: 200, headMinM: 0, headMaxM: 29, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.55.4.5.0D", capacityMinM3h: 110, capacityMaxM3h: 200, headMinM: 0, headMaxM: 16, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.75.75.4.5.0D", capacityMinM3h: 130, capacityMaxM3h: 228, headMinM: 0, headMaxM: 24, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.75.4.5.0D", capacityMinM3h: 150, capacityMaxM3h: 240, headMinM: 0, headMaxM: 15, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.110.4.5.1D", capacityMinM3h: 150, capacityMaxM3h: 280, headMinM: 0, headMaxM: 24, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.150.4.5.1D", capacityMinM3h: 150, capacityMaxM3h: 295, headMinM: 0, headMaxM: 28, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.190.4.5.1D", capacityMinM3h: 150, capacityMaxM3h: 300, headMinM: 0, headMaxM: 32, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.220.4.5.1D", capacityMinM3h: 150, capacityMaxM3h: 330, headMinM: 0, headMaxM: 38, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.300.4.5.1D", capacityMinM3h: 150, capacityMaxM3h: 310, headMinM: 0, headMaxM: 44, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.370.4.5.1D", capacityMinM3h: 150, capacityMaxM3h: 300, headMinM: 0, headMaxM: 49, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.150.450.4.5.1D", capacityMinM3h: 150, capacityMaxM3h: 400, headMinM: 0, headMaxM: 57, nozzleDiameterMm: 150 },
+  { name: "Vandjord VSL.200.75.4.5.0D", capacityMinM3h: 250, capacityMaxM3h: 400, headMinM: 0, headMaxM: 12, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.110.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 450, headMinM: 0, headMaxM: 16, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.150.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 490, headMinM: 0, headMaxM: 21, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.190.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 525, headMinM: 0, headMaxM: 24, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.220.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 550, headMinM: 0, headMaxM: 26, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.300.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 580, headMinM: 0, headMaxM: 32, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.370.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 620, headMinM: 0, headMaxM: 39, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.450.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 660, headMinM: 0, headMaxM: 43, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.550.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 660, headMinM: 0, headMaxM: 52, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.750.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 660, headMinM: 0, headMaxM: 61, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.200.900.4.5.1D", capacityMinM3h: 300, capacityMaxM3h: 630, headMinM: 0, headMaxM: 68, nozzleDiameterMm: 200 },
+  { name: "Vandjord VSL.250.220.4.5.1D", capacityMinM3h: 500, capacityMaxM3h: 760, headMinM: 0, headMaxM: 21, nozzleDiameterMm: 250 },
+  { name: "Vandjord VSL.250.300.4.5.1D", capacityMinM3h: 500, capacityMaxM3h: 800, headMinM: 0, headMaxM: 27, nozzleDiameterMm: 250 },
+  { name: "Vandjord VSL.250.370.4.5.1D", capacityMinM3h: 500, capacityMaxM3h: 860, headMinM: 0, headMaxM: 30, nozzleDiameterMm: 250 },
+  { name: "Vandjord VSL.250.450.4.5.1D", capacityMinM3h: 500, capacityMaxM3h: 900, headMinM: 0, headMaxM: 33, nozzleDiameterMm: 250 },
+  { name: "Vandjord VSL.250.550.4.5.1D", capacityMinM3h: 500, capacityMaxM3h: 920, headMinM: 0, headMaxM: 42, nozzleDiameterMm: 250 },
+  { name: "Vandjord VSL.250.750.4.5.1D", capacityMinM3h: 500, capacityMaxM3h: 1000, headMinM: 0, headMaxM: 49, nozzleDiameterMm: 250 },
+  { name: "Vandjord VSL.250.900.4.5.1D", capacityMinM3h: 500, capacityMaxM3h: 1000, headMinM: 0, headMaxM: 54, nozzleDiameterMm: 250 },
+  { name: "Vandjord VSL.300.300.4.5.1D", capacityMinM3h: 800, capacityMaxM3h: 1040, headMinM: 0, headMaxM: 22, nozzleDiameterMm: 300 },
+  { name: "Vandjord VSL.300.370.4.5.1D", capacityMinM3h: 800, capacityMaxM3h: 1060, headMinM: 0, headMaxM: 24, nozzleDiameterMm: 300 },
+  { name: "Vandjord VSL.300.450.4.5.1D", capacityMinM3h: 800, capacityMaxM3h: 1080, headMinM: 0, headMaxM: 27, nozzleDiameterMm: 300 },
+  { name: "Vandjord VSL.300.550.4.5.1D", capacityMinM3h: 800, capacityMaxM3h: 1100, headMinM: 0, headMaxM: 32, nozzleDiameterMm: 300 },
+  { name: "Vandjord VSL.300.750.4.5.1D", capacityMinM3h: 800, capacityMaxM3h: 1100, headMinM: 0, headMaxM: 40, nozzleDiameterMm: 300 },
+  { name: "Vandjord VSL.300.900.4.5.1D", capacityMinM3h: 800, capacityMaxM3h: 1100, headMinM: 0, headMaxM: 44, nozzleDiameterMm: 300 },
+  { name: "Vandjord VSL.400.450.6.5.1D", capacityMinM3h: 1200, capacityMaxM3h: 1800, headMinM: 0, headMaxM: 18, nozzleDiameterMm: 400 },
+  { name: "Vandjord VSL.400.550.6.5.1D", capacityMinM3h: 1200, capacityMaxM3h: 1800, headMinM: 0, headMaxM: 20, nozzleDiameterMm: 400 },
 ]
 
 export interface PumpSelectionWarning {

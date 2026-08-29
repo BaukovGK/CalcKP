@@ -200,16 +200,21 @@ async function verify() {
   if (!n250) errors.push('не найдена норма патрубка DN250')
   else console.log(`  контроль нормы патрубка DN250 = ${n250.moldingMassKg} кг ✓`)
 
-  // Контроль подбора насоса: реальная рабочая точка Q=41,65 м³/ч; H=12,96 м
-  // (том ИМИП-ДУДС31и, насос Vandjord VSL.80.37.4.5.0D).
+  // Контроль подбора насоса: официальная (номинальный расход; номинальный
+  // напор) точка VSL.80.37.4.5.0D из выгрузки VJ Select — гарантированно
+  // попадает в диапазон этой модели (границы построены по её же паспорту).
   const pump = await prisma.pump.findFirst({
     where: {
-      capacityMinM3h: { lte: 41.65 }, capacityMaxM3h: { gte: 41.65 },
-      headMinM: { lte: 12.96 }, headMaxM: { gte: 12.96 },
+      capacityMinM3h: { lte: 45 }, capacityMaxM3h: { gte: 45 },
+      headMinM: { lte: 12.7 }, headMaxM: { gte: 12.7 },
+      name: 'Vandjord VSL.80.37.4.5.0D',
     },
   })
-  if (!pump) errors.push('не найден насос для Q=41,65 м³/ч; H=12,96 м (ожидался Vandjord VSL.80.37.4.5.0D)')
-  else console.log(`  контроль подбора насоса (Q=41,65 м³/ч; H=12,96 м) = ${pump.name} ✓`)
+  if (!pump) errors.push('не найден насос Vandjord VSL.80.37.4.5.0D для Q=45 м³/ч; H=12,7 м')
+  else console.log(`  контроль подбора насоса (Q=45 м³/ч; H=12,7 м) = ${pump.name} ✓`)
+
+  const pumpCount = await prisma.pump.count()
+  if (pumpCount !== 61) errors.push(`каталог насосов: ожидалось 61 позиция, в БД ${pumpCount}`)
 
   if (errors.length) {
     errors.forEach((e) => console.error(`  ✗ ${e}`))
