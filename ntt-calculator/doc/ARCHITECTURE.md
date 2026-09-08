@@ -1,6 +1,6 @@
 # НТТ Калькулятор — Архитектура системы
 
-> Актуализировано 2026-07-20 по фактическому коду. Прежняя редакция описывала
+> Актуализировано 2026-09-08 по фактическому коду. Прежняя редакция описывала
 > раннюю задумку (серверные движки BOM, свободное дерево связок) — реализация
 > ушла на другую модель, см. §4 и §6.
 
@@ -22,7 +22,7 @@
 | Слой | Технологии |
 |---|---|
 | Frontend | Vue 3.5 (Composition API), TypeScript, Vite, Pinia, Vue Router, Axios, Vitest |
-| Backend | Node.js 20, Express 4, TypeScript, Prisma ORM, Zod, JWT |
+| Backend | Node.js ≥20, Express 5, TypeScript, Prisma ORM, Zod, JWT (jose), Vitest |
 | БД | PostgreSQL 16 (docker compose), справочники в таблицах |
 | Развёртывание | Docker Compose (`docker-compose.yml` в корне), проверка — `verify.ps1` |
 
@@ -33,10 +33,15 @@
 ├── ntt-calculator/              Vue 3 фронтенд
 │   └── src/
 │       ├── api/                 HTTP-клиенты: client, estimates, projects,
-│       │                        prices, refs, admin
-│       ├── composables/         useKnsSurvey, useEmkKolSurvey, useTheme, useToast
+│       │                        prices, refs, templates, admin
+│       ├── composables/         useKnsSurvey, useEmkKolSurvey, usePipeOverride
+│       │                        (труба корпуса: PN/SN с ручным override),
+│       │                        useTheme, useToast
 │       ├── engines/             ЧИСТАЯ расчётная библиотека (покрыта тестами):
+│       │   ├── types.ts         контракт расчёта строки (EngineRow, RowResult)
 │       │   ├── row.ts           расчёт строки (qty/price/sum, overrides)
+│       │   ├── formulas.ts      реестр именованных формул количеств
+│       │   │                    (DSL не вводится — формулы живут в коде)
 │       │   ├── economics.ts     экономический хвост (корзины, ПЗР/СИЗ/ацетон,
 │       │   │                    наценка, цена продажи)
 │       │   ├── fot.ts           ФОТ-спутники (k = 0,28 / 0,56 / 1,0)
@@ -48,20 +53,22 @@
 │       │   ├── template-kns.ts  материализация дерева КНС (7 разделов)
 │       │   └── template-emk-kol.ts материализация ЕМК (8) и КОЛ (7);
 │       │                        общие узлы переиспользуются из template-kns
-│       ├── stores/              Pinia: auth, projects, estimates, prices,
+│       ├── stores/              Pinia: auth, projects, estimates
 │       │   └── calcTree.ts      ГЛАВНЫЙ стор: загрузка расчёта, материализация,
 │       │                        рематериализация при изменении ОЛ, overrides,
 │       │                        конфликты, экономика, сохранение
 │       ├── types/               survey.ts (SurveyCommonForm, KnsSurveyForm),
-│       │                        survey-emk-kol.ts (Emk/KolSurveyForm), ui.ts
+│       │                        survey-emk-kol.ts (Emk/KolSurveyForm),
+│       │                        device.ts (DeviceType), ui.ts
 │       └── views/
 │           ├── LoginView, DashboardView (проекты), ProjectView
 │           ├── SurveyView       ЕДИНЫЙ опросный лист /survey/:id? —
 │           │                    ветвление по типу изделия; ветки:
 │           ├── SurveyKnsView / SurveyEmkView / SurveyKolView
-│           ├── CalculatorTreeView конфигуратор расчёта /calculator/:id
+│           ├── CalculatorTreeView конфигуратор расчёта /calculator/:id?
 │           ├── PurchaseRequestView заявка на закупку /calculator/:id/purchase
 │           ├── PricesView       реестр цен + импорт xlsx
+│           ├── TemplatesView    редактор шаблонов /templates (TECHNOLOG)
 │           └── AdminView        пользователи, аудит
 │
 ├── backend/
@@ -69,13 +76,18 @@
 │   │   ├── app.ts               Express, монтирование роутеров
 │   │   ├── middleware/          auth (JWT), rbac, validate (Zod), errorHandler
 │   │   ├── routes/              auth, estimates, projects, prices, purchase,
-│   │   │                        refs, admin
+│   │   │                        refs, templates, pump-station, admin
 │   │   └── utils/               prisma, jwt, audit, logger, nn-sheet (импорт
-│   │                            прайса), estimate-tree (обход дерева для гейтов)
+│   │                            прайса), estimate-tree (обход дерева: гейты и
+│   │                            спецификация КП), kp-document + kp-docx/kp-pdf
+│   │                            (печатная форма КП), pump-station-dimensions,
+│   │                            ring-stiffness, pipe-hydraulics, pump-selection
+│   │                            (подбор насосной станции, §4); рядом *.test.ts
 │   └── prisma/
 │       ├── schema.prisma        схема БД
 │       ├── seed.ts + seed-data/ сид: пользователи, прайс (1043 позиции),
-│       │                        веса труб, инженерные матрицы, нормы патрубков
+│       │                        веса труб, инженерные матрицы, нормы патрубков,
+│       │                        каталог насосов (61 модель Vandjord VSL)
 │       └── migrations/
 │
 ├── doc/ (в корне)               ТЗ, Механика_калькулятора, Библиотека, Реверс
@@ -84,15 +96,45 @@
 
 ## 4. Где считается расчёт (ключевое решение)
 
-**Вся расчётная математика — на клиенте** (`ntt-calculator/src/engines/*`).
-Сервер расчёт НЕ выполняет: он хранит `surveyData` (JSON) и валидирует
-инварианты на гейтах (строки без цены блокируют выпуск КП и переход
-CALC→REVIEW — `backend/src/utils/estimate-tree.ts`).
+**Вся математика СМЕТЫ — на клиенте** (`ntt-calculator/src/engines/*`).
+Сервер смету НЕ считает: он хранит `surveyData` (JSON) и валидирует инвариант
+на единственном гейте — строки без цены блокируют выпуск КП
+(`backend/src/utils/estimate-tree.ts:91` → `routes/estimates.routes.ts:304`).
+Переход дерева в спецификацию печатной формы — там же
+(`estimate-tree.ts:129`, `extractSpecification`).
 
 Обоснование: формулы итеративно сверяются с эталонными Excel; один движок
-на TypeScript с юнит-тестами (263 шт.) проще держать верным, чем два.
+на TypeScript с юнит-тестами (264 шт.) проще держать верным, чем два.
 Плата — итог (`totalRub`) приходит с клиента и фиксируется на сервере при
 сохранении; целостность обеспечивают снапшоты и аудит.
+
+**Исключение — подбор насосной станции.** Габарит корпуса, кольцевая
+жёсткость, диаметр напорного трубопровода и марка насоса считаются НА
+СЕРВЕРЕ: `backend/src/utils/pump-station-dimensions.ts:199`,
+`ring-stiffness.ts:36`, `pipe-hydraulics.ts:68`, `pump-selection.ts:161`
+(эндпоинты — §8). Причина: подбор насоса ходит в каталог `Pump` в БД, а
+значит нужен серверу. Между собой четыре функции не связаны — каждый
+эндпоинт независим, `selectPump` результатов остальных не принимает
+(`backend/src/utils/pump-selection.ts:161`). Контур обособлен: фронт
+`/api/pump-station` пока не вызывает, результаты в дерево расчёта не
+заводятся, а арифметика глубины продублирована с `engines/survey-kns.ts`
+(`computeDepth`) — общего пакета у фронта и бэка нет (ROADMAP, «Технический
+долг»).
+
+Ступени кольцевой жёсткости в обоих контурах одни и те же, но входы разные.
+Реальных жёсткостей две — производство делает трубу SN 5000 либо SN 10000
+(`engines/survey-kns.ts:134`, `SN_BASE`), и к ним сведён АВТОПОДБОР. Ручной
+override в ОЛ по-прежнему предлагает прежнюю лестницу 1250/2500/5000/10000
+(`SN_LIST` — `views/SurveyKnsView.vue:346`, `SurveyEmkView.vue:240`,
+`SurveyKolView.vue:236`); выбранное инженером значение проходит через
+`usePipeOverride` в `derived.sn` и дальше в ключ поиска веса трубы, то есть
+SN 1250 опросный лист выдаёт, если его выбрать руками. Автоподбор на фронте —
+`snByDepth()`: смотрит на Нподз (> 7000 мм → 10000) и на флаг «под проезжей
+частью», ТТ МВК жёсткость не меняет; обозначение для заказчика — 8000
+и 12000 — даёт `snDesignation()` (та же труба с двумя нитками ровинга: вес
+и трудоёмкость считаются по реальной жёсткости). На бэке `calcRingStiffnessPa()` —
+матрица 2×2 (`ring-stiffness.ts:20`) по «глубина подводящего патрубка + 2 м»
+против порога 7 м и признаку ТТ МВК, и обозначение уже вшито в результат.
 
 ## 5. Модель данных расчёта
 
@@ -124,8 +166,11 @@ CalcTree
                             parentId+fotK у ФОТ-спутников
 ```
 
-Разделы: КНС — 7, ЕМК — 8 (+корзина, шахта; напорный только при насосах),
-КОЛ — 7 (без напорного, + горловина). Раздел «Оборудование» у ЕМК/КОЛ
+Разделы: КНС — 7, ЕМК — 8 (те же плюс «Корзина»; «Напорный трубопровод»
+остаётся пустым каркасом без насосов), КОЛ — 7 (плюс «Корзина», без
+напорного — насосов в колодце нет). «Шахта обслуживания» у ЕМК и «Горловина»
+у КОЛ — не разделы, а компоненты внутри «Корпуса», включаются флагом ОЛ
+(`template-emk-kol.ts:370` и `:487`). Раздел «Оборудование» у ЕМК/КОЛ
 материализуется пустым — состав вариативен, строки добавляются вручную.
 
 ### Рематериализация (Механика §8.3)
@@ -154,7 +199,8 @@ ROUNDUP до 100 ₽ → рентабельность. ПЗР входит в «
 ```
 проект → единый ОЛ (/survey?project=…) → расчёт (projectId) →
 конфигуратор (/calculator/:id) ⇄ правка ОЛ (/survey/:id) →
-[Сформировать КП] → гейт «нет строк без цены» (бэк) → снапшот
+[Сформировать КП] → гейт «нет строк без цены» (бэк) → снапшот →
+[Версии → docx | pdf] → печатная форма ИЗ СНАПШОТА
 ```
 
 Статусы: DRAFT → CALC (автоматически при первом сохранении). Согласование
@@ -162,6 +208,12 @@ ROUNDUP до 100 ₽ → рентабельность. ПЗР входит в «
 бэк отклоняет с кодом `STATUS_FLOW_REMOVED`; значения остались в enum ради
 старых расчётов. REJECTED — административная отбраковка (ADMIN). Точка
 фиксации процесса — выпуск КП (гейт + снапшот), Механика §10.
+
+Расчёт после выпуска КП НЕ замораживается — правка продолжается, это
+следующий шаг процесса. Поэтому печатная форма строится из снапшота, а не из
+текущего дерева, а удаление расчёта, по которому есть снапшоты, отклоняется:
+422 `ESTIMATE_HAS_SNAPSHOTS` (`routes/estimates.routes.ts:223`) — снапшот
+подтверждает цену, ушедшую заказчику.
 
 ## 7. Роли и доступ
 
@@ -175,8 +227,9 @@ ROUNDUP до 100 ₽ → рентабельность. ПЗР входит в «
 | Пользователи, аудит | — | — | — | — | — | ✓ |
 
 `VIEWER` — наблюдатель: видит все проекты и расчёты (конфигуратор в режиме
-«только просмотр» — бейдж «👁 просмотр», ввод заблокирован, история версий
-доступна), запись отвергается и на бэке. Роль предназначена для интеграции
+«только просмотр» — бейдж «👁 просмотр», ввод заблокирован, история версий и
+выгрузка печатной формы КП доступны — чтение шире записи, `canReadEstimate`),
+запись отвергается и на бэке. Роль предназначена для интеграции
 с Битрикс24: приложение планируется встраивать вкладкой «Расчёт» в карточку
 сделки (iframe, вёрстка выживает при 1000px — заложено в хендоффе), и
 пользователи Битрикс входят наблюдателями.
@@ -190,11 +243,14 @@ GET|POST /api/projects                GET|PATCH|DELETE /api/projects/:id
 POST   /api/projects/:id/estimates    создать расчёт в проекте
 
 GET|POST /api/estimates               GET|DELETE /api/estimates/:id
-PATCH  /api/estimates/:id/survey      мёрж surveyData + запись totalRub из totals
-PATCH  /api/estimates/:id/status      таблица переходов + гейт красных строк
+PATCH  /api/estimates/:id/survey      мёрж surveyData (zod-схема) + totalRub
+PATCH  /api/estimates/:id/status      DRAFT→CALC и →REJECTED; REVIEW/APPROVED
+                                      отклоняются (STATUS_FLOW_REMOVED)
 POST   /api/estimates/:id/snapshot    ручное версионирование
 POST   /api/estimates/:id/kp          выпуск КП: гейт + снапшот
-GET    /api/estimates/:id/kp/export   501 — ждём образец документа
+GET    /api/estimates/:id/kp/export?format=docx|pdf[&version=N]
+                                      печатная форма из снапшота; без снапшотов
+                                      — 422 KP_NOT_ISSUED
 GET    /api/estimates/:id/snapshots   история версий
 POST   /api/estimates/:id/purchase-request/export   заявка на закупку (xlsx)
 
@@ -202,11 +258,18 @@ GET    /api/prices                    PATCH /api/prices/:id
 POST   /api/prices/import             импорт xlsx (лист НН)
 
 GET    /api/refs/nomenclature | /pipe-weights | /engineering
+GET    /api/refs/price-version        активная версия прайса = MAX(version)
 
 Редактор шаблонов (TECHNOLOG/ADMIN; чтение — через /api/refs):
 PUT|DELETE /api/templates/nozzle-norms/:dn    нормы патрубков (upsert по DN)
 PUT|DELETE /api/templates/pipe-weights        веса GRP (ключ dn+pn+sn)
 PUT    /api/templates/engineering             ячейка матрицы (kind+d+lengthMm)
+
+Подбор насосной станции (любая авторизованная роль, §4):
+POST   /api/pump-station/dimensions              габарит корпуса (DN, Нподз)
+POST   /api/pump-station/ring-stiffness          SN по глубине + признаку ТТ МВК
+POST   /api/pump-station/discharge-pipe-diameter диаметр напорного по расходу
+POST   /api/pump-station/select-pump             марка насоса по рабочей точке
 
 GET    /api/admin/users               POST/PATCH пользователи
 GET    /api/admin/audit               GET /api/health
@@ -229,6 +292,8 @@ PipeWeight       веса труб GRP: (dn, pn, sn) → кг/м
 PePipe           веса ПЭ-труб
 EngineeringMatrix матрица «Для расчетов» (enum MatrixKind)
 NozzleNorm       нормы патрубков: DN → масса формовки гильзы
+Pump             каталог насосов: name @unique, диапазоны расхода и напора,
+                 DN патрубка (61 модель Vandjord VSL; §4, подбор НС)
 AuditLog         аудит действий (append-only)
 ```
 
@@ -237,13 +302,25 @@ AuditLog         аудит действий (append-only)
 ### Готово
 - Полный поток: проекты → единый ОЛ (ветвление КНС/ЕМК/КОЛ, создание и
   редактирование) → материализация → конфигуратор (overrides, конфликты,
-  каталог, экономика, тираж) → КП (гейт+снапшот) → заявка на закупку (xlsx)
+  каталог, экономика, тираж) → КП (гейт+снапшот) → печатная форма (docx/pdf)
+  → заявка на закупку (xlsx)
 - Рематериализация при изменении ОЛ с переносом правок и конфликтами
+- Экран истории версий: окно «Версии» в конфигураторе (список снапшотов,
+  ручная фиксация, выгрузка КП по каждой редакции)
+- Редактор шаблонов `/templates` (TECHNOLOG): нормы патрубков, веса труб GRP,
+  матрица корпуса, эллиптические днища — upsert с аудитом; удаление есть
+  только у норм патрубков и весов труб (у матриц DELETE-роута нет, §8)
+- Подбор насосной станции на бэке (§4): габарит корпуса, SN по правилу завода,
+  гидравлика напорного трубопровода, каталог насосов
 - Backend: авторизация JWT, RBAC, все роутеры, аудит, сид справочников
-- Docker Compose, verify.ps1; движки покрыты юнит-тестами (263)
+- Docker Compose, verify.ps1, CI (`.github/workflows/ci-cd.yml`);
+  тесты: фронт 281 (из них движки — 264), бэк 93, `npm test` в обоих пакетах
 
 ### Не сделано / отложено
-- Печатная форма КП (501 — ждём образец от заказчика)
-- Экран истории снапшотов (бэк готов, UI нет)
-- Редактор шаблонов для роли TECHNOLOG
+- Вёрстка печатной формы КП временная: образца от заказчика нет, состав
+  собран по здравому смыслу; два неочевидных решения (цены не построчно,
+  НДС «в том числе») объяснены в `backend/src/utils/kp-document.ts`
+- Подбор НС к фронту не подключён: `/api/pump-station` никто не вызывает,
+  результаты в дерево расчёта не заводятся
+- Экспорт сметы в Excel (ТЗ §7) — отложен решением 2026-07-20
 - Массы днищ/шахты ЕМК — ручной ввод (нет матрицы масс от завода)

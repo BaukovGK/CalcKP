@@ -1,6 +1,6 @@
 # Потоки данных и компоненты
 
-> Актуализировано 2026-07-20 по фактическому коду.
+> Актуализировано 2026-09-08 по фактическому коду.
 
 ## 1. Компонентное дерево (живое)
 
@@ -15,14 +15,21 @@ App.vue → RouterView
 │   ├── SurveyKnsView             ветка КНС (собственный каркас .ol)
 │   ├── SurveyEmkView             ветка ЕМК ┐
 │   └── SurveyKolView             ветка КОЛ ┴ оба на SurveyShell
-│       └── survey/: SurveyShell, ToggleYesNo, CalcField
-├── CalculatorTreeView            /calculator/:id   конфигуратор
-│   └── CalcTableRow              строка дерева (все состояния ячеек)
+│       └── survey/: SurveyShell, ToggleYesNo (CalcField — только у КНС)
+├── CalculatorTreeView            /calculator/:id?  конфигуратор
+│   ├── CalcTableRow              строка дерева (все состояния ячеек)
+│   └── модал «История версий»    снапшоты + docx/pdf по каждой редакции
 ├── PurchaseRequestView           /calculator/:id/purchase
 ├── PricesView                    /prices
+├── TemplatesView                 /templates  редактор шаблонов (TECHNOLOG):
+│                                 4 вкладки справочников материализации
 └── AdminView                     /admin
-ui/: BaseModal, ContextMenu, ThemeToggle, ToastHost
+ui/: BaseModal, ThemeToggle, ToastHost
 ```
+
+`components/ui/ContextMenu.vue` в это дерево не входит: он не импортируется
+ни одним экраном (как и `dashboard/EstimateCard.vue` — ROADMAP, «Технический
+долг»).
 
 ## 2. Сквозной поток данных
 
@@ -44,6 +51,9 @@ ProjectView «＋ Добавить единицу»
                                      → конфликты «было → стало»
    → «Сформировать КП»             POST /estimates/:id/kp
                                      бэк: rowsWithoutPrice() гейт → снапшот
+   → «Версии» → docx | pdf         GET /estimates/:id/kp/export?format=…&version=N
+                                     бэк: снапшот → buildKpDocument() →
+                                     renderKpDocx | renderKpPdf → blob
    → «Экспорт»                     /calculator/:id/purchase → xlsx
 ```
 
@@ -51,9 +61,12 @@ ProjectView «＋ Добавить единицу»
 
 ```
 load(id):
-  параллельно: estimate, прайс (nomenclature), веса труб, инж. матрицы
+  параллельно: estimate, прайс (nomenclature), веса труб, инж. матрицы,
+               активная версия прайса (/refs/price-version)
   → индексы: priceIdx (категория|имя|ЕИ), weightIdx (dn|pn|sn), normIdx (dn)
   → rates: 4 ставки из прайса (fallback — константы)
+  → totals: markup и tirage восстанавливаются из surveyData ДО первого
+    recalcAll() — иначе переоткрытие молча возвращало 0,43 и 1 корпус
   → дерево: saved.tree (если ОЛ не менялся) | рематериализация | материализация
 
 производные (computed):
@@ -65,19 +78,48 @@ load(id):
 
 действия: setQtyManual/setPriceManual/resetQty/resetPrice,
   toggleSection/toggleComponent, keepOverride/dropOverride,
-  addRow/removeRow (только isCustom), save()
+  addRow/removeRow (только isCustom), save(),
+  clear() — сброс наценки/тиража/версии прайса: стор синглтон, иначе
+    параметры предыдущего расчёта перетекали в следующий
 ```
 
-Правило: компоненты НЕ считают ничего сами — вся арифметика в `engines/*`,
-стор только держит состояние и вызывает движок.
+Правило: компоненты НЕ считают строку — количество, цена и сумма приходят
+из `engines/*`, стор держит состояние и вызывает движок.
+
+Витринные подытоги — исключение: `CalculatorTreeView.vue:436` (`sumOf`)
+складывает готовые `results[*].sum` по разделу (`sectionSum` :439) и
+компоненту (`componentSum` :445), там же перевод рентабельности в проценты
+(:353, :355); `PurchaseRequestView.vue:122` суммирует свои строки тем же
+способом. Новых формул это не вводит — только сложение результатов движка.
 
 ## 4. Серверная сторона
 
-Сервер расчёт не выполняет. `Estimate.surveyData` — единый JSON-документ
+Смету сервер не считает. `Estimate.surveyData` — единый JSON-документ
 (ОЛ + дерево + totals). Точки контроля:
 
-- `PATCH /estimates/:id/survey` — мёрж JSON, запись `totalRub` из totals,
-  DRAFT→CALC при первом сохранении, заморозка APPROVED/REJECTED
-- `PATCH /estimates/:id/status` — таблица переходов по ролям;
-  CALC→REVIEW блокируется строками без цены (estimate-tree.ts)
-- `POST /estimates/:id/kp` — тот же гейт + снапшот с версией прайса
+- `PATCH /estimates/:id/survey` — мёрж JSON под zod-схемой (`tree`,
+  `surveyRev`/`treeSurveyRev`, `totals` типизированы, остальные ключи
+  проходят passthrough: тело шлют четыре источника — стор калькулятора
+  (`calcTree.save()`) и три экрана ОЛ), запись `totalRub` из
+  `totals.salePriceRub`, DRAFT→CALC при первом сохранении, заморозка
+  APPROVED/REJECTED
+- `POST /estimates/:id/kp` — единственный гейт «нет строк без цены»
+  (`rowsWithoutPrice`, estimate-tree.ts:91) + снапшот с версией прайса
+- `PATCH /estimates/:id/status` — переходы сведены к DRAFT→CALC и →REJECTED;
+  REVIEW/APPROVED безусловно отклоняются (422 `STATUS_FLOW_REMOVED`,
+  estimates.routes.ts:128), гейта по строкам без цены здесь нет
+- `DELETE /estimates/:id` — 422 `ESTIMATE_HAS_SNAPSHOTS`, если по расчёту
+  есть снапшоты: связь `onDelete: Cascade` иначе молча стирала историю
+  выпущенных КП
+- `GET /estimates/:id/kp/export` — снапшот → `buildKpDocument()`
+  (kp-document.ts:98, спецификация без цен строк + НДС «в том числе»)
+  → `renderKpDocx` | `renderKpPdf`; чтение шире записи — VIEWER документ
+  скачивает. Аудит: `estimate.kp.export`
+- `GET /refs/price-version` — активная версия прайса `MAX(version)`; до неё
+  фронт держал версию захардкоженной единицей, и топбар расходился со
+  снапшотом
+
+Отдельный контур — `POST /api/pump-station/*` (габарит НС, SN, диаметр
+напорного, подбор насоса): чистые функции бэка плюс каталог `Pump` в БД.
+Фронт их пока не вызывает, в `surveyData` результаты не попадают
+(ARCHITECTURE §4).

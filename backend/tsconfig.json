@@ -15,5 +15,9 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  // Тесты не попадают в сборку: в рантайм-образе они не нужны, а собранные
+  // dist/**/*.test.js ещё и подхватывались vitest'ом и падали («Vitest cannot
+  // be imported in a CommonJS module») — CI ломался на шаге npm test, который
+  // идёт после npm run build.
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
 }
