@@ -61,9 +61,26 @@ export interface EngineeringRefs {
   nozzles: NozzleNorm[]
 }
 
+/** Активная версия прайса (ТЗ §3): та, из которой считается расчёт сейчас. */
+export interface PriceVersionInfo {
+  version: number
+  label: string
+  createdAt: string | null
+}
+
 export const refsApi = {
   nomenclature(): Promise<Nomenclature> {
     return api.get<Nomenclature>('/refs/nomenclature').then((r) => r.data)
+  },
+
+  /**
+   * Активная версия прайса — MAX(version) на сервере.
+   *
+   * До появления этого вызова калькулятор держал версию захардкоженной
+   * единицей и всегда показывал «НН v1», хотя снапшот фиксировал настоящую.
+   */
+  priceVersion(): Promise<PriceVersionInfo> {
+    return api.get<PriceVersionInfo>('/refs/price-version').then((r) => r.data)
   },
 
   /** Инженерные матрицы (ТЗ §7): корпус, эллиптические днища, нормы патрубков. */

@@ -206,6 +206,22 @@ estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) =>
     if (!['DRAFT', 'CALC', 'REJECTED'].includes(estimate.status)) {
       res.status(422).json({ message: 'Утверждённый расчёт удалить нельзя' }); return
     }
+    // Снапшот — точка фиксации: он снимается при выпуске КП и хранит, из каких
+    // цен родилась цифра в документе, ушедшем заказчику (Механика §10).
+    // Статус после выпуска КП остаётся рабочим (CALC), поэтому проверки статуса
+    // выше недостаточно, а EstimateSnapshot.estimateId — onDelete: Cascade:
+    // удаление расчёта молча стирало историю выпущенных КП.
+    const snapshotCount = await prisma.estimateSnapshot.count({ where: { estimateId: id } })
+    if (snapshotCount > 0) {
+      res.status(422).json({
+        message:
+          `Расчёт удалить нельзя: по нему зафиксировано версий — ${snapshotCount} ` +
+          '(выпуск КП или ручная фиксация). Снапшоты подтверждают цену, ушедшую заказчику.',
+        code: 'ESTIMATE_HAS_SNAPSHOTS',
+        snapshotCount,
+      })
+      return
+    }
 
     await prisma.estimate.delete({ where: { id } })
     res.status(204).send()
@@ -383,8 +399,43 @@ estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunct
   } catch (e) { next(e) }
 })
 
+/**
+ * Тело PATCH /:id/survey.
+ *
+ * Маршрут — единственный пишущий вход в расчёт, и его тело мержится в
+ * `surveyData` целиком, а `totals.salePriceRub` уходит в колонку `totalRub`,
+ * по которой считают карточки проекта и снапшоты. Без схемы сюда проходило
+ * что угодно: строка вместо суммы, NaN, подменённая структура дерева.
+ *
+ * Схема намеренно НЕ строгая по составу: тело шлют четыре разных источника —
+ * стор калькулятора (`stores/calcTree.ts`, save) и три экрана опросного листа
+ * (`views/Survey*View.vue`, surveyPayload), у каждого свой набор полей ОЛ.
+ * Поэтому неизвестные ключи проходят (passthrough), а типизированы те, от
+ * которых зависят деньги и материализация.
+ */
+const surveyPatchSchema = z
+  .object({
+    /** Дерево расчёта целиком (CalcTree). Структуру валидирует движок. */
+    tree: z.object({}).passthrough().optional(),
+    /** Ревизия ОЛ, из которой построено дерево, — гейт рематериализации. */
+    treeSurveyRev: z.number().int().min(0).optional(),
+    /** Ревизия ОЛ. Растёт при каждом сохранении опросного листа. */
+    surveyRev: z.number().int().min(0).optional(),
+    totals: z
+      .object({
+        costRub: z.number().finite().min(0).optional(),
+        // Именно это значение попадает в Estimate.totalRub.
+        salePriceRub: z.number().finite().min(0).optional(),
+        markup: z.number().finite().min(0).max(100).optional(),
+        tirage: z.number().int().min(1).max(1000).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
+
 // PATCH /api/estimates/:id/survey
-estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), async (req, res: Response, next: NextFunction) => {
+estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), validate(surveyPatchSchema), async (req, res: Response, next: NextFunction) => {
   try {
     const auth = req as AuthRequest
     const id   = String(req.params.id)

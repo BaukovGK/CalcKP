@@ -30,6 +30,38 @@ refsRouter.get('/nomenclature', async (_req, res, next) => {
 })
 
 /**
+ * GET /api/refs/price-version — активная версия прайса (ТЗ §3).
+ *
+ * «Прайс версионируется целиком… активная версия фиксируется в snapshot
+ * расчёта». Активная = MAX(version); импорт прайса создаёт новую
+ * (см. `prices.routes.ts`, POST /import).
+ *
+ * Нужен калькулятору: до этого фронт держал `priceListVersion = ref(1)`
+ * захардкоженной константой, поэтому топбар всегда показывал «НН v1», какой бы
+ * прайс ни был импортирован. Снапшот при этом писал настоящую версию — и
+ * расходился с тем, что видел инженер.
+ *
+ * Пустая таблица (БД засеяна до появления версий) → version 1: то же значение,
+ * что подставляет снапшот (`estimates.routes.ts`, createSnapshot).
+ */
+refsRouter.get('/price-version', async (_req, res, next) => {
+  try {
+    const active = await prisma.priceListVersion.findFirst({
+      orderBy: { version: 'desc' },
+      select: { version: true, label: true, createdAt: true },
+    })
+
+    res.json({
+      version: active?.version ?? 1,
+      label: active?.label ?? 'НН v1',
+      createdAt: active?.createdAt ?? null,
+    })
+  } catch (e) {
+    next(e)
+  }
+})
+
+/**
  * GET /api/refs/engineering — инженерные матрицы листа «Для расчетов»
  * (ТЗ §7, приоритет высокий; Реверс §9.3).
  *
@@ -74,7 +106,12 @@ refsRouter.get('/engineering', async (_req, res, next) => {
  *
  * ⚠️ PN здесь — это PN_ТРУБЫ (автоподбор, ячейка F7 эталона), а НЕ PN
  * опросного листа (ТЗ §9.4). Домены: PN {0,6; 1; 1,6}, SN {2500; 5000; 10000};
- * PN = 0,1 и SN = 1250 из ОЛ в справочнике отсутствуют — искать по ним нельзя.
+ * PN = 0,1 из ОЛ в справочнике отсутствует — искать по нему нельзя.
+ *
+ * SN 1250 здесь тоже нет, но с переходом на правило завода (`utils/ring-stiffness.ts`,
+ * `engines/survey-kns.ts` → SN_BASE) опросный лист его больше не выдаёт: домен
+ * подбора сузился до {5000; 10000}, обозначения 8000/12000 по ТТ МВК — та же
+ * труба, вес берётся из строк 5000 и 10000.
  */
 refsRouter.get('/pipe-weights', async (_req, res, next) => {
   try {

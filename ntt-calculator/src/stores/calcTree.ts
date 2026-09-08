@@ -76,13 +76,17 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     loading.value = true
     error.value = null
     try {
-      const [est, prices, weights, engineering] = await Promise.all([
+      const [est, prices, weights, engineering, priceVersion] = await Promise.all([
         estimatesApi.get(id),
         refsApi.nomenclature(),
         refsApi.pipeWeights(),
         refsApi.engineering(),
+        refsApi.priceVersion(),
       ])
       estimate.value = est
+      // Настоящая версия прайса, а не константа: снапшот фиксирует именно её,
+      // и топбар обязан показывать то же самое (ТЗ §3).
+      priceListVersion.value = priceVersion.version
 
       // Индексы справочников: поиск по тройке (категория, наименование, ЕИ)
       // и по (DN; PN_трубы; SN) — ровно как VLOOKUP эталона.
@@ -123,6 +127,18 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       const savedRev = typeof saved.surveyRev === 'number' ? saved.surveyRev : 0
       const builtRev = typeof saved.treeSurveyRev === 'number' ? saved.treeSurveyRev : 0
       conflictsKept.value = new Set()
+
+      // Наценка и тираж: save() их пишет, load() раньше не читал — после
+      // переоткрытия расчёт молча возвращался к 0,43 и 1 корпусу, а следующее
+      // сохранение затирало сохранённое. Оба параметра влияют на цену продажи,
+      // поэтому восстанавливаются до первого recalcAll().
+      const savedTotals = (saved.totals ?? {}) as Record<string, unknown>
+      markup.value = typeof savedTotals.markup === 'number' && Number.isFinite(savedTotals.markup)
+        ? savedTotals.markup
+        : DEFAULT_MARKUP
+      tirage.value = typeof savedTotals.tirage === 'number' && Number.isInteger(savedTotals.tirage) && savedTotals.tirage >= 1
+        ? savedTotals.tirage
+        : 1
 
       const savedTree = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
 
@@ -495,10 +511,19 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     tree.value = null
     conflictsKept.value = new Set()
     prevQtyCalc.value = {}
+    // Стор — синглтон Pinia: без сброса наценка и тираж предыдущего расчёта
+    // перетекали в следующий и молча меняли его цену продажи.
+    markup.value = DEFAULT_MARKUP
+    tirage.value = 1
+    priceListVersion.value = 1
   }
 
   return {
     estimate, tree, rates, markup, tirage, loading, error, catalog,
+    // Активная версия прайса на сервере. Отличается от tree.priceListVersion,
+    // который хранит версию, из которой расчёт был материализован, — топбар
+    // показывает именно её.
+    priceListVersion,
     rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, enabledFor, prevQtyCalc,
     load, save, clear, recalcAll,
     setQtyManual, setPriceManual, resetQty, resetPrice,

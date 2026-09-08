@@ -667,13 +667,20 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
           qtyCalc: gates,
           note: `ƒ = подводящих (${s.inletCount}) × флаг «арматура на подводящем»`,
         }),
+        // В прайсе НН есть ровно одна позиция «Кран шаровой» — DN25
+        // («Прочее оборудование»). Напорный DN у КНС обычно 50…300, поэтому
+        // строка почти всегда рождается «красной». Это не промах ключа, а
+        // пробел каталога (doc/Вопросы_заводу.md §3): позицию под нужный DN
+        // инженер выбирает из прайса вручную, как и задвижку выше.
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
           category: 'Прочее оборудование',
           name: `Кран шаровой DN${s.outletDn}`,
           unit: 'шт',
           qtyCalc: balls,
-          note: `ƒ = (раб ${s.pumpsWorking} + рез ${s.pumpsReserve}) + коллектор 1${s.emergencyPipeline ? ' + аварийный 1' : ''}`,
+          note:
+            `ƒ = (раб ${s.pumpsWorking} + рез ${s.pumpsReserve}) + коллектор 1${s.emergencyPipeline ? ' + аварийный 1' : ''}` +
+            (s.outletDn === 25 ? '' : ' · в прайсе только DN25 — выберите позицию вручную'),
         }),
       ],
     },
