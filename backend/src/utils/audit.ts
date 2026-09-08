@@ -19,6 +19,8 @@ export type AuditAction =
   | 'estimate.snapshot'
   /** Выпуск КП — точка фиксации процесса (ТЗ §4.3 v1.5). */
   | 'estimate.kp'
+  /** Выгрузка печатной формы КП (docx/pdf) — документ уходит заказчику. */
+  | 'estimate.kp.export'
   | 'prices.update'
   | 'prices.import'
   | 'user.create'

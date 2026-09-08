@@ -6,6 +6,9 @@ import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { rowsWithoutPrice } from '../utils/estimate-tree'
+import { buildKpDocument } from '../utils/kp-document'
+import { renderKpDocx } from '../utils/kp-docx'
+import { renderKpPdf } from '../utils/kp-pdf'
 import type { Response, NextFunction } from 'express'
 
 export const estimatesRouter = Router()
@@ -334,21 +337,20 @@ estimatesRouter.post(
 /**
  * GET /api/estimates/:id/kp/export?format=docx|pdf — печатная форма КП.
  *
- * ⚠️ ЗАГЛУШКА. Состав формы не специфицирован: образец КП заказчик предоставит
- * позже (решение 2026-07-16). Ни ТЗ, ни хендофф его не описывают — ТЗ §7
- * говорит про «экспорт в PDF/Excel» и описывает СМЕТУ, а не коммерческое
- * предложение; README хендоффа относит КП к непроработанным экранам.
+ * Документ строится ИЗ СНАПШОТА, а не из текущего состояния расчёта: после
+ * выпуска КП расчёт не замораживается и продолжает правиться (Механика §10),
+ * поэтому печатная форма обязана воспроизводить согласованную редакцию.
+ * По умолчанию берётся последний снапшот; `?version=N` печатает конкретную
+ * редакцию из истории.
  *
- * Гадать нельзя: документ уходит заказчику, и по нему идёт согласование
- * (ТЗ §4.3 v1.5).
+ * 422 KP_NOT_ISSUED, если снапшотов нет: печатать нечего — сначала
+ * `POST /api/estimates/:id/kp` (гейт по строкам без цены + снапшот).
  *
- * Реализовано и работает уже сейчас — то, что специфицировано однозначно:
- * `POST /api/estimates/:id/kp` (гейт по красным строкам + снапшот).
- *
- * Осталось при получении образца:
- *  - вёрстка документа по образцу;
- *  - генерация docx (напр. пакет `docx`) и PDF — форматы согласованы;
- *  - шрифты с кириллицей для PDF.
+ * ⚠️ Вёрстка временная. Образец КП от заказчика на момент реализации не
+ * получен (решение 2026-07-16), поэтому состав документа собран по здравому
+ * смыслу, а два неочевидных решения — цены не построчно и НДС «в том числе»,
+ * а не сверху — объяснены в `utils/kp-document.ts`. Замена вёрстки по образцу
+ * затрагивает только `kp-docx.ts` и `kp-pdf.ts`.
  */
 estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunction) => {
   try {
@@ -356,23 +358,79 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
     const id = String(req.params.id)
     const format = String(req.query.format ?? 'docx')
 
-    const estimate = await prisma.estimate.findUnique({ where: { id }, select: { authorId: true } })
-    if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
-    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
-      res.status(403).json({ message: 'Нет доступа' }); return
-    }
     if (!['docx', 'pdf'].includes(format)) {
       res.status(400).json({ message: 'format должен быть docx или pdf' })
       return
     }
+    const versionRaw = req.query.version
+    let version: number | undefined
+    if (versionRaw != null && String(versionRaw) !== '') {
+      version = Number(versionRaw)
+      if (!Number.isInteger(version) || version < 1) {
+        res.status(400).json({ message: 'version должен быть целым числом ≥ 1' })
+        return
+      }
+    }
 
-    res.status(501).json({
-      message: 'Печатная форма КП не реализована: ожидается образец от заказчика',
-      code: 'KP_TEMPLATE_PENDING',
-      format,
-      note: 'Механика выпуска КП работает: POST /api/estimates/:id/kp — гейт по строкам без цены и снапшот. Не хватает только вёрстки документа.',
-      formats: ['docx', 'pdf'],
+    const estimate = await prisma.estimate.findUnique({
+      where: { id },
+      include: { project: { select: { title: true, customer: true, address: true } } },
     })
+    if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+    // Чтение КП шире правки: наблюдатель тоже должен уметь открыть документ.
+    if (!canReadEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+      res.status(403).json({ message: 'Нет доступа' }); return
+    }
+
+    const snapshot = await prisma.estimateSnapshot.findFirst({
+      where: { estimateId: id, ...(version != null ? { version } : {}) },
+      orderBy: { version: 'desc' },
+    })
+    if (!snapshot) {
+      res.status(422).json({
+        message:
+          version != null
+            ? `Редакция ${version} не найдена в истории расчёта`
+            : 'КП по этому расчёту ещё не выпускалось — печатать нечего',
+        code: 'KP_NOT_ISSUED',
+        note: 'Сначала POST /api/estimates/:id/kp — он проверяет строки без цены и снимает снапшот.',
+      })
+      return
+    }
+
+    const doc = buildKpDocument({
+      estimateId: estimate.id,
+      estimateTitle: estimate.title,
+      deviceType: estimate.deviceType,
+      project: estimate.project,
+      snapshot: {
+        version: snapshot.version,
+        priceListVersion: snapshot.priceListVersion,
+        totalRub: snapshot.totalRub,
+        createdAt: snapshot.createdAt,
+        bundlesJson: snapshot.bundlesJson,
+      },
+    })
+
+    const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)
+    const filename = `${doc.number}.${format}`
+
+    await audit(auth.userId, 'estimate.kp.export', 'Estimate', id, {
+      format,
+      snapshotVersion: snapshot.version,
+      positions: doc.positionsCount,
+    })
+
+    res.setHeader(
+      'Content-Type',
+      format === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    // filename* с UTF-8: номер КП содержит кириллицу («КП-…»).
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
+    res.setHeader('Content-Length', String(body.length))
+    res.end(body)
   } catch (e) { next(e) }
 })
 

@@ -89,4 +89,20 @@ export const estimatesApi = {
   kp(id: string): Promise<KpResult> {
     return api.post<KpResult>(`/estimates/${id}/kp`).then((r) => r.data)
   },
+
+  /**
+   * Печатная форма выпущенного КП.
+   *
+   * Строится из снапшота, а не из текущего дерева: расчёт после выпуска КП
+   * продолжает правиться, а документ обязан воспроизводить согласованную
+   * редакцию. Без `version` берётся последняя.
+   */
+  kpExport(id: string, format: 'docx' | 'pdf', version?: number): Promise<Blob> {
+    return api
+      .get(`/estimates/${id}/kp/export`, {
+        params: { format, ...(version != null ? { version } : {}) },
+        responseType: 'blob',
+      })
+      .then((r) => r.data as Blob)
+  },
 }

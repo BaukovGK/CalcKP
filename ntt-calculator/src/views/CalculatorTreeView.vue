@@ -228,7 +228,7 @@
       <div v-else-if="!versions.length" class="ver-state">Версий пока нет</div>
       <table v-else class="ver-tbl">
         <thead>
-          <tr><th>Версия</th><th>Дата</th><th>Прайс</th><th class="num">Итог ₽</th></tr>
+          <tr><th>Версия</th><th>Дата</th><th>Прайс</th><th class="num">Итог ₽</th><th>КП</th></tr>
         </thead>
         <tbody>
           <tr v-for="v in versions" :key="v.id">
@@ -236,6 +236,20 @@
             <td>{{ fmtDateTime(v.createdAt) }}</td>
             <td>НН v{{ v.priceListVersion }}</td>
             <td class="num">{{ v.totalRub ? fmtInt(v.totalRub) : '—' }}</td>
+            <td class="ver-dl">
+              <button
+                class="btn btn-xs"
+                :disabled="kpDownload === `${v.version}:docx`"
+                title="Скачать печатную форму КП в Word"
+                @click="downloadKp(v.version, 'docx')"
+              >docx</button>
+              <button
+                class="btn btn-xs"
+                :disabled="kpDownload === `${v.version}:pdf`"
+                title="Скачать печатную форму КП в PDF"
+                @click="downloadKp(v.version, 'pdf')"
+              >pdf</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -281,6 +295,8 @@ const readOnly = computed(() => auth.role === 'VIEWER')
 
 const saving = ref(false)
 const kpBusy = ref(false)
+/** Какая печатная форма качается прямо сейчас: «<версия>:<формат>». */
+const kpDownload = ref<string | null>(null)
 
 // ── История версий (ТЗ §7): список снапшотов + ручная фиксация ──
 const versionsOpen = ref(false)
@@ -551,8 +567,38 @@ async function onSave() {
 }
 
 /**
+ * Скачать печатную форму КП по конкретной редакции.
+ *
+ * Документ собирается на сервере из снапшота: расчёт после выпуска КП
+ * продолжает правиться, поэтому печатать «текущее состояние» нельзя —
+ * заказчик согласовывал зафиксированное.
+ *
+ * Доступно и наблюдателю: чтение КП шире правки расчёта.
+ */
+async function downloadKp(version: number, format: 'docx' | 'pdf') {
+  if (!st.estimate) return
+  kpDownload.value = `${version}:${format}`
+  try {
+    const blob = await estimatesApi.kpExport(st.estimate.id, format, version)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `КП_${st.estimate.title}_v${version}.${format}`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast(`КП v${version} выгружено (${format})`, 'success')
+  } catch (err) {
+    const r = (err as { response?: { data?: { message?: string } } }).response
+    toast(r?.data?.message ?? 'Не удалось выгрузить КП', 'error')
+  } finally {
+    kpDownload.value = null
+  }
+}
+
+/**
  * Выпуск КП — точка фиксации процесса (ТЗ §4.3 v1.5): гейт по красным строкам
- * и снапшот делает бэк. Печатная форма — заглушка, ждём образец.
+ * и снапшот делает бэк. Печатная форма (docx/pdf) скачивается из окна «Версии»:
+ * она строится из снапшота, а не из текущего дерева.
  */
 async function onKp() {
   if (!st.estimate) return
@@ -624,6 +670,9 @@ onMounted(() => {
   color: var(--faint); padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .ver-tbl td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
 .ver-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ver-dl { white-space: nowrap; }
+.ver-dl .btn-xs { padding: 2px 7px; font-size: 11px; line-height: 1.5; }
+.ver-dl .btn-xs + .btn-xs { margin-left: 4px; }
 
 .body { flex: 1; display: flex; min-height: 0; }
 

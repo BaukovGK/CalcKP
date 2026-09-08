@@ -91,3 +91,76 @@ export function isRowWithoutPrice(row: TreeRow): boolean {
 export function rowsWithoutPrice(surveyData: unknown): TreeRow[] {
   return extractRows(surveyData).filter(isRowWithoutPrice)
 }
+
+/** Количество строки: ручное переопределение приоритетнее расчётного. */
+export function rowQty(row: TreeRow): number | null {
+  return row.qtyManual != null ? num(row.qtyManual) : (row.qtyCalc ?? num(row.qty))
+}
+
+/** Позиция спецификации — строка расчёта, попавшая в документ заказчику. */
+export interface SpecRow {
+  name: string
+  unit: string
+  qty: number
+}
+
+/** Раздел спецификации: номер и заголовок из каркаса шаблона (Реверс §4.2). */
+export interface SpecSection {
+  code: string
+  title: string
+  rows: SpecRow[]
+}
+
+/**
+ * Спецификация изделия по разделам — состав для печатной формы КП.
+ *
+ * Отличие от {@link extractRows}: сохраняются номер и заголовок раздела, а
+ * строки схлопываются до «наименование · ЕИ · количество». Цены сюда
+ * намеренно не попадают — см. `utils/kp-document.ts`.
+ *
+ * Выключенные разделы, компоненты и строки, а также строки с нулевым или
+ * неопределённым количеством отбрасываются: в итог они не входят, и в
+ * документе заказчику им делать нечего.
+ *
+ * Понимает только целевую форму (`tree.sections`): устаревшие `bundles[]`
+ * не имеют разделов с номерами, а КП выпускается из снапшота, который
+ * снимается уже с дерева.
+ */
+export function extractSpecification(surveyData: unknown): SpecSection[] {
+  if (!isObj(surveyData)) return []
+
+  const tree = isObj(surveyData.tree) ? surveyData.tree : null
+  const sections = asArray(tree?.sections ?? surveyData.sections)
+
+  const out: SpecSection[] = []
+  for (const s of sections) {
+    if (!isObj(s) || s.enabled === false) continue
+
+    const rows: SpecRow[] = []
+    for (const c of asArray(s.components)) {
+      if (!isObj(c) || c.enabled === false) continue
+      for (const r of asArray(c.rows)) {
+        if (!isObj(r)) continue
+        const row = r as TreeRow
+        if (row.enabled === false) continue
+        const qty = rowQty(row)
+        if (qty == null || qty <= 0) continue
+        rows.push({
+          name: String(row.name ?? '').trim() || '(без наименования)',
+          unit: String(row.unit ?? '').trim(),
+          qty,
+        })
+      }
+    }
+
+    // Раздел, из которого всё выключено, в документ не выводим.
+    if (rows.length === 0) continue
+    out.push({
+      code: String(s.code ?? '').trim(),
+      title: String(s.title ?? '').trim() || 'Без названия',
+      rows,
+    })
+  }
+
+  return out
+}
