@@ -3,6 +3,9 @@ import { z } from 'zod'
 import { requireAuth } from '../middleware/auth'
 import { calcPumpStationDimensions } from '../utils/pump-station-dimensions'
 import { calcRingStiffnessPa } from '../utils/ring-stiffness'
+import { calcDischargePipeDiameterMm } from '../utils/pipe-hydraulics'
+import { selectPump } from '../utils/pump-selection'
+import { prisma } from '../utils/prisma'
 
 export const pumpStationRouter = Router()
 pumpStationRouter.use('/', requireAuth)
@@ -53,6 +56,58 @@ pumpStationRouter.post('/ring-stiffness', (req, res, next) => {
   try {
     const { mvk, inletPipeDepthM } = ringStiffnessSchema.parse(req.body)
     res.json({ ringStiffnessPa: calcRingStiffnessPa(mvk, inletPipeDepthM) })
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
+      return
+    }
+    next(e)
+  }
+})
+
+const pipeDiameterSchema = z.object({
+  flowM3h: z.number().positive(),
+  workingPumps: z.number().int().positive().optional(),
+  designVelocityMs: z.number().positive().optional(),
+})
+
+/**
+ * POST /api/pump-station/discharge-pipe-diameter — диаметр напорного
+ * трубопровода, мм, по притоку и числу рабочих насосов.
+ *
+ * Чистый расчёт `calcDischargePipeDiameterMm` (см. `utils/pipe-hydraulics.ts`).
+ */
+pumpStationRouter.post('/discharge-pipe-diameter', (req, res, next) => {
+  try {
+    const { flowM3h, workingPumps, designVelocityMs } = pipeDiameterSchema.parse(req.body)
+    res.json(calcDischargePipeDiameterMm(flowM3h, workingPumps, designVelocityMs))
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
+      return
+    }
+    next(e)
+  }
+})
+
+const pumpSelectionSchema = z.object({
+  flowM3h: z.number().positive(),
+  headM: z.number().positive(),
+  workingPumps: z.number().int().positive().optional(),
+})
+
+/**
+ * POST /api/pump-station/select-pump — подбор марки насоса по притоку,
+ * напору и числу рабочих насосов (рабочей точке одного насоса).
+ *
+ * Каталог берётся из БД (`Pump`, см. `prisma/seed-data/pumps.json`), отбор —
+ * чистая функция `selectPump` (см. `utils/pump-selection.ts`).
+ */
+pumpStationRouter.post('/select-pump', async (req, res, next) => {
+  try {
+    const { flowM3h, headM, workingPumps } = pumpSelectionSchema.parse(req.body)
+    const pumps = await prisma.pump.findMany()
+    res.json(selectPump(flowM3h, headM, workingPumps, pumps))
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
