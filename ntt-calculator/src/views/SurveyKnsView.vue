@@ -41,19 +41,19 @@
         <section :id="'sec-1'" class="ol-sec">
           <h2 class="ol-h">1 · Общие</h2>
           <div class="ol-grid">
-            <label class="fld"><span>№ заявки ОЛ</span><input v-model="form.zayavka" /></label>
-            <label class="fld"><span>Тип НС</span>
+            <label class="fld fld--3"><span>№ заявки ОЛ</span><input v-model="form.zayavka" /></label>
+            <label class="fld fld--3"><span>Тип НС</span>
               <select v-model="form.tipNs">
                 <option v-for="t in NS_TYPES" :key="t">{{ t }}</option>
               </select>
             </label>
-            <label class="fld"><span>Стадия проекта</span>
+            <label class="fld fld--3"><span>Стадия проекта</span>
               <select v-model="form.stadiya"><option v-for="t in STAGES" :key="t">{{ t }}</option></select>
             </label>
-            <label class="fld"><span>Заказчик</span><input v-model="form.zakazchik" /></label>
-            <label class="fld fld--wide"><span>Объект</span><input v-model="form.obekt" /></label>
-            <label class="fld"><span>Регион</span><input v-model="form.region" /></label>
-            <label class="fld"><span>Дата</span><input v-model="form.data" /></label>
+            <label class="fld fld--3"><span>Дата</span><input v-model="form.data" /></label>
+            <label class="fld fld--4"><span>Заказчик</span><input v-model="form.zakazchik" /></label>
+            <label class="fld fld--5"><span>Объект</span><input v-model="form.obekt" /></label>
+            <label class="fld fld--3"><span>Регион</span><input v-model="form.region" /></label>
           </div>
         </section>
 
@@ -69,7 +69,7 @@
           />
         
           <div class="ol-grid">
-            <label class="fld"><span>DN корпуса, мм</span>
+            <label class="fld fld--3"><span>DN корпуса, мм</span>
               <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
             </label>
           </div>
@@ -89,20 +89,20 @@
             </label>
 
             <div v-if="form.pipeManual" class="ol-manual">
-              <label class="fld"><span>PN, МПа</span>
+              <label class="fld fld--3"><span>PN, МПа</span>
                 <select v-model="form.pnManual"><option value="">расчётное</option><option v-for="p in PN_LIST" :key="p">{{ p }}</option></select>
               </label>
-              <label class="fld"><span>SN, Па</span>
+              <label class="fld fld--3"><span>SN, Па</span>
                 <select v-model="form.snManual"><option value="">расчётное</option><option v-for="v in SN_LIST" :key="v">{{ v }}</option></select>
               </label>
               <!-- Возвышение, исполнение и теплоизоляция живут здесь же: это
                    такие же типовые величины, что PN и SN, и трогают их так же
                    редко. Глубина показывается только при включённой
                    теплоизоляции — иначе она ни на что не влияет. -->
-              <label class="fld"><span>Возвышение над землёй, мм</span>
+              <label class="fld fld--3"><span>Возвышение над землёй, мм</span>
                 <input v-model="form.vozv" class="num" :placeholder="String(ELEVATION_DEFAULT_MM)" />
               </label>
-              <label class="fld"><span>Исполнение обечайки</span>
+              <label class="fld fld--3"><span>Исполнение обечайки</span>
                 <select v-model="form.ispolnenie">
                   <option value="частями">Труба частями</option>
                   <option value="целая">Целая труба</option>
@@ -111,10 +111,10 @@
               <div class="ol-manual-tg">
                 <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" />
               </div>
-              <label v-if="form.insulation" class="fld"><span>Глубина теплоизоляции, мм</span>
+              <label v-if="form.insulation" class="fld fld--4"><span>Глубина теплоизоляции, мм</span>
                 <input v-model="form.tiGlubina" class="num" :placeholder="String(TI_DEPTH_DEFAULT_MM)" />
               </label>
-              <button class="ol-reset" @click="resetPipe">↺ вернуть расчётные</button>
+              <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
             </div>
           </div>
 
@@ -135,11 +135,10 @@
         <!-- 3. Насосное оборудование -->
         <section :id="'sec-3'" class="ol-sec">
           <h2 class="ol-h">3 · Насосное оборудование</h2>
-          <!-- Две строки, а не одна сетка: сверху то, что задаёт рабочую точку
-               (расход и напор), снизу — сколько насосов её обслуживают. Раньше
-               «Рабочих» затекало в первую строку и читалось как часть напора. -->
-          <div class="ol-grid ol-grid--2">
-            <label class="fld"><span>Максимальный приток <b class="req">*</b></span>
+          <!-- Две строки: сверху то, что задаёт рабочую точку (расход и напор),
+               снизу — сколько насосов её обслуживают. -->
+          <div class="ol-grid">
+            <label class="fld fld--4"><span>Максимальный приток <b class="req">*</b></span>
               <div class="ol-unit">
                 <input v-model="form.rashod" class="num" />
                 <select v-model="form.rashodUnit" class="ol-unit-sel">
@@ -149,19 +148,19 @@
                 </select>
               </div>
             </label>
-            <label class="fld"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
-          </div>
-
-          <div class="ol-grid ol-grid--3">
-            <label class="fld"><span>Рабочих насосов <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
-            <label class="fld"><span>Резервных насосов</span><input v-model="form.nRez" class="num" /></label>
-            <!-- «На склад» — формулировка опросного листа завода: эти насосы
-                 в станцию не ставятся и в обвязку не входят. -->
-            <label class="fld"><span>Запасных на склад</span><input v-model="form.nZap" class="num" /></label>
+            <label class="fld fld--4"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
           </div>
 
           <div class="ol-grid">
-            <label class="fld fld--wide"><span>Марка насосов</span>
+            <label class="fld fld--4"><span>Рабочих насосов <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
+            <label class="fld fld--4"><span>Резервных насосов</span><input v-model="form.nRez" class="num" /></label>
+            <!-- «На склад» — формулировка опросного листа завода: эти насосы
+                 в станцию не ставятся и в обвязку не входят. -->
+            <label class="fld fld--4"><span>Запасных на склад</span><input v-model="form.nZap" class="num" /></label>
+          </div>
+
+          <div class="ol-grid">
+            <label class="fld fld--12"><span>Марка насосов</span>
               <!-- Выбор из подобранных: по умолчанию оптимальный, но инженер
                    может взять другой — в том числе отсечённый по запасу. -->
               <select v-if="hasPumpChoices" :value="pumpChoice" @change="onPumpChoice">
@@ -305,10 +304,10 @@
             <ToggleYesNo v-model="form.rashodomer" label="Расходомер" />
           </div>
           <div v-if="form.shu" class="ol-grid">
-            <label class="fld"><span>Тип ШУ</span>
+            <label class="fld fld--4"><span>Тип ШУ</span>
               <select v-model="form.shuTip"><option>внутренний</option><option>уличный</option></select>
             </label>
-            <label class="fld"><span>Пуск</span>
+            <label class="fld fld--4"><span>Пуск</span>
               <select v-model="form.shuPusk"><option>стандартный</option><option>плавный</option><option>ЧП</option></select>
             </label>
           </div>
@@ -754,19 +753,43 @@ async function createEstimate() {
 .ol-sec { max-width: 820px; margin: 0 auto 26px; }
 .ol-h { font-size: 18px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px;
   border-bottom: 2px solid var(--line); }
-.ol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-/* Фиксированное число колонок там, где строка несёт смысл: поля не должны
-   перетекать между строками при изменении ширины окна. На узком экране
-   переносятся, иначе поле сжимается до нечитаемого. */
-.ol-grid--2 { grid-template-columns: repeat(2, minmax(200px, 1fr)); }
-.ol-grid--3 { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
-@media (max-width: 900px) {
-  .ol-grid--2, .ol-grid--3 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-}
+/* ── Сетка листа ─────────────────────────────────────────────────────────
+ * Одна общая сетка на 12 колонок для ВСЕХ строк формы. Раньше каждый блок
+ * был самостоятельной auto-fit сеткой, и число колонок зависело от того,
+ * сколько полей в него положили: три поля давали трети, два — половины,
+ * одно растягивалось на всю ширину. Поля соседних строк не совпадали ни по
+ * одной вертикали — отсюда ощущение разброса.
+ *
+ * Теперь ширина задаётся полем: `fld--3` четверть, `fld--4` треть,
+ * `fld--6` половина, `fld--12` во всю строку. Границы полей выстраиваются
+ * по одним и тем же двенадцати колонкам сверху донизу.
+ */
+.ol-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px 12px; }
+.ol-grid + .ol-grid { margin-top: 10px; }
 .ol-tail { height: 40vh; }
 
+/* Любой прямой ребёнок сетки по умолчанию занимает треть строки — включая
+   компоненты без класса fld — например CalcField. */
+.ol-grid > * { grid-column: span 4; }
 .fld { display: flex; flex-direction: column; gap: 3px; }
-.fld--wide { grid-column: span 2; }
+.fld--3 { grid-column: span 3; }
+.fld--4 { grid-column: span 4; }
+.fld--5 { grid-column: span 5; }
+.fld--6 { grid-column: span 6; }
+.fld--8 { grid-column: span 8; }
+.fld--12, .fld--wide { grid-column: 1 / -1; }
+/* На узком экране двенадцать колонок вырождаются в одну: поля уже цифры
+   нечитаемы, а горизонтальная прокрутка формы недопустима. */
+@media (max-width: 760px) {
+  .ol-grid { grid-template-columns: 1fr; }
+  .ol-grid > *, .ol-manual > * { grid-column: 1 / -1; }
+}
+/* Внутри карточки колонок физически меньше: карточка сама занимает половину
+   строки, и треть от неё — это уже сотня пикселей, куда не влезает подпись.
+   Поэтому поля в карточке идут половинами, складываясь в 2×2. */
+.ol-card .ol-grid > * { grid-column: span 6; }
+@media (max-width: 1200px) { .ol-card .ol-grid > * { grid-column: 1 / -1; } }
+
 .fld > span { font-size: 13.2px; color: var(--muted); }
 .req { color: var(--acc); }
 .fld input, .fld select {
@@ -787,17 +810,24 @@ async function createEstimate() {
 .ol-pick-btn:hover { border-bottom-style: solid; }
 
 /* Карточка (труба корпуса, патрубки) */
-.ol-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* Карточки патрубков — те же двенадцать колонок: по половине на карточку. */
+.ol-cards { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+.ol-cards > .ol-card { grid-column: span 6; margin-top: 0; }
+@media (max-width: 760px) { .ol-cards > .ol-card { grid-column: 1 / -1; } }
 .ol-card { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-top: 10px; }
 .ol-card-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 8px; }
 .ol-grade { font-size: 16.8px; font-weight: 600; }
 .ol-grade--empty { color: var(--faint); font-weight: 400; }
 .ol-explain { font-size: 13.2px; color: var(--muted); margin-top: 3px; }
 .ol-chk { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13.8px; color: var(--muted); }
-.ol-manual { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px;
-/* Тумблер внутри сетки ручных полей: занимает свою ячейку и не ломает ряд. */
-.ol-manual-tg { display: flex; align-items: flex-end; padding-bottom: 4px; }
+/* Ручные поля — та же двенадцатиколоночная сетка, что и снаружи: раскрытие
+   блока не должно менять вертикали, по которым выровнена форма. */
+.ol-manual { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px 12px;
+  align-items: end; margin-top: 8px;
   padding: 8px; background: var(--blue-bg); border-left: 3px solid var(--blue); }
+@media (max-width: 760px) { .ol-manual { grid-template-columns: 1fr; } }
+/* Тумблер внутри сетки ручных полей: занимает свою ячейку и не ломает ряд. */
+.ol-manual-tg { grid-column: span 4; display: flex; align-items: flex-end; padding-bottom: 4px; }
 .ol-reset { background: transparent; border: none; color: var(--blue); font-size: 13.2px; text-decoration: underline; }
 
 .ol-toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
