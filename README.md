@@ -107,8 +107,22 @@ docker compose up --build
 ```bash
 docker compose logs -f backend    # миграции и сид видно здесь
 docker compose down               # остановить
-docker compose down -v            # + удалить том с базой
+docker compose down -v            # + удалить том с базой (данные пропадут!)
 ```
+
+Бэкап и восстановление:
+
+```bash
+docker compose --profile tools run --rm backup                # снять дамп
+docker compose --profile tools run --rm restore --list        # что есть
+docker compose --profile tools run --rm restore --yes latest  # восстановить
+```
+
+Дампы — в `./backups` на хосте. Перед применением миграций контейнер снимает
+дамп сам и **не стартует, если это не удалось**: у `prisma migrate deploy` нет
+обратного хода, и восстановление из дампа — единственный путь назад. Подробно,
+включая порядок отката неудачной миграции и регулярный бэкап по cron, —
+в `РАЗВЁРТЫВАНИЕ.md`, раздел «Бэкап базы и откат миграции».
 
 ---
 

@@ -255,18 +255,34 @@ async function verify() {
   if (!n250) errors.push('не найдена норма патрубка DN250')
   else console.log(`  контроль нормы патрубка DN250 = ${n250.moldingMassKg} кг ✓`)
 
-  // Контроль подбора насоса: официальная (номинальный расход; номинальный
-  // напор) точка VSL.80.37.4.5.0D из выгрузки VJ Select — гарантированно
-  // попадает в диапазон этой модели (границы построены по её же паспорту).
-  const pump = await prisma.pump.findFirst({
-    where: {
-      capacityMinM3h: { lte: 45 }, capacityMaxM3h: { gte: 45 },
-      headMinM: { lte: 12.7 }, headMaxM: { gte: 12.7 },
-      name: 'Vandjord VSL.80.37.4.5.0D',
-    },
+  // Контроль паспортной кривой: подбор идёт по ней, а не по диапазонам, и
+  // потерянные при сиде точки не проявят себя ничем, кроме неверной марки.
+  // Проверяем узловую точку VSL.80.37.4.5.0D из выгрузки VJ Select.
+  //
+  // Прежняя проверка утверждала, что этот же насос «подбирается» для
+  // Q = 45 м³/ч и H = 12,7 м, — она осталась от прямоугольной рамки и была
+  // прямо неверной: на кривой при 45 м³/ч модель даёт около 12,69 м, то есть
+  // до 12,7 м не дотягивает и в подбор не попадает.
+  const curvePump = await prisma.pump.findUnique({
+    where: { name: 'Vandjord VSL.80.37.4.5.0D' },
+    include: { curve: { orderBy: { idx: 'asc' } } },
   })
-  if (!pump) errors.push('не найден насос Vandjord VSL.80.37.4.5.0D для Q=45 м³/ч; H=12,7 м')
-  else console.log(`  контроль подбора насоса (Q=45 м³/ч; H=12,7 м) = ${pump.name} ✓`)
+  if (!curvePump) {
+    errors.push('не найден насос Vandjord VSL.80.37.4.5.0D')
+  } else if (curvePump.curve.length !== 10) {
+    errors.push(`кривая VSL.80.37.4.5.0D: ожидалось 10 точек, получено ${curvePump.curve.length}`)
+  } else {
+    const p = curvePump.curve.find((c) => Math.abs(c.q - 40.95) < 0.01)
+    // 13.0141 — значение из pump-curves.json: точки округлены до 4 знаков при
+    // подготовке файла (исходное 13.0140822875). Сверяем именно с тем, что
+    // лежит в сиде, иначе проверка ловила бы округление, а не потерю данных.
+    if (!p) errors.push('кривая VSL.80.37.4.5.0D: нет узловой точки Q = 40,95 м³/ч')
+    else if (Math.abs(p.h - 13.0141) > 1e-9) {
+      errors.push(`кривая VSL.80.37.4.5.0D: при Q = 40,95 ожидался напор 13,0141 м, получено ${p.h}`)
+    } else {
+      console.log(`  контроль кривой VSL.80.37.4.5.0D: Q 40,95 м³/ч → H ${p.h.toFixed(3)} м ✓`)
+    }
+  }
 
   const pumpCount = await prisma.pump.count()
   if (pumpCount !== 61) errors.push(`каталог насосов: ожидалось 61 позиция, в БД ${pumpCount}`)

@@ -68,9 +68,19 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
-      # Тот же путь, что в проде (CMD Dockerfile): миграции применяются с нуля.
-      # Ловит расхождение schema.prisma ↔ migrations до деплоя.
+      # Тот же путь, что в проде (docker-entrypoint.sh): миграции применяются
+      # с нуля. Ловит расхождение schema.prisma ↔ migrations до деплоя.
       - run: npx prisma migrate deploy
+      # Дрейф схемы: `migrate deploy` применяет миграции, но НЕ проверяет, что
+      # они описывают текущий schema.prisma. Правка схемы без миграции проходила
+      # CI незамеченной и падала уже на проде. `migrate diff --exit-code` даёт
+      # ненулевой код, если между схемой и накатанной базой есть разница.
+      - name: Схема и миграции совпадают
+        run: >-
+          npx prisma migrate diff
+          --from-schema-datasource prisma/schema.prisma
+          --to-schema-datamodel prisma/schema.prisma
+          --exit-code
       # Сид проверяет, что справочники и прайс грузятся в свежую БД.
       - run: npm run db:seed
       # tsc собирает src/** — компиляция без ошибок типов.

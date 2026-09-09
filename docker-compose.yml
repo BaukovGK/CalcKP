@@ -58,8 +58,62 @@ services:
       JWT_REFRESH_EXPIRES: 7d
       # Фронт отдаётся тем же nginx, поэтому запросы идут с его origin.
       CORS_ORIGIN: ${PUBLIC_URL:-http://localhost}
+      # Дамп снимается ДО применения миграций: у `prisma migrate deploy`
+      # обратного хода нет, и восстановление из дампа — единственный путь назад.
+      # `require` (по умолчанию) означает «не снялся дамп — не стартуем».
+      BACKUP_BEFORE_MIGRATE: ${BACKUP_BEFORE_MIGRATE:-require}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP: ${BACKUP_KEEP:-30}
+    volumes:
+      # Дампы лежат на хосте, а не в томе: их надо уметь забрать с машины,
+      # а том исчезнет вместе с `docker compose down -v`.
+      - ./backups:/backups
     expose:
       - '3000'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 60s
+
+  # Ручной бэкап. Со стеком не поднимается — только по требованию:
+  #
+  #   docker compose --profile tools run --rm backup
+  #
+  # Образ postgres:16 взят намеренно: мажорная версия pg_dump обязана совпадать
+  # с сервером, иначе дамп не снимется.
+  backup:
+    image: postgres:16
+    profiles: ['tools']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &backup-env
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ntt}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ntt_estimates}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP: ${BACKUP_KEEP:-30}
+    volumes: &backup-volumes
+      - ./backups:/backups
+      - ./backend/scripts:/scripts:ro
+    entrypoint: ['/scripts/db-backup.sh']
+
+  # Восстановление — отдельным сервисом, а не флагом к предыдущему: операция
+  # разрушающая, и запускать её нужно осознанно, целиком написав команду.
+  #
+  #   docker compose --profile tools run --rm restore --list
+  #   docker compose --profile tools run --rm restore --yes latest
+  #
+  # Перед заменой скрипт сам снимает страховочный дамп текущего состояния.
+  restore:
+    image: postgres:16
+    profiles: ['tools']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *backup-env
+    volumes: *backup-volumes
+    entrypoint: ['/scripts/db-restore.sh']
 
   web:
     build:

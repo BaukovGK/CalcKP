@@ -26,6 +26,11 @@ FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Клиент PostgreSQL нужен точке входа: она снимает дамп ДО применения миграций
+# (у `prisma migrate deploy` обратного хода нет). Мажорная версия должна
+# совпадать с сервером — postgres:16 в docker-compose.yml.
+RUN apk add --no-cache postgresql16-client
+
 COPY package*.json ./
 # exceljs и multer — рантайм-зависимости (импорт прайса, выгрузка Заявки),
 # поэтому --omit=dev их не тронет. Проверено: они в dependencies.
@@ -43,8 +48,11 @@ COPY prisma ./prisma
 
 EXPOSE 3000
 
-# Миграции и сид при старте. Сид идемпотентен (upsert + createMany
-# skipDuplicates) и содержит проверки — упадёт, если ставка ФОТ или
-# контрольный вес трубы не нашлись. Без сида приложение нерабочее:
-# нет ни пользователей, ни прайса.
-CMD sh -c "npx prisma migrate deploy && node dist-seed/seed.js && node dist/app.js"
+# Порядок запуска — в docker-entrypoint.sh: бэкап → миграции → сид → приложение.
+# Сид идемпотентен (upsert + createMany skipDuplicates) и содержит проверки —
+# упадёт, если ставка ФОТ или контрольный вес трубы не нашлись. Без сида
+# приложение нерабочее: нет ни пользователей, ни прайса.
+COPY --chmod=755 docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --chmod=755 scripts/ /app/scripts/
+
+CMD ["/app/docker-entrypoint.sh"]

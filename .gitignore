@@ -38,3 +38,7 @@ Thumbs.db
 # Локальный архив сессии Claude (151 МБ, не артефакт проекта)
 .claude.zip
 .claude/settings.local.json
+
+# Дампы БД: боевые данные, не артефакт проекта (см. backups/.gitkeep)
+backups/*
+!backups/.gitkeep
