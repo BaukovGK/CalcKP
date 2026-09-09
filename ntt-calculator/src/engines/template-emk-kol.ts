@@ -90,6 +90,13 @@ export interface EmkSurveyParams {
   pnSurvey: number
 
   hasShaft: boolean
+  /**
+   * Шахта — отрезок стеклопластиковой трубы своего диаметра. Поля
+   * необязательные: у расчётов, сохранённых до их появления, остаются типовые
+   * Ø1200 и высота по установке (`serviceShaft`).
+   */
+  shaftDiameterMm?: number | null
+  shaftHeightMm?: number | null
 
   inletDn: number
   inletCount: number
@@ -389,6 +396,22 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
       title: `Шахта обслуживания Ø${geo.shaftDiameterMm} h${geo.shaftHeightMm}`,
       enabled: true,
       rows: [
+        // Шахта — та же стеклопластиковая труба, что и корпус, но своего
+        // диаметра: в расчёт идёт отрезок длиной в высоту шахты. Марка взята
+        // от корпуса — PN и SN шахты завод не называл (Вопросы_заводу §7).
+        {
+          ...makeRow(ctx, {
+            kind: 'МАТЕРИАЛ',
+            category: 'Собственное производство',
+            name: `Труба ${material}-К ${geo.shaftDiameterMm}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`,
+            unit: 'м',
+            qtyCalc: geo.shaftHeightMm / 1000,
+            bucket: 'Труба, муфта',
+            note: `Ø${geo.shaftDiameterMm} × h${geo.shaftHeightMm} мм = ${(geo.shaftHeightMm / 1000).toLocaleString('ru-RU')} пм · марка по корпусу`,
+          }),
+          // Цена трубы договорная — как у корпуса (Механика §5.2).
+          priceCatalog: null,
+        },
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ручная формовка шахты обслуживания к корпусу',
@@ -507,6 +530,21 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
       title: `Горловина Ø${s.neckDiameterMm} h${s.neckHeightMm}`,
       enabled: true,
       rows: [
+        // Горловина — отрезок стеклопластиковой трубы своего диаметра, как и
+        // шахта ёмкости. Марка по корпусу: PN и SN горловины завод не называл
+        // (Вопросы_заводу §7).
+        {
+          ...makeRow(ctx, {
+            kind: 'МАТЕРИАЛ',
+            category: 'Собственное производство',
+            name: `Труба СК/НПС-К ${s.neckDiameterMm}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`,
+            unit: 'м',
+            qtyCalc: s.neckHeightMm / 1000,
+            bucket: 'Труба, муфта',
+            note: `Ø${s.neckDiameterMm} × h${s.neckHeightMm} мм = ${(s.neckHeightMm / 1000).toLocaleString('ru-RU')} пм · марка по корпусу`,
+          }),
+          priceCatalog: null,
+        },
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Механическая формовка горловины к корпусу',

@@ -93,8 +93,15 @@
              диаметр с высотой читаются вместе, как DN с признаками у КНС. -->
         <div class="ol-grid ol-grid--mid">
           <ToggleYesNo v-model="form.hasShaft" stacked class="fld--3" label="Шахта обслуживания" />
-          <label v-if="form.hasShaft" class="fld fld--3"><span>d шахты, мм</span><input v-model="form.shaftD" class="num" /></label>
-          <label v-if="form.hasShaft" class="fld fld--3"><span>h шахты, мм</span><input v-model="form.shaftH" class="num" /></label>
+          <!-- Шахта — та же стеклопластиковая труба, что корпус, но своего
+               диаметра, поэтому здесь селект по ряду труб, а не свободный
+               ввод. Типовая — DN 1200. -->
+          <label v-if="form.hasShaft" class="fld fld--3"><span>DN шахты, мм</span>
+            <select v-model="form.shaftD"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
+          </label>
+          <label v-if="form.hasShaft" class="fld fld--3"><span>h шахты, мм</span>
+            <input v-model="form.shaftH" class="num" :placeholder="String(s.geo.value.shaftHeightMm)" />
+          </label>
         </div>
         <div class="ol-grid">
           <ToggleYesNo v-model="form.hasLadder" stacked class="fld--3" label="Лестница" />
@@ -367,6 +374,8 @@ function surveyPayload() {
       tankType: form.value.tankType,
       pnSurvey: s.pn.value,
       hasShaft: form.value.hasShaft,
+      shaftDiameterMm: num(form.value.shaftD),
+      shaftHeightMm: num(form.value.shaftH),
       inletDn: num(form.value.podvDn) ?? 0,
       inletCount: num(form.value.podvKol) ?? 0,
       outletDn: num(form.value.otvDn) ?? 0,

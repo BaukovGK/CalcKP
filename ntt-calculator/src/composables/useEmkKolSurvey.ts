@@ -30,6 +30,8 @@ export function useEmkSurvey(form: Ref<EmkSurveyForm>) {
       placement: form.value.placement as Placement,
       installation: form.value.installation as Installation,
       hasShaft: form.value.hasShaft,
+      shaftDiameterMm: num(form.value.shaftD),
+      shaftHeightMm: num(form.value.shaftH),
     }),
   )
 

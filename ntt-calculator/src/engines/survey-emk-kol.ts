@@ -62,14 +62,32 @@ export function tankElevationMm(installation: Installation): number {
   return installation === 'подземная' ? 300 : 0
 }
 
-/** Параметры шахты обслуживания — из листа «для шапки» (8 комбинаций). */
+/**
+ * Типовой диаметр шахты обслуживания — та же стеклопластиковая труба, что и
+ * корпус, но своего диаметра. DN 1200 — значение листа «для шапки».
+ */
+export const SHAFT_DN_DEFAULT = 1200
+
+/**
+ * Параметры шахты обслуживания — из листа «для шапки» (8 комбинаций),
+ * с приоритетом значений опросного листа.
+ *
+ * Раньше функция возвращала только типовые: поля «d шахты» и «h шахты» в ОЛ
+ * заполнялись, но в габариты и в расчёт не попадали — считалась всегда
+ * Ø1200. Ноль и пустое трактуем как «типовое»: в ОЛ это пустое поле.
+ */
 export function serviceShaft(
   installation: Installation,
   hasShaft: boolean,
+  override?: { diameterMm?: number | null; heightMm?: number | null },
 ): { diameterMm: number; heightMm: number } {
   if (!hasShaft) return { diameterMm: 0, heightMm: 0 }
-  // Диаметр типовой 1200; высота больше у подземной (нужен выход на поверхность).
-  return { diameterMm: 1200, heightMm: installation === 'подземная' ? 2300 : 2000 }
+  // Высота типовая больше у подземной: нужен выход на поверхность.
+  const typicalHeightMm = installation === 'подземная' ? 2300 : 2000
+  return {
+    diameterMm: override?.diameterMm || SHAFT_DN_DEFAULT,
+    heightMm: override?.heightMm || typicalHeightMm,
+  }
 }
 
 export interface EmkGeometryInput {
@@ -78,6 +96,10 @@ export interface EmkGeometryInput {
   placement: Placement
   installation: Installation
   hasShaft: boolean
+  /** Диаметр шахты из ОЛ; пусто — типовой DN 1200. */
+  shaftDiameterMm?: number | null
+  /** Высота шахты из ОЛ; пусто — типовая по установке. */
+  shaftHeightMm?: number | null
 }
 
 export interface EmkGeometry {
@@ -101,7 +123,10 @@ export function computeEmkGeometry(input: EmkGeometryInput): EmkGeometry {
   const horizontal = placement === 'горизонтальное'
   const pipeLengthMm = tankPipeLengthMm(volumeM3, dn)
   const overallLengthMm = pipeLengthMm == null ? null : pipeLengthMm + (horizontal ? ELLIPTIC_EXTRA_MM : 0)
-  const shaft = serviceShaft(installation, hasShaft)
+  const shaft = serviceShaft(installation, hasShaft, {
+    diameterMm: input.shaftDiameterMm,
+    heightMm: input.shaftHeightMm,
+  })
 
   return {
     pipeLengthMm,

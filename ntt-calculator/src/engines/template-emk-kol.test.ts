@@ -125,6 +125,15 @@ describe('ЕМК: габариты из объёма (Реверс §5)', () => 
     expect(withShaft.shaftHeightMm).toBe(2300) // подземная выше наземной
     expect(without.shaftDiameterMm).toBe(0)
   })
+
+  it('размеры шахты из ОЛ перекрывают типовые', () => {
+    const g = computeEmkGeometry({
+      volumeM3: 50, dn: 2000, placement: 'вертикальное', installation: 'подземная',
+      hasShaft: true, shaftDiameterMm: 1500, shaftHeightMm: 3000,
+    })
+    expect(g.shaftDiameterMm).toBe(1500)
+    expect(g.shaftHeightMm).toBe(3000)
+  })
 })
 
 describe('ЕМК: материал зависит от среды (эталон D8)', () => {
@@ -228,6 +237,23 @@ describe('материализация ЕМК', () => {
     expect(without.some((r) => r.name.includes('шахты обслуживания'))).toBe(false)
   })
 
+  it('шахта — отрезок трубы своего DN, длиной в свою высоту', () => {
+    const rows = flattenRows(materializeEmk(ctx, EMK))
+    // Труб в расчёте две: корпус DN 2000 и шахта DN 1200.
+    const shaftPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1200-'))
+    expect(shaftPipe).toBeDefined()
+    expect(shaftPipe!.unit).toBe('м')
+    expect(shaftPipe!.qtyCalc).toBe(2.3) // h 2300 мм
+    // Цена трубы договорная — как у корпуса.
+    expect(shaftPipe!.priceCatalog).toBeNull()
+  })
+
+  it('DN шахты из ОЛ попадает в наименование трубы', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, shaftDiameterMm: 1500, shaftHeightMm: 3000 }))
+    const shaftPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1500-'))
+    expect(shaftPipe?.qtyCalc).toBe(3)
+  })
+
   it('без насосов напорный трубопровод пуст, с насосами — наполнен', () => {
     const noPumps = materializeEmk(ctx, EMK)
     const withPumps = materializeEmk(ctx, { ...EMK, hasPumps: true, pumpsWorking: 2, pumpsReserve: 1 })
@@ -313,8 +339,19 @@ describe('материализация КОЛ', () => {
     expect(without.some((r) => r.name === 'Механическая формовка горловины к корпусу')).toBe(false)
   })
 
+  it('горловина — отрезок трубы своего DN, длиной в свою высоту', () => {
+    const rows = flattenRows(materializeKol(ctx, KOL))
+    const neckPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1000-'))
+    expect(neckPipe).toBeDefined()
+    expect(neckPipe!.unit).toBe('м')
+    expect(neckPipe!.qtyCalc).toBeCloseTo(0.8, 6) // h 800 мм
+    expect(neckPipe!.priceCatalog).toBeNull()
+  })
+
   it('длина трубы учитывает горловину', () => {
-    const pipe = flattenRows(materializeKol(ctx, KOL)).find((r) => r.name.startsWith('Труба СК'))!
+    // DN в поиске обязателен: труба корпуса и труба горловины различаются
+    // только им, и без него нашлась бы первая попавшаяся.
+    const pipe = flattenRows(materializeKol(ctx, KOL)).find((r) => r.name.startsWith('Труба СК/НПС-К 1500-'))!
     expect(pipe.qtyCalc).toBeCloseTo(3.5, 6) // 3500 мм
     expect(pipe.note).toContain('с горловиной')
   })

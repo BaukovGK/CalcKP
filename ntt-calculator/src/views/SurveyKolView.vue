@@ -85,8 +85,10 @@
              глубиной, — а не отдельным блоком под всеми тумблерами. -->
         <div class="ol-grid ol-grid--mid">
           <ToggleYesNo v-model="form.hasNeck" stacked class="fld--3" label="Горловина" />
-          <label v-if="form.hasNeck" class="fld fld--3"><span>d горловины, мм <b class="req">*</b></span>
-            <input v-model="form.neckD" class="num" />
+          <!-- Горловина — отрезок стеклопластиковой трубы своего диаметра,
+               поэтому селект по ряду труб, а не свободный ввод. -->
+          <label v-if="form.hasNeck" class="fld fld--3"><span>DN горловины, мм <b class="req">*</b></span>
+            <select v-model="form.neckD"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
           </label>
           <label v-if="form.hasNeck" class="fld fld--3"><span>h горловины, мм <b class="req">*</b></span>
             <input v-model="form.neckH" class="num" />

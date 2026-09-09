@@ -183,7 +183,8 @@ export function makeDefaultKolSurvey(): KolSurveyForm {
     pipeManual: false,
 
     hasNeck: true,
-    neckD: '1000',
+    // Горловина — стеклопластиковая труба своего диаметра; типовой DN 1200.
+    neckD: '1200',
     neckH: '800',
 
     hasLadder: true,
