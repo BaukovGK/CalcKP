@@ -138,7 +138,7 @@
           <!-- Две строки: сверху то, что задаёт рабочую точку (расход и напор),
                снизу — сколько насосов её обслуживают. -->
           <div class="ol-grid">
-            <label class="fld fld--4"><span>Максимальный приток <b class="req">*</b></span>
+            <label class="fld fld--4"><span>Рабочий расход <b class="req">*</b></span>
               <div class="ol-unit">
                 <input v-model="form.rashod" class="num" />
                 <select v-model="form.rashodUnit" class="ol-unit-sel">
@@ -185,7 +185,7 @@
               <input
                 v-if="!hasPumpChoices || manualPump"
                 v-model="form.marka"
-                :placeholder="p.pumpModelCalc.value ?? 'подберётся по притоку и напору'"
+                :placeholder="p.pumpModelCalc.value ?? 'подберётся по расходу и напору'"
               />
               <span v-if="p.pumpExplain.value" class="ol-pick" :class="{ 'ol-pick--warn': !p.pumpModelCalc.value && p.ready.value && !p.loading.value }">
                 {{ p.pumpExplain.value }}
@@ -265,31 +265,48 @@
           </label>
 
           <!-- Арматура: вычисляется с override -->
-          <div class="ol-grid">
-            <CalcField
-              v-model="form.zadvManual"
-              label="Задвижки — подводящие (безнапорные)"
-              :calc="s.gatesCalc.value"
-              :value="s.gates.value"
-              :overridden="s.gatesOverridden.value"
-              :explain="s.gatesExplain.value"
-            />
-            <CalcField
-              v-model="form.kranManual"
-              label="Задвижки — напорная сторона"
-              :calc="s.pressureGatesCalc.value"
-              :value="s.pressureGates.value"
-              :overridden="s.pressureGatesOverridden.value"
-              :explain="s.pressureGatesExplain.value"
-            />
-            <CalcField
-              v-model="form.klapanManual"
-              label="Обратные клапаны"
-              :calc="s.checkValvesCalc.value"
-              :value="s.checkValves.value"
-              :overridden="s.checkValvesOverridden.value"
-              :explain="s.checkValvesExplain.value"
-            />
+          <!-- Арматура считается из числа патрубков и насосов, поэтому свёрнута
+               так же, как труба корпуса: итог виден, поля ввода — под флажком. -->
+          <div class="ol-card">
+            <div class="ol-card-h">
+              Арматура
+              <span class="f-mark" title="Считается из числа патрубков, насосов и отводящих">ƒ</span>
+            </div>
+            <div class="ol-grade">{{ armatureSummary }}</div>
+            <div class="ol-explain">{{ s.gatesExplain.value }} · {{ s.pressureGatesExplain.value }}</div>
+
+            <label class="ol-chk">
+              <input v-model="form.armaturaManual" type="checkbox" />
+              <span>изменить вручную</span>
+            </label>
+
+            <div v-if="form.armaturaManual" class="ol-manual">
+              <CalcField
+                v-model="form.zadvManual"
+                label="Задвижки — подводящие"
+                :calc="s.gatesCalc.value"
+                :value="s.gates.value"
+                :overridden="s.gatesOverridden.value"
+                :explain="s.gatesExplain.value"
+              />
+              <CalcField
+                v-model="form.kranManual"
+                label="Задвижки — напорная сторона"
+                :calc="s.pressureGatesCalc.value"
+                :value="s.pressureGates.value"
+                :overridden="s.pressureGatesOverridden.value"
+                :explain="s.pressureGatesExplain.value"
+              />
+              <CalcField
+                v-model="form.klapanManual"
+                label="Обратные клапаны"
+                :calc="s.checkValvesCalc.value"
+                :value="s.checkValves.value"
+                :overridden="s.checkValvesOverridden.value"
+                :explain="s.checkValvesExplain.value"
+              />
+              <button class="ol-reset fld--12" @click="resetArmature">↺ вернуть расчётные</button>
+            </div>
           </div>
         
         </section>
@@ -379,7 +396,7 @@
       <template #default>
         <p class="mo-sub">
           {{ s.pipeGrade.value }} · подз. {{ s.depthMm.value != null ? fmtInt(s.depthMm.value) : '—' }} мм ·
-          приток {{ form.rashod }} {{ unitLabel }} · {{ form.nRab }}+{{ form.nRez }} насоса
+          расход {{ form.rashod }} {{ unitLabel }} · {{ form.nRab }}+{{ form.nRez }} насоса
         </p>
         <ul class="mo-list">
           <li v-for="b in blocks" :key="b.t">
@@ -540,7 +557,7 @@ const unitLabel = computed(
 const liveValues = computed(() => {
   const d = s.depth.value
   return [
-    { k: 'Q', v: `${fmt(d.qLps)} л/с`, f: 'ƒ приток, приведённый к л/с' },
+    { k: 'Q', v: `${fmt(d.qLps)} л/с`, f: 'ƒ рабочий расход, приведённый к л/с' },
     { k: 'Vэф', v: `${fmt(d.vEf)} м³`, f: 'ƒ Vэф = Q·3,6 / (4 · 10 пусков/ч · n раб)' },
     { k: 'Vмин', v: `${fmt(d.vMin)} м³`, f: 'ƒ Vмин = (Q·3,6 / n) · 5/60' },
     { k: 'hраб', v: `${fmt(d.hRab, 3)} м`, f: 'ƒ hраб = 4·Vмин / (π·(DN/1000)²)' },
@@ -634,6 +651,19 @@ const hasGrinder = computed({
   get: () => form.value.drobilka === 'дробилка' || form.value.drobilka === 'обе',
   set: (v: boolean) => { form.value.drobilka = grinderValue(hasBasket.value, v) },
 })
+
+/** Свёрнутая строка арматуры: что именно поедет в расчёт. */
+const armatureSummary = computed(() => {
+  const gates = s.gates.value + s.pressureGates.value
+  return `задвижек ${gates} · обратных клапанов ${s.checkValves.value}`
+})
+
+function resetArmature() {
+  form.value.armaturaManual = false
+  form.value.zadvManual = ''
+  form.value.kranManual = ''
+  form.value.klapanManual = ''
+}
 
 function resetPipe() {
   form.value.pipeManual = false

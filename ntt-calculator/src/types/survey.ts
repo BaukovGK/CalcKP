@@ -116,6 +116,8 @@ export interface KnsSurveyForm extends SurveyCommonForm {
   zadvManual: string
   kranManual: string
   klapanManual: string
+  /** Чекбокс «изменить вручную» у блока арматуры — как у трубы корпуса. */
+  armaturaManual: boolean
 
   // ── Насосное оборудование ──
   rashod: string
@@ -180,6 +182,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     zadvManual: '',
     kranManual: '',
     klapanManual: '',
+    armaturaManual: false,
 
     rashod: '25,13',
     rashodUnit: 'l/s',

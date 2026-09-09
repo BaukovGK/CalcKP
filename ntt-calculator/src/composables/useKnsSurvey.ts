@@ -141,7 +141,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
     const miss: string[] = []
     if (num(form.value.dn) == null) miss.push('DN корпуса')
     if (num(form.value.podvLotok) == null) miss.push('глубина лотка подводящего')
-    if (num(form.value.rashod) == null) miss.push('максимальный приток')
+    if (num(form.value.rashod) == null) miss.push('рабочий расход')
     if ((num(form.value.nRab) ?? 0) < 1) miss.push('кол-во рабочих насосов')
     if (depthMm.value == null) miss.push('глубина подземной части')
     return miss

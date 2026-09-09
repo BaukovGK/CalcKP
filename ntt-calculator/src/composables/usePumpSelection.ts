@@ -61,7 +61,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
   /** Чего не хватает для подбора — экран объясняет это пользователю. */
   const missing = computed<string[]>(() => {
     const miss: string[] = []
-    if (flowM3h.value == null) miss.push('приток')
+    if (flowM3h.value == null) miss.push('рабочий расход')
     if (headM.value == null) miss.push('расчётный напор')
     if (workingPumps.value == null) miss.push('кол-во рабочих насосов')
     return miss
