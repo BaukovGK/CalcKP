@@ -9,6 +9,7 @@
         <div class="nav-section">Разделы</div>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'users' }"  @click="tab = 'users'">Пользователи</button>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'audit' }"  @click="tab = 'audit'; loadAudit()">Аудит-лог</button>
+        <button class="nav-link" :class="{ 'nav-link--active': tab === 'db' }"     @click="tab = 'db'; loadBackups()">База данных</button>
       </div>
       <div class="sidebar-footer">
         <ThemeToggle />
@@ -17,9 +18,18 @@
 
     <div class="main-col">
       <div class="topbar">
-        <div class="tb-title">{{ tab === 'users' ? 'Пользователи' : 'Аудит-лог' }}</div>
+        <div class="tb-title">{{ tabTitle }}</div>
         <div class="tb-spacer"></div>
         <button v-if="tab === 'users'" class="btn" @click="newUserOpen = true">＋ Новый пользователь</button>
+        <template v-if="tab === 'db'">
+          <label class="btn" :class="{ 'is-busy': dbBusy }">
+            ↑ Загрузить дамп
+            <input type="file" accept=".dump" hidden :disabled="dbBusy" @change="onUpload" />
+          </label>
+          <button class="btn btn-acc" :disabled="dbBusy" @click="onCreateBackup">
+            {{ dbBusy ? 'Работаем…' : '＋ Снять дамп' }}
+          </button>
+        </template>
       </div>
 
       <!-- ── Users ── -->
@@ -85,7 +95,68 @@
           <div class="dash-state-txt">Записей нет</div>
         </div>
       </div>
+
+      <!-- ── База данных ── -->
+      <div v-if="tab === 'db'" class="calc-area">
+        <p class="db-note">
+          Дамп снимается автоматически перед применением миграций — у них нет обратного
+          хода, и восстановление из дампа единственный путь назад. Здесь тот же каталог:
+          файлы видны и скриптам на сервере.
+        </p>
+        <p v-if="dbError" class="db-err">{{ dbError }}</p>
+        <p v-if="dbNote" class="db-ok">{{ dbNote }}</p>
+
+        <div v-if="dbLoading" class="dash-state"><div class="dash-state-txt">Загрузка…</div></div>
+        <table v-else-if="backups.length" class="adm-table">
+          <thead>
+            <tr><th>Файл</th><th>Метка</th><th class="num">Размер</th><th>Снят</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in backups" :key="b.name">
+              <td class="adm-entity">{{ b.name }}</td>
+              <td><span class="adm-action">{{ b.label }}</span></td>
+              <td class="num">{{ fmtSize(b.sizeBytes) }}</td>
+              <td class="adm-date">{{ fmtDateTime(b.createdAt) }}</td>
+              <td class="db-acts">
+                <button class="btn btn-xs" :disabled="dbBusy" @click="onDownload(b)">скачать</button>
+                <button class="btn btn-xs" :disabled="dbBusy" @click="askRestore(b)">восстановить</button>
+                <button class="btn btn-xs" :disabled="dbBusy" @click="onDelete(b)">удалить</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="dash-state" style="height:auto;padding:40px 0">
+          <div class="dash-state-txt">Дампов пока нет</div>
+        </div>
+      </div>
     </div>
+
+    <!-- Подтверждение восстановления -->
+    <BaseModal :show="restoreTarget !== null" title="Восстановление базы" @close="restoreTarget = null">
+      <p class="db-warn">
+        Содержимое базы будет заменено содержимым дампа. Всё, что появилось после
+        {{ restoreTarget ? fmtDateTime(restoreTarget.createdAt) : '' }}, пропадёт: проекты,
+        расчёты, выпущенные КП, изменения прайса.
+      </p>
+      <p class="db-note">
+        Перед заменой сервер сам снимет дамп текущего состояния — вернуться будет куда.
+        Аудит-лог хранится в этой же базе, поэтому он тоже вернётся к состоянию на момент
+        дампа: записи о действиях после него исчезнут. Запись о самом восстановлении
+        останется — она пишется после.
+      </p>
+      <div class="ff">
+        <label class="fl">Для подтверждения введите имя файла</label>
+        <input class="fi" v-model="restoreConfirm" :placeholder="restoreTarget?.name" />
+      </div>
+      <template #footer>
+        <button class="btn" @click="restoreTarget = null">Отмена</button>
+        <button
+          class="btn btn-acc"
+          :disabled="dbBusy || restoreConfirm.trim() !== restoreTarget?.name"
+          @click="onRestore"
+        >{{ dbBusy ? 'Восстанавливаем…' : 'Заменить базу' }}</button>
+      </template>
+    </BaseModal>
 
     <!-- Новый пользователь -->
     <BaseModal :show="newUserOpen" title="Новый пользователь" @close="closeNewUser">
@@ -119,14 +190,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { adminApi, type AdminUser, type AuditEntry } from '@/api/admin'
+import { adminApi, type AdminUser, type AuditEntry, type DumpInfo } from '@/api/admin'
 import BaseModal   from '@/components/ui/BaseModal.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 
 const router = useRouter()
-const tab = ref<'users' | 'audit'>('users')
+const tab = ref<'users' | 'audit' | 'db'>('users')
+const tabTitle = computed(
+  () => ({ users: 'Пользователи', audit: 'Аудит-лог', db: 'База данных' })[tab.value],
+)
 
 // ── Users ────────────────────────────────────────────────────────────────────
 const users        = ref<AdminUser[]>([])
@@ -208,6 +282,106 @@ function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+// ── База данных: дампы ───────────────────────────────────────────────────────
+
+const backups = ref<DumpInfo[]>([])
+const dbLoading = ref(false)
+const dbBusy = ref(false)
+const dbError = ref('')
+const dbNote = ref('')
+const restoreTarget = ref<DumpInfo | null>(null)
+const restoreConfirm = ref('')
+
+const fmtSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} Б`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} КБ`
+  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`
+}
+
+/** Текст ошибки от сервера важнее общей формулировки: он объясняет отказ. */
+const errText = (e: unknown, fallback: string) =>
+  (e as { response?: { data?: { message?: string } } }).response?.data?.message ??
+  (e instanceof Error ? e.message : fallback)
+
+async function loadBackups() {
+  dbLoading.value = true; dbError.value = ''
+  try { backups.value = await adminApi.listBackups() }
+  catch (e) { dbError.value = errText(e, 'Не удалось получить список дампов') }
+  finally { dbLoading.value = false }
+}
+
+async function onCreateBackup() {
+  dbBusy.value = true; dbError.value = ''; dbNote.value = ''
+  try {
+    const info = await adminApi.createBackup()
+    dbNote.value = `Снят дамп ${info.name} (${fmtSize(info.sizeBytes)})`
+    await loadBackups()
+  } catch (e) { dbError.value = errText(e, 'Не удалось снять дамп') }
+  finally { dbBusy.value = false }
+}
+
+async function onDownload(b: DumpInfo) {
+  dbBusy.value = true; dbError.value = ''
+  try {
+    const blob = await adminApi.downloadBackup(b.name)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = b.name; a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) { dbError.value = errText(e, 'Не удалось скачать дамп') }
+  finally { dbBusy.value = false }
+}
+
+async function onDelete(b: DumpInfo) {
+  dbBusy.value = true; dbError.value = ''; dbNote.value = ''
+  try {
+    await adminApi.deleteBackup(b.name)
+    dbNote.value = `Удалён ${b.name}`
+    await loadBackups()
+  } catch (e) { dbError.value = errText(e, 'Не удалось удалить дамп') }
+  finally { dbBusy.value = false }
+}
+
+/**
+ * Загрузка кладёт файл в каталог, но НЕ применяет его: подмена базы должна
+ * быть отдельным осознанным действием, а не побочным эффектом выбора файла.
+ * Сервер перед сохранением проверяет содержимое архива.
+ */
+async function onUpload(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = '' // чтобы повторный выбор того же файла снова сработал
+
+  dbBusy.value = true; dbError.value = ''; dbNote.value = ''
+  try {
+    const info = await adminApi.uploadBackup(file)
+    dbNote.value = `Загружен ${info.name}. Чтобы применить, нажмите «восстановить».`
+    await loadBackups()
+  } catch (err) { dbError.value = errText(err, 'Не удалось загрузить дамп') }
+  finally { dbBusy.value = false }
+}
+
+function askRestore(b: DumpInfo) {
+  restoreTarget.value = b
+  restoreConfirm.value = ''
+  dbError.value = ''; dbNote.value = ''
+}
+
+async function onRestore() {
+  const target = restoreTarget.value
+  if (!target) return
+
+  dbBusy.value = true; dbError.value = ''
+  try {
+    const r = await adminApi.restoreBackup(target.name)
+    restoreTarget.value = null
+    dbNote.value = `База восстановлена из ${r.restored}. Состояние до замены сохранено в ${r.safetyDump}.`
+    await loadBackups()
+  } catch (e) { dbError.value = errText(e, 'Не удалось восстановить базу') }
+  finally { dbBusy.value = false }
+}
+
 onMounted(loadUsers)
 </script>
 
@@ -242,4 +416,15 @@ onMounted(loadUsers)
 .dash-state    { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
 .dash-state-txt { font-size: 12px; color: var(--tx3); }
 .dash-err      { color: var(--danger); }
+
+/* Вкладка «База данных» */
+.db-note { font-size: 11px; color: var(--tx3); line-height: 1.5; margin: 0 0 10px; max-width: 78ch; }
+.db-err  { font-size: 11.5px; color: var(--danger); margin: 0 0 10px; white-space: pre-line; }
+.db-ok   { font-size: 11.5px; color: var(--tx2); margin: 0 0 10px; }
+.db-warn { font-size: 12px; color: var(--danger); line-height: 1.5; margin: 0 0 8px; }
+.adm-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.db-acts { white-space: nowrap; text-align: right; }
+.db-acts .btn-xs { padding: 2px 7px; font-size: 10.5px; line-height: 1.5; }
+.db-acts .btn-xs + .btn-xs { margin-left: 4px; }
+.btn.is-busy { opacity: .5; pointer-events: none; }
 </style>

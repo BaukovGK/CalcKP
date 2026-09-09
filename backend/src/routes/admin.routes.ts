@@ -6,6 +6,13 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import multer from 'multer'
+import { randomUUID } from 'node:crypto'
+import { stat, unlink } from 'node:fs/promises'
+import {
+  acceptUpload, BACKUP_DIR, createDump, deleteDump, dumpPath, dumpStream, DumpError,
+  isValidDumpName, listDumps, MAX_DUMP_BYTES, restoreDump,
+} from '../utils/db-dump'
 import type { Response, NextFunction } from 'express'
 
 /**
@@ -115,6 +122,128 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
     await audit(auth.userId, 'user.update', 'User', id, patch)
     res.json(user)
   } catch (e) { next(e) }
+})
+
+// ── Дампы базы ─────────────────────────────────────────────────────────────
+//
+// Те же файлы и тот же каталог, что у скриптов `backend/scripts/` и у дампа,
+// который снимается перед миграциями: админка не заводит свой параллельный
+// механизм, а даёт доступ к общему.
+//
+// Восстановление загруженного файла — самая опасная операция во всём
+// приложении: pg_restore выполняет SQL из архива, а пользователь БД в образе
+// postgres суперпользователь. Поэтому загрузка и восстановление разнесены,
+// а архив перед применением проверяется (см. utils/db-dump.ts).
+
+const dumpUpload = multer({
+  // На диск, а не в память: дамп боевой базы может быть в сотни мегабайт.
+  //
+  // Пишем сразу в каталог дампов, а не в /tmp: это разные устройства (каталог —
+  // bind-mount), и перенос между ними падал бы с EXDEV, а копирование сотен
+  // мегабайт ради переноса — лишняя работа. Временное имя не проходит фильтр
+  // `isValidDumpName`, поэтому в списке дампов такой файл не появится, а при
+  // отказе он удаляется.
+  storage: multer.diskStorage({
+    destination: BACKUP_DIR,
+    filename: (_req, _file, cb) => cb(null, `.upload-${randomUUID()}.tmp`),
+  }),
+  limits: { fileSize: MAX_DUMP_BYTES, files: 1 },
+})
+
+// GET /api/admin/backups — список дампов
+adminRouter.get('/backups', async (_req, res: Response, next: NextFunction) => {
+  try {
+    res.json(await listDumps())
+  } catch (e) { next(e) }
+})
+
+// POST /api/admin/backups — снять дамп сейчас
+adminRouter.post('/backups', async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const info = await createDump('manual')
+    await audit(auth.userId, 'db.backup', 'Database', info.name, { sizeBytes: info.sizeBytes })
+    res.status(201).json(info)
+  } catch (e) { next(e) }
+})
+
+// GET /api/admin/backups/:name — скачать дамп
+adminRouter.get('/backups/:name', async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const name = String(req.params.name)
+    if (!isValidDumpName(name)) { res.status(400).json({ message: 'Недопустимое имя файла' }); return }
+
+    const file = dumpPath(name)
+    if (!(await stat(file).catch(() => null))) { res.status(404).json({ message: 'Дамп не найден' }); return }
+
+    // Выгрузка дампа — вынос всей базы наружу, включая хеши паролей и цены.
+    // Она разрешена только ADMIN, но след обязателен.
+    await audit(auth.userId, 'db.backup.download', 'Database', name, {})
+
+    res.setHeader('Content-Type', 'application/octet-stream')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`)
+    dumpStream(name).pipe(res)
+  } catch (e) { next(e) }
+})
+
+// DELETE /api/admin/backups/:name
+adminRouter.delete('/backups/:name', async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const name = String(req.params.name)
+    if (!isValidDumpName(name)) { res.status(400).json({ message: 'Недопустимое имя файла' }); return }
+    if (!(await stat(dumpPath(name)).catch(() => null))) { res.status(404).json({ message: 'Дамп не найден' }); return }
+
+    await deleteDump(name)
+    await audit(auth.userId, 'db.backup.delete', 'Database', name, {})
+    res.status(204).send()
+  } catch (e) { next(e) }
+})
+
+// POST /api/admin/backups/upload — загрузить дамп в каталог (без применения)
+adminRouter.post('/backups/upload', dumpUpload.single('file'), async (req, res: Response, next: NextFunction) => {
+  const file = (req as { file?: { path: string } }).file
+  try {
+    const auth = req as AuthRequest
+    if (!file) { res.status(400).json({ message: 'Файл не передан (поле file)' }); return }
+
+    const info = await acceptUpload(file.path)
+    await audit(auth.userId, 'db.backup.upload', 'Database', info.name, { sizeBytes: info.sizeBytes })
+    res.status(201).json(info)
+  } catch (e) {
+    if (file) await unlink(file.path).catch(() => {})
+    if (e instanceof DumpError) { res.status(422).json({ message: e.message, code: e.code }); return }
+    next(e)
+  }
+})
+
+/**
+ * POST /api/admin/backups/:name/restore — заменить базу содержимым дампа.
+ *
+ * Требует `{ confirm: "<имя файла>" }`: администратор должен явно повторить
+ * имя того, что применяет. Случайный клик по кнопке базу не заменит.
+ */
+const restoreSchema = z.object({ confirm: z.string().min(1) })
+
+adminRouter.post('/backups/:name/restore', validate(restoreSchema), async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const name = String(req.params.name)
+    if (!isValidDumpName(name)) { res.status(400).json({ message: 'Недопустимое имя файла' }); return }
+    if ((req.body as z.infer<typeof restoreSchema>).confirm !== name) {
+      res.status(422).json({ message: 'Подтверждение не совпадает с именем дампа', code: 'CONFIRM_MISMATCH' })
+      return
+    }
+    if (!(await stat(dumpPath(name)).catch(() => null))) { res.status(404).json({ message: 'Дамп не найден' }); return }
+
+    const { safetyDump } = await restoreDump(name)
+    await audit(auth.userId, 'db.restore', 'Database', name, { safetyDump })
+    res.json({ restored: name, safetyDump })
+  } catch (e) {
+    if (e instanceof DumpError) { res.status(422).json({ message: e.message, code: e.code }); return }
+    next(e)
+  }
 })
 
 // GET /api/admin/audit
