@@ -309,10 +309,13 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
     expect(nozzle.note).toContain('выберите патрубок из каталога')
   })
 
-  it('для ГМ150 патрубок известен и берётся из прайса', () => {
+  // Умолчание ГМ150 держится в обе стороны: и для новых опросных листов, и для
+  // расчётов, созданных до появления поля, — там параметр приходит пустым.
+  it('без указанного размера ставится ГМ150 с известным патрубком', () => {
     const rows150 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true })
       .sections.find((s) => s.code === '5')!
       .components.find((c) => c.title === 'Аварийный трубопровод')!.rows
+    expect(OL3487.emergencyHoseNutGm).toBeUndefined()
     expect(rows150.find((r) => r.name === 'Гайка пожарная ГМ150')).toBeDefined()
     expect(rows150.find((r) => r.name.startsWith('Патрубок резьбовой М150х6'))).toBeDefined()
   })
