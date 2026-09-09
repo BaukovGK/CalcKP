@@ -11,13 +11,14 @@
  * появились, а документированного серверного пути — нет. 0.2 отдаёт обычный
  * поток и держится в проекте предсказуемо.
  *
- * Вёрстка повторяет `kp-docx.ts` и так же временна: см. `utils/kp-document.ts`.
+ * Вёрстка повторяет `kp-docx.ts`: та же структура «шапка — позиции — стоимость»
+ * на КП и по единице, и по проекту. См. `utils/kp-document.ts`.
  *
  * @module utils/kp-pdf
  */
 
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces'
-import { formatDate, formatMoney, formatQty, type KpDocument } from './kp-document'
+import { formatDate, formatMoney, formatQty, type KpDocument, type KpPosition } from './kp-document'
 
 /** Дескрипторы начертаний: pdfkit принимает шрифт как Buffer. */
 interface FontFaces {
@@ -78,10 +79,6 @@ function headerLines(doc: KpDocument): Content[] {
     ['Заказчик', doc.customer],
     ['Объект', doc.project],
     ['Адрес', doc.address],
-    ['Изделие', doc.deviceTitle],
-    // Тираж печатается всегда: количества и цена относятся ко всему заказу.
-    ['Количество изделий', String(doc.tirage)],
-    ['Редакция', `${doc.snapshotVersion} · прайс НН v${doc.priceListVersion}`],
   ]
   return lines
     .filter((l): l is [string, string] => Boolean(l[1]))
@@ -91,15 +88,36 @@ function headerLines(doc: KpDocument): Content[] {
     }))
 }
 
-function specification(doc: KpDocument): Content[] {
-  if (doc.sections.length === 0) {
-    return [{ text: 'Спецификация пуста: в снапшоте нет включённых позиций.', margin: [0, 0, 0, 12] }]
+/** Спецификация одной позиции: заголовок с ценой, редакция, таблицы разделов. */
+function positionContent(position: KpPosition): Content[] {
+  const out: Content[] = [
+    {
+      text: [
+        { text: `${position.number}. ${position.title} — `, bold: true },
+        { text: formatMoney(position.totalRub), bold: true },
+      ],
+      fontSize: 12,
+      margin: [0, 10, 0, 2],
+    },
+    {
+      // Тираж печатается всегда: количества и цена относятся ко всему заказу.
+      text:
+        `Редакция ${position.snapshotVersion} · прайс НН v${position.priceListVersion} · ` +
+        `количество изделий: ${position.tirage}`,
+      fontSize: 8,
+      color: '#444444',
+      margin: [0, 0, 0, 6],
+    },
+  ]
+
+  if (position.sections.length === 0) {
+    out.push({ text: 'Спецификация пуста: в снапшоте нет включённых позиций.', margin: [0, 0, 0, 12] })
+    return out
   }
 
-  const out: Content[] = []
+  // Нумерация строк — сквозная внутри позиции: «1.1», «1.2» …
   let n = 0
-
-  for (const section of doc.sections) {
+  for (const section of position.sections) {
     out.push({
       text: section.code ? `${section.code}. ${section.title}` : section.title,
       bold: true,
@@ -116,7 +134,7 @@ function specification(doc: KpDocument): Content[] {
       ...section.rows.map((row) => {
         n += 1
         return [
-          { text: String(n), alignment: 'center' as const },
+          { text: `${position.number}.${n}`, alignment: 'center' as const },
           { text: row.name },
           { text: row.unit, alignment: 'center' as const },
           { text: formatQty(row.qty), alignment: 'right' as const },
@@ -125,7 +143,7 @@ function specification(doc: KpDocument): Content[] {
     ]
 
     out.push({
-      table: { headerRows: 1, widths: ['7%', '*', '15%', '15%'], body },
+      table: { headerRows: 1, widths: ['10%', '*', '15%', '15%'], body },
       layout: 'lightHorizontalLines',
       margin: [0, 0, 0, 8],
     })
@@ -134,13 +152,43 @@ function specification(doc: KpDocument): Content[] {
   return out
 }
 
+/** Свод по позициям — только в КП на проект. */
+function positionsSummary(doc: KpDocument): Content[] {
+  if (doc.scope !== 'project') return []
+
+  return [
+    {
+      table: {
+        headerRows: 1,
+        widths: ['10%', '*', '25%'],
+        body: [
+          [
+            { text: '№', bold: true, alignment: 'center' as const },
+            { text: 'Позиция', bold: true },
+            { text: 'Цена, ₽', bold: true, alignment: 'right' as const },
+          ],
+          ...doc.positions.map((p) => [
+            { text: String(p.number), alignment: 'center' as const },
+            { text: p.title },
+            { text: formatMoney(p.totalRub), alignment: 'right' as const },
+          ]),
+        ],
+      },
+      layout: 'lightHorizontalLines',
+      margin: [0, 0, 0, 8] as [number, number, number, number],
+    },
+  ]
+}
+
 /** Собрать PDF и вернуть его байтами. */
 export function renderKpPdf(doc: KpDocument): Promise<Buffer> {
   const definition: TDocumentDefinitions = {
     info: {
       title: `Коммерческое предложение ${doc.number}`,
       author: 'НТТ Калькулятор',
-      subject: `${doc.deviceTitle}${doc.project ? ` · ${doc.project}` : ''}`,
+      subject: [doc.scope === 'project' ? null : doc.positions[0]?.title, doc.project]
+        .filter(Boolean)
+        .join(' · '),
     },
     pageSize: 'A4',
     pageMargins: [40, 40, 40, 50],
@@ -153,15 +201,24 @@ export function renderKpPdf(doc: KpDocument): Promise<Buffer> {
         margin: [0, 4, 0, 16],
       },
       ...headerLines(doc),
-      { text: 'Состав изделия', fontSize: 13, bold: true, margin: [0, 14, 0, 4] },
-      ...specification(doc),
+      {
+        text: doc.scope === 'project' ? 'Состав поставки' : 'Состав изделия',
+        fontSize: 13,
+        bold: true,
+        margin: [0, 14, 0, 4],
+      },
+      ...doc.positions.flatMap(positionContent),
       {
         canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1 }],
         margin: [0, 10, 0, 8],
       },
       { text: 'Стоимость', fontSize: 13, bold: true, margin: [0, 0, 0, 4] },
+      ...positionsSummary(doc),
       {
-        text: [{ text: 'Цена: ', bold: true }, { text: formatMoney(doc.totalRub), bold: true, fontSize: 13 }],
+        text: [
+          { text: doc.scope === 'project' ? 'Общая сумма: ' : 'Цена: ', bold: true },
+          { text: formatMoney(doc.totalRub), bold: true, fontSize: 13 },
+        ],
         margin: [0, 0, 0, 2],
       },
       { text: `В том числе НДС ${doc.vatRatePct}%: ${formatMoney(doc.vatRub)}`, margin: [0, 0, 0, 14] },

@@ -1,13 +1,13 @@
 /**
- * Рендер печатной формы КП в .docx.
+ * Рендер печатной формы КП в .docx — на одну единицу и на проект целиком.
  *
- * Вёрстка временная: образец от заказчика ещё не получен (решение 2026-07-16),
- * поэтому документ собран по здравому смыслу — шапка, спецификация по разделам
- * каркаса, итоговая цена. Состав данных и два решения по ним (цены не
- * построчно, НДС «в том числе») объяснены в `utils/kp-document.ts`.
+ * Вёрстка одна на оба случая: документ — это шапка, позиции (у каждой своя
+ * спецификация и своя цена) и стоимость. КП на единицу отличается только
+ * числом позиций, поэтому расходиться этим двум документам негде.
  *
- * Когда образец придёт, меняется только этот файл и `kp-pdf.ts`: модель
- * документа от вёрстки не зависит.
+ * Состав данных и решения по ценам объяснены в `utils/kp-document.ts`.
+ * Вёрстка по-прежнему приблизительная: образец заказчика («КПВ6393») содержит
+ * ещё блок условий, подписи и реквизиты — они не перенесены.
  *
  * @module utils/kp-docx
  */
@@ -25,7 +25,7 @@ import {
   TextRun,
   WidthType,
 } from 'docx'
-import { formatDate, formatMoney, formatQty, type KpDocument } from './kp-document'
+import { formatDate, formatMoney, formatQty, type KpDocument, type KpPosition } from './kp-document'
 
 const FONT = 'Times New Roman'
 
@@ -60,13 +60,24 @@ function headerLines(doc: KpDocument): Array<[string, string]> {
     ['Заказчик', doc.customer],
     ['Объект', doc.project],
     ['Адрес', doc.address],
-    ['Изделие', doc.deviceTitle],
-    // Тираж печатается всегда, даже при одном изделии: количества и цена в
-    // документе относятся ко всему заказу, и читатель должен знать, к какому.
-    ['Количество изделий', String(doc.tirage)],
-    ['Редакция', `${doc.snapshotVersion} · прайс НН v${doc.priceListVersion}`],
   ]
   return lines.filter((l): l is [string, string] => Boolean(l[1]))
+}
+
+/**
+ * Подпись позиции: редакция и тираж.
+ *
+ * Тираж печатается всегда, даже при одном изделии: количества и цена в
+ * документе относятся ко всему заказу, и читатель должен знать, к какому.
+ */
+function positionMeta(p: KpPosition): string {
+  return `Редакция ${p.snapshotVersion} · прайс НН v${p.priceListVersion} · количество изделий: ${p.tirage}`
+}
+
+/** Тема документа в свойствах файла: изделие или проект. */
+function documentSubject(doc: KpDocument): string {
+  const what = doc.scope === 'project' ? null : (doc.positions[0]?.title ?? null)
+  return [what, doc.project].filter(Boolean).join(' · ')
 }
 
 /** Собрать .docx и вернуть его байтами. */
@@ -94,50 +105,75 @@ export async function renderKpDocx(doc: KpDocument): Promise<Buffer> {
   }
 
   children.push(para('', { spacingAfter: 120 }))
-  children.push(para('Состав изделия', { bold: true, size: 26, spacingAfter: 120 }))
+  children.push(
+    para(doc.scope === 'project' ? 'Состав поставки' : 'Состав изделия', {
+      bold: true,
+      size: 26,
+      spacingAfter: 120,
+    }),
+  )
 
-  let n = 0
-  for (const section of doc.sections) {
-    const title = section.code ? `${section.code}. ${section.title}` : section.title
-    children.push(para(title, { bold: true, spacingAfter: 60 }))
-
-    const rows: TableRow[] = [
-      new TableRow({
-        tableHeader: true,
+  for (const position of doc.positions) {
+    // Заголовок позиции — с ценой: в КП на проект это единственное место, где
+    // видно, сколько стоит каждая единица.
+    children.push(
+      new Paragraph({
+        spacing: { before: 120, after: 20 },
         children: [
-          cell('№', { bold: true, width: 7, align: AlignmentType.CENTER }),
-          cell('Наименование', { bold: true, width: 63 }),
-          cell('Ед. изм.', { bold: true, width: 15, align: AlignmentType.CENTER }),
-          cell('Кол-во', { bold: true, width: 15, align: AlignmentType.RIGHT }),
+          text(`${position.number}. ${position.title} — `, { bold: true, size: 24 }),
+          text(formatMoney(position.totalRub), { bold: true, size: 24 }),
         ],
       }),
-    ]
+    )
+    children.push(para(positionMeta(position), { size: 18, spacingAfter: 80 }))
 
-    for (const row of section.rows) {
-      n += 1
-      rows.push(
+    // Нумерация строк — сквозная внутри позиции: «1.1», «1.2» … Так номер в
+    // документе однозначно указывает и на позицию, и на строку.
+    let n = 0
+    for (const section of position.sections) {
+      const title = section.code ? `${section.code}. ${section.title}` : section.title
+      children.push(para(title, { bold: true, spacingAfter: 60 }))
+
+      const rows: TableRow[] = [
         new TableRow({
+          tableHeader: true,
           children: [
-            cell(String(n), { align: AlignmentType.CENTER }),
-            cell(row.name),
-            cell(row.unit, { align: AlignmentType.CENTER }),
-            cell(formatQty(row.qty), { align: AlignmentType.RIGHT }),
+            cell('№', { bold: true, width: 10, align: AlignmentType.CENTER }),
+            cell('Наименование', { bold: true, width: 60 }),
+            cell('Ед. изм.', { bold: true, width: 15, align: AlignmentType.CENTER }),
+            cell('Кол-во', { bold: true, width: 15, align: AlignmentType.RIGHT }),
           ],
         }),
+      ]
+
+      for (const row of section.rows) {
+        n += 1
+        rows.push(
+          new TableRow({
+            children: [
+              cell(`${position.number}.${n}`, { align: AlignmentType.CENTER }),
+              cell(row.name),
+              cell(row.unit, { align: AlignmentType.CENTER }),
+              cell(formatQty(row.qty), { align: AlignmentType.RIGHT }),
+            ],
+          }),
+        )
+      }
+
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows,
+        }),
       )
+      children.push(para('', { spacingAfter: 120 }))
     }
 
-    children.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows,
-      }),
-    )
-    children.push(para('', { spacingAfter: 120 }))
-  }
-
-  if (doc.sections.length === 0) {
-    children.push(para('Спецификация пуста: в снапшоте нет включённых позиций.', { spacingAfter: 120 }))
+    if (position.sections.length === 0) {
+      children.push(
+        para('Спецификация пуста: в снапшоте нет включённых позиций.', { spacingAfter: 120 }),
+      )
+    }
   }
 
   children.push(
@@ -147,10 +183,45 @@ export async function renderKpDocx(doc: KpDocument): Promise<Buffer> {
       children: [text('Стоимость', { bold: true, size: 26 })],
     }),
   )
+
+  // В КП на проект перед итогом идёт свод по позициям: заказчик читает цену
+  // каждой единицы рядом с общей суммой, не листая документ обратно.
+  if (doc.scope === 'project') {
+    children.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            tableHeader: true,
+            children: [
+              cell('№', { bold: true, width: 10, align: AlignmentType.CENTER }),
+              cell('Позиция', { bold: true, width: 65 }),
+              cell('Цена, ₽', { bold: true, width: 25, align: AlignmentType.RIGHT }),
+            ],
+          }),
+          ...doc.positions.map(
+            (p) =>
+              new TableRow({
+                children: [
+                  cell(String(p.number), { align: AlignmentType.CENTER }),
+                  cell(p.title),
+                  cell(formatMoney(p.totalRub), { align: AlignmentType.RIGHT }),
+                ],
+              }),
+          ),
+        ],
+      }),
+    )
+    children.push(para('', { spacingAfter: 120 }))
+  }
+
   children.push(
     new Paragraph({
       spacing: { after: 40 },
-      children: [text('Цена: ', { bold: true }), text(formatMoney(doc.totalRub), { bold: true, size: 26 })],
+      children: [
+        text(doc.scope === 'project' ? 'Общая сумма: ' : 'Цена: ', { bold: true }),
+        text(formatMoney(doc.totalRub), { bold: true, size: 26 }),
+      ],
     }),
   )
   children.push(
@@ -167,7 +238,7 @@ export async function renderKpDocx(doc: KpDocument): Promise<Buffer> {
   const document = new Document({
     creator: 'НТТ Калькулятор',
     title: `Коммерческое предложение ${doc.number}`,
-    description: `${doc.deviceTitle}${doc.project ? ` · ${doc.project}` : ''}`,
+    description: documentSubject(doc),
     sections: [{ children }],
   })
 

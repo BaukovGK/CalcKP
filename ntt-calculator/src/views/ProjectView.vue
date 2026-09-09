@@ -40,7 +40,10 @@
                проект» на дашборде: серой она терялась среди служебных. -->
           <button class="btn btn-am" @click="addUnit">＋ Добавить единицу</button>
         </template>
-        <span v-else class="pv-ro" title="Роль «Наблюдатель»: только просмотр">👁 просмотр</span>
+        <!-- КП на проект доступно и наблюдателю: чтение документа шире правки
+             расчёта — то же правило, что у КП на единицу. -->
+        <button class="btn" :disabled="units.length === 0" @click="openKp">КП на проект</button>
+        <span v-if="!canEdit" class="pv-ro" title="Роль «Наблюдатель»: только просмотр">👁 просмотр</span>
       </div>
 
       <!-- Content -->
@@ -156,6 +159,52 @@
         </button>
       </template>
     </BaseModal>
+
+    <!-- КП на проект: состав документа выбирается здесь -->
+    <BaseModal :show="kpOpen" title="КП на проект" @close="kpOpen = false">
+      <p class="pv-kp-sub">
+        В документ войдёт по позиции на каждую отмеченную единицу — со своей
+        спецификацией и своей ценой. Цена берётся из выпущенного КП, а не из
+        текущего состояния расчёта.
+      </p>
+
+      <ul class="pv-kp-list">
+        <li v-for="u in units" :key="u.id" class="pv-kp-item">
+          <label class="pv-kp-lbl" :class="{ 'is-off': !kpReady(u) }">
+            <input
+              type="checkbox"
+              :checked="kpPicked.has(u.id)"
+              :disabled="!kpReady(u)"
+              @change="toggleKpUnit(u.id)"
+            />
+            <span class="pv-kp-title">{{ u.title }}</span>
+          </label>
+          <span class="pv-kp-state">
+            <template v-if="kpReady(u)">редакция {{ u.snapshots?.[0]?.version }}</template>
+            <template v-else>КП не выпускалось</template>
+          </span>
+          <span class="pv-kp-sum">{{ u.totalRub ? `${fmt(u.totalRub)} ₽` : '—' }}</span>
+        </li>
+      </ul>
+
+      <!-- Единицу без выпущенного КП в документ не поставить: цена берётся из
+           снапшота, а его нет. Путь один — открыть расчёт и выпустить КП. -->
+      <p v-if="kpNotReady.length" class="pv-kp-note">
+        Не войдут в документ: {{ kpNotReady.map(u => u.title).join(', ') }} — по ним ещё
+        не выпускалось КП. Откройте расчёт и нажмите «Выпустить КП».
+      </p>
+      <div v-if="kpError" class="auth-err" style="margin-top:8px">{{ kpError }}</div>
+
+      <template #footer>
+        <button class="btn btn-g" @click="kpOpen = false">Отмена</button>
+        <button class="btn" :disabled="kpBusy !== null || kpPicked.size === 0" @click="downloadProjectKp('docx')">
+          {{ kpBusy === 'docx' ? 'Готовим…' : 'Скачать .docx' }}
+        </button>
+        <button class="btn btn-am" :disabled="kpBusy !== null || kpPicked.size === 0" @click="downloadProjectKp('pdf')">
+          {{ kpBusy === 'pdf' ? 'Готовим…' : 'Скачать .pdf' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -258,6 +307,81 @@ async function confirmDeleteEstimate() {
   }
 }
 
+// ── КП на проект ────────────────────────────────────────────────────────────
+//
+// Документ собирается из снапшотов единиц, поэтому единица без выпущенного КП
+// в него не войдёт. Показываем это ДО отправки: иначе сервер откажет 422, и
+// инженер узнает о непроработанной единице из ошибки.
+const kpOpen = ref(false)
+const kpBusy = ref<'docx' | 'pdf' | null>(null)
+const kpError = ref('')
+const kpPicked = ref<Set<string>>(new Set())
+
+const units = computed<ProjectEstimate[]>(() => projects.current?.estimates ?? [])
+
+/** Единица готова к КП, если по ней есть хотя бы одна редакция. */
+function kpReady(u: ProjectEstimate): boolean {
+  return (u.snapshots?.length ?? 0) > 0
+}
+
+const kpNotReady = computed(() => units.value.filter((u) => !kpReady(u)))
+
+function openKp() {
+  // По умолчанию отмечено всё готовое: обычный случай — КП на весь проект.
+  kpPicked.value = new Set(units.value.filter(kpReady).map((u) => u.id))
+  kpError.value = ''
+  kpOpen.value = true
+}
+
+function toggleKpUnit(id: string) {
+  const next = new Set(kpPicked.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  kpPicked.value = next
+}
+
+/**
+ * Разбор ошибки запроса, ответ которого — blob.
+ *
+ * При `responseType: 'blob'` тело ошибки тоже приходит блобом, и обычное
+ * `data.message` в нём не читается: без этого пользователь видел бы «Ошибка»
+ * вместо «по единице X не выпускалось КП».
+ */
+async function messageFromBlobError(e: unknown): Promise<string> {
+  const data = (e as { response?: { data?: unknown } }).response?.data
+  if (data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text()) as { message?: string }
+      if (parsed.message) return parsed.message
+    } catch {
+      // Не JSON — покажем общий текст ниже.
+    }
+  }
+  const msg = (data as { message?: string } | undefined)?.message
+  return msg ?? (e instanceof Error ? e.message : 'Не удалось выгрузить КП')
+}
+
+async function downloadProjectKp(format: 'docx' | 'pdf') {
+  if (kpPicked.value.size === 0) return
+  kpBusy.value = format
+  kpError.value = ''
+  try {
+    const picked = units.value.filter((u) => kpPicked.value.has(u.id)).map((u) => u.id)
+    const blob = await projectsApi.kpExport(projectId, format, picked)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `КП_${projects.current?.title ?? 'проект'}.${format}`
+    a.click()
+    URL.revokeObjectURL(url)
+    kpOpen.value = false
+  } catch (e) {
+    kpError.value = await messageFromBlobError(e)
+  } finally {
+    kpBusy.value = null
+  }
+}
+
 const STATUS_LABELS: Record<EstimateStatus, string> = {
   DRAFT: 'Черновик', CALC: 'Расчёт', REVIEW: 'Проверка', APPROVED: 'Утверждено', REJECTED: 'Отклонён',
 }
@@ -331,6 +455,20 @@ onMounted(() => projects.fetchOne(projectId))
   transition: background .15s;
 }
 .pv-unit-add:hover { background: var(--bg3); }
+
+/* Список единиц в окне «КП на проект» */
+.pv-kp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pv-kp-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 4px; }
+.pv-kp-item:hover { background: var(--bg3); }
+.pv-kp-lbl { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; cursor: pointer; }
+/* Единица без выпущенного КП — видна, но приглушена: это состояние, а не
+   отсутствие. Скрывать её нельзя, иначе состав документа читается неверно. */
+.pv-kp-lbl.is-off { cursor: default; opacity: .55; }
+.pv-kp-title { font-size: 13.2px; color: var(--tx1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-kp-state { font-size: 11.4px; color: var(--tx3); white-space: nowrap; }
+.pv-kp-sum { font-size: 12px; color: var(--tx2); white-space: nowrap; min-width: 96px; text-align: right; }
+.pv-kp-note { font-size: 12px; color: var(--tx3); line-height: 1.5; margin: 10px 0 0; }
+.pv-kp-sub { font-size: 12.6px; color: var(--tx2); line-height: 1.5; margin: 0 0 10px; }
 
 .pv-uc-top  { display: flex; align-items: center; gap: 6px; }
 .pv-uc-type {

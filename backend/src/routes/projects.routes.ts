@@ -5,6 +5,9 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import { buildProjectKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
+import { renderKpDocx } from '../utils/kp-docx'
+import { renderKpPdf } from '../utils/kp-pdf'
 import type { Response, NextFunction } from 'express'
 
 export const projectsRouter = Router()
@@ -74,6 +77,14 @@ projectsRouter.get('/:id', async (req, res: Response, next: NextFunction) => {
             id: true, title: true, deviceType: true, status: true,
             totalRub: true, updatedAt: true, surveyData: true,
             author: { select: { name: true } },
+            // Последняя редакция: по ней экран проекта видит, выпускалось ли
+            // КП по единице — без этого «КП на проект» пришлось бы предлагать
+            // вслепую и ловить отказ сервера.
+            snapshots: {
+              orderBy: { version: 'desc' },
+              take: 1,
+              select: { version: true, createdAt: true },
+            },
           },
         },
       },
@@ -160,5 +171,136 @@ projectsRouter.post('/:id/estimates', requireRole('ADMIN', 'MANAGER', 'ENGINEER'
       include: { author: { select: { name: true } } },
     })
     res.status(201).json(estimate)
+  } catch (e) { next(e) }
+})
+
+/**
+ * GET /api/projects/:id/kp/export?format=docx|pdf&estimates=id,id — КП на проект.
+ *
+ * Документ собирается из снапшотов единиц, а не из их текущего состояния:
+ * расчёт после выпуска КП не замораживается и продолжает правиться
+ * (Механика §10). По каждой единице берётся её последняя редакция.
+ *
+ * Единица без снапшота — отказ 422, а не пропуск: молча выброшенная из
+ * документа единица обнаружится уже у заказчика. Чтобы выпустить КП на часть
+ * проекта, перечислите нужные единицы в `estimates`.
+ */
+projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const id = String(req.params.id)
+    const format = String(req.query.format ?? 'docx')
+
+    if (!['docx', 'pdf'].includes(format)) {
+      res.status(400).json({ message: 'format должен быть docx или pdf' })
+      return
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { id: true, title: true, customer: true, address: true, authorId: true },
+    })
+    if (!project) { res.status(404).json({ message: 'Проект не найден' }); return }
+    // Чтение КП шире правки: наблюдатель тоже должен уметь открыть документ.
+    if (!seesAllProjects(auth.userRole) && project.authorId !== auth.userId) {
+      res.status(403).json({ message: 'Нет доступа' }); return
+    }
+
+    const onlyRaw = String(req.query.estimates ?? '').trim()
+    const only = onlyRaw ? onlyRaw.split(',').map((s) => s.trim()).filter(Boolean) : null
+
+    const estimates = await prisma.estimate.findMany({
+      where: { projectId: id, ...(only ? { id: { in: only } } : {}) },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true, title: true, deviceType: true,
+        snapshots: { orderBy: { version: 'desc' }, take: 1 },
+      },
+    })
+
+    if (estimates.length === 0) {
+      res.status(422).json({
+        message: only
+          ? 'Ни одна из перечисленных единиц не найдена в этом проекте'
+          : 'В проекте нет единиц оборудования — печатать нечего',
+        code: 'KP_PROJECT_EMPTY',
+      })
+      return
+    }
+
+    const notIssued = estimates.filter((e) => e.snapshots.length === 0)
+    if (notIssued.length > 0) {
+      res.status(422).json({
+        message:
+          `Нельзя выпустить КП на проект: по ${notIssued.length} ед. КП ещё не выпускалось — ` +
+          notIssued.map((e) => `«${e.title}»`).join(', '),
+        code: 'KP_UNITS_NOT_ISSUED',
+        units: notIssued.map((e) => ({ id: e.id, title: e.title })),
+        note: 'Выпустите КП по каждой единице или перечислите готовые в параметре estimates.',
+      })
+      return
+    }
+
+    let doc
+    try {
+      doc = buildProjectKpDocument({
+        projectId: project.id,
+        project: { title: project.title, customer: project.customer, address: project.address },
+        units: estimates.map((e) => {
+          const snapshot = e.snapshots[0]!
+          return {
+            estimateId: e.id,
+            estimateTitle: e.title,
+            deviceType: e.deviceType,
+            snapshot: {
+              version: snapshot.version,
+              priceListVersion: snapshot.priceListVersion,
+              totalRub: snapshot.totalRub,
+              createdAt: snapshot.createdAt,
+              bundlesJson: snapshot.bundlesJson,
+            },
+          }
+        }),
+      })
+    } catch (e) {
+      // Спецификацию не собрать точно — печатать нельзя (см. kp-document.ts).
+      if (e instanceof KpSpecificationIncomplete) {
+        res.status(422).json({
+          message:
+            `Печать невозможна: в расчёте «${e.estimateTitle}» ${e.rows.length} строк(и) задают ` +
+            'количество выражением, а в этой редакции не сохранён его результат. ' +
+            'Откройте расчёт, сохраните и выпустите КП заново.',
+          code: 'KP_SPEC_INCOMPLETE',
+          estimateTitle: e.estimateTitle,
+          rows: e.rows.slice(0, 20),
+          count: e.rows.length,
+        })
+        return
+      }
+      throw e
+    }
+
+    const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)
+    const filename = `${doc.number}.${format}`
+
+    await audit(auth.userId, 'project.kp.export', 'Project', id, {
+      format,
+      units: doc.positions.length,
+      positions: doc.positionsCount,
+    })
+
+    res.setHeader(
+      'Content-Type',
+      format === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    // filename* — RFC 5987: имя кириллическое, латинский fallback обязателен.
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="kp-${project.id.slice(0, 8)}.${format}"; ` +
+        `filename*=UTF-8''${encodeURIComponent(filename)}`,
+    )
+    res.send(body)
   } catch (e) { next(e) }
 })

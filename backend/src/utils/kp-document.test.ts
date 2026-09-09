@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { extractSpecification, isRowWithoutPrice, resolveRowQty, tirageOf } from './estimate-tree'
 import {
   buildKpDocument,
+  buildProjectKpDocument,
   formatMoney,
   formatQty,
   KpSpecificationIncomplete,
@@ -201,8 +202,8 @@ describe('тираж', () => {
       }),
     )
 
-    expect(doc.tirage).toBe(3)
-    expect(doc.sections[0]?.rows[0]?.qty).toBe(37.5)
+    expect(doc.positions[0]?.tirage).toBe(3)
+    expect(doc.positions[0]?.sections[0]?.rows[0]?.qty).toBe(37.5)
     expect(doc.totalRub).toBe(3_600_000)
   })
 })
@@ -211,10 +212,10 @@ describe('buildKpDocument', () => {
   it('не выносит цены строк в документ — они же себестоимость', () => {
     const doc = buildKpDocument(input())
 
-    const serialized = JSON.stringify(doc.sections)
+    const serialized = JSON.stringify(doc.positions.map((p) => p.sections))
     expect(serialized).not.toContain('48000')
     expect(serialized).not.toContain('priceCatalog')
-    for (const section of doc.sections) {
+    for (const section of doc.positions.flatMap((p) => p.sections)) {
       for (const row of section.rows) {
         expect(Object.keys(row).sort()).toEqual(['name', 'qty', 'unit'])
       }
@@ -224,9 +225,9 @@ describe('buildKpDocument', () => {
   it('выделяет НДС из цены, а не начисляет сверху', () => {
     const doc = buildKpDocument(input())
 
-    // 1 200 000 с НДС 20% внутри: налог = 200 000, а не 240 000.
+    // 1 200 000 с НДС 22% внутри: налог = 216 393,44, а не 264 000 сверху.
     expect(doc.totalRub).toBe(1_200_000)
-    expect(doc.vatRub).toBe(200_000)
+    expect(doc.vatRub).toBe(216_393.44)
     expect(doc.vatRatePct).toBe(VAT_RATE_PCT)
     expect(doc.vatRub).toBeLessThan(doc.totalRub)
   })
@@ -235,8 +236,10 @@ describe('buildKpDocument', () => {
     const doc = buildKpDocument(input())
 
     expect(doc.number).toBe('КП-1A2B3C4D-v2')
-    expect(doc.snapshotVersion).toBe(2)
-    expect(doc.priceListVersion).toBe(3)
+    expect(doc.scope).toBe('unit')
+    expect(doc.positions).toHaveLength(1)
+    expect(doc.positions[0]?.snapshotVersion).toBe(2)
+    expect(doc.positions[0]?.priceListVersion).toBe(3)
     expect(doc.issuedAt.toISOString()).toBe('2026-09-08T10:00:00.000Z')
   })
 
@@ -284,9 +287,124 @@ describe('buildKpDocument', () => {
     )
 
     expect(doc.customer).toBeNull()
-    expect(doc.sections).toEqual([])
+    expect(doc.positions[0]?.sections).toEqual([])
     expect(doc.positionsCount).toBe(0)
     expect(doc.vatRub).toBe(0)
+  })
+})
+
+describe('buildProjectKpDocument', () => {
+  const unit = (over: Record<string, unknown> = {}) => ({
+    estimateId: 'aaaaaaaa-0000-0000-0000-000000000000',
+    estimateTitle: 'КНС DN3000',
+    deviceType: 'KNS',
+    snapshot: {
+      version: 2,
+      priceListVersion: 3,
+      totalRub: 1_200_000,
+      createdAt: new Date('2026-09-08T10:00:00Z'),
+      bundlesJson: tree(),
+    },
+    ...over,
+  })
+
+  const project = {
+    projectId: '9f8e7d6c-0000-0000-0000-000000000000',
+    project: { title: 'Объект «Северный»', customer: 'ООО «Заказчик»', address: 'г. Москва' },
+    units: [
+      unit(),
+      unit({
+        estimateId: 'bbbbbbbb-0000-0000-0000-000000000000',
+        estimateTitle: 'ЕМК 50 м³',
+        deviceType: 'EMK',
+        snapshot: {
+          version: 1,
+          priceListVersion: 3,
+          totalRub: 800_000,
+          createdAt: new Date('2026-09-09T12:00:00Z'),
+          bundlesJson: tree(),
+        },
+      }),
+    ],
+  }
+
+  it('нумерует позиции по порядку единиц и складывает их цены', () => {
+    const doc = buildProjectKpDocument(project)
+
+    expect(doc.scope).toBe('project')
+    expect(doc.positions.map((p) => [p.number, p.title])).toEqual([
+      [1, 'КНС DN3000'],
+      [2, 'ЕМК 50 м³'],
+    ])
+    // Цена проекта — сумма согласованных цен, а не новый расчёт.
+    expect(doc.totalRub).toBe(2_000_000)
+  })
+
+  it('редакция и версия прайса живут в позиции: у каждой единицы свои', () => {
+    const doc = buildProjectKpDocument(project)
+
+    expect(doc.positions.map((p) => p.snapshotVersion)).toEqual([2, 1])
+    // Номер документа — по проекту: общей редакции у него нет.
+    expect(doc.number).toBe('КП-9F8E7D6C')
+  })
+
+  it('дата документа — самый поздний снапшот, чтобы печать была воспроизводимой', () => {
+    const doc = buildProjectKpDocument(project)
+
+    expect(doc.issuedAt.toISOString()).toBe('2026-09-09T12:00:00.000Z')
+  })
+
+  it('НДС выделяется из общей суммы, а не начисляется сверху', () => {
+    const doc = buildProjectKpDocument(project)
+
+    expect(doc.vatRub).toBe(vatIncludedIn(2_000_000))
+    expect(doc.vatRub).toBeLessThan(doc.totalRub)
+  })
+
+  it('цены строк и здесь не попадают в документ', () => {
+    const doc = buildProjectKpDocument(project)
+
+    expect(JSON.stringify(doc.positions)).not.toContain('48000')
+  })
+
+  it('называет единицу, на которой спецификацию собрать не удалось', () => {
+    const broken = {
+      tree: {
+        sections: [
+          {
+            code: '1', title: 'Корпус', enabled: true,
+            components: [{ title: 'c', enabled: true, rows: [{ name: 'Труба', unit: 'м', qtyManual: '2*3' }] }],
+          },
+        ],
+      },
+    }
+
+    try {
+      buildProjectKpDocument({
+        ...project,
+        units: [
+          project.units[0]!,
+          unit({
+            estimateTitle: 'КОЛ 1500',
+            snapshot: {
+              version: 1, priceListVersion: 3, totalRub: 10, createdAt: new Date(0), bundlesJson: broken,
+            },
+          }),
+        ],
+      })
+      expect.unreachable('должно было выбросить KpSpecificationIncomplete')
+    } catch (e) {
+      expect(e).toBeInstanceOf(KpSpecificationIncomplete)
+      // Без имени единицы инженер не поймёт, какой из расчётов чинить.
+      expect((e as KpSpecificationIncomplete).estimateTitle).toBe('КОЛ 1500')
+    }
+  })
+
+  it('проект из одной единицы даёт документ из одной позиции', () => {
+    const doc = buildProjectKpDocument({ ...project, units: [project.units[0]!] })
+
+    expect(doc.positions).toHaveLength(1)
+    expect(doc.totalRub).toBe(1_200_000)
   })
 })
 

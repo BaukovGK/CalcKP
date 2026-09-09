@@ -6,22 +6,27 @@
  * готовую модель, поэтому вёрстку можно менять, не трогая данные.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * ДВА РЕШЕНИЯ, КОТОРЫЕ НУЖНО ПОДТВЕРДИТЬ ОБРАЗЦОМ ЗАКАЗЧИКА
+ * ДВА РЕШЕНИЯ ПО ЦЕНАМ (образец заказчика получен 09.09.2026 — «КПВ6393»)
  *
- * 1. Цены по строкам НЕ печатаются. В расчёте цена строки — это ЦЕНА ЗАКУПКИ
- *    из прайса НН (себестоимость), а цена заказчику получается из неё через
- *    наценку (`engines/economics.ts`, salePriceFromCost). Напечатать строки с
- *    их ценами — значит показать заказчику себестоимость и, вместе с итогом,
- *    всю маржу. Поэтому КП содержит спецификацию БЕЗ цен и одну итоговую
- *    цену. Когда образец придёт, включить цены построчно — правка одного
- *    этого файла и шаблона рендера.
+ * 1. Цены печатаются ПО ПОЗИЦИЯМ (по единицам оборудования), но не по строкам
+ *    спецификации. В расчёте цена строки — это ЦЕНА ЗАКУПКИ из прайса НН
+ *    (себестоимость), а цена заказчику получается из неё через наценку
+ *    (`engines/economics.ts`, salePriceFromCost). Напечатать строки с их
+ *    ценами — значит показать заказчику себестоимость и, вместе с итогом, всю
+ *    маржу.
  *
- * 2. НДС не начисляется сверху, а выделяется «в том числе». Движок прямо
- *    фиксирует: «Себестоимость с НДС: НДС зашит в цены прайса, отдельно не
- *    выделяется» (`engines/economics.ts`, Economics.costRub). Значит цена
- *    продажи — уже с НДС, и накрутить 20% сверх неё нельзя: это удорожило бы
- *    КП на пятую часть. Ставка {@link VAT_RATE_PCT} — предположение, влияющее
- *    ТОЛЬКО на справочную строку «в том числе НДС»; итог от неё не зависит.
+ *    В образце цена стоит у каждой строки — но там строки собраны иначе: это
+ *    узлы изделия, а не строки расчёта, и цена узла требует разнести по узлам
+ *    накладные, ПЗР, ацетон и СИЗ, которые в движке общие на изделие. Правило
+ *    разнесения заводом не задано, а выдуманное разошлось бы с итогом
+ *    снапшота. Поэтому цена печатается на уровне, где она точна, — позиции.
+ *
+ * 2. НДС не начисляется сверху, а выделяется «в том числе» — образец
+ *    подтверждает: «Цены приведены с учётом НДС». Движок фиксирует то же:
+ *    «Себестоимость с НДС: НДС зашит в цены прайса, отдельно не выделяется»
+ *    (`engines/economics.ts`, Economics.costRub). Ставка {@link VAT_RATE_PCT}
+ *    влияет ТОЛЬКО на справочную строку «в том числе НДС»; итог от неё не
+ *    зависит.
  * ────────────────────────────────────────────────────────────────────────────
  *
  * @module utils/kp-document
@@ -38,37 +43,46 @@ import { extractSpecification, type SpecSection, type Specification } from './es
  * расчётом. Маршрут превращает это в 422.
  */
 export class KpSpecificationIncomplete extends Error {
-  constructor(readonly rows: Specification['unresolved']) {
+  constructor(
+    readonly rows: Specification['unresolved'],
+    /** Единица, на которой споткнулись — в КП на проект их несколько. */
+    readonly estimateTitle?: string,
+  ) {
     super(`Количество не определено у строк: ${rows.length}`)
     this.name = 'KpSpecificationIncomplete'
   }
 }
+
+/** КП выпускается на одну единицу оборудования или на проект целиком. */
+export type KpScope = 'unit' | 'project'
 
 /**
  * Ставка НДС для справочной строки «в том числе», %.
  *
  * Не начисляется сверху (см. решение 2 в шапке модуля): цена уже включает
  * налог. Изменение ставки не меняет итоговую сумму КП.
+ *
+ * 22, а не 20: образец заказчика «КПВ6393» от 21.07.2026 прямо пишет «Цены
+ * приведены с учетом НДС 22%». Прежнее значение было предположением кода.
  */
-export const VAT_RATE_PCT = 20
+export const VAT_RATE_PCT = 22
 
-/** Реквизиты и содержание печатной формы. */
-export interface KpDocument {
-  /** Номер документа: «КП-<8 символов id>-v<версия снапшота>». */
-  number: string
-  /** Дата выпуска КП = дата снапшота, ISO-строка. */
-  issuedAt: Date
-  customer: string | null
-  project: string | null
-  address: string | null
+/**
+ * Позиция документа — одна единица оборудования со своей спецификацией и
+ * своей ценой.
+ *
+ * КП на единицу — документ из одной позиции, КП на проект — из нескольких:
+ * состав и цена у каждой свои (у каждой свой снапшот), а общая сумма
+ * складывается из них. Одна структура на оба случая держит вёрстку общей:
+ * иначе рядом жили бы два документа, расходящиеся при первой же правке.
+ */
+export interface KpPosition {
+  /** Номер позиции: 1, 2, … Им же нумеруются строки спецификации — «1.1». */
+  number: number
+  estimateId: string
   /** Обозначение изделия, напр. «КНС DN3000». */
-  deviceTitle: string
+  title: string
   deviceType: string
-  /** Версия прайса, из которой посчитан снапшот (ТЗ §3). */
-  priceListVersion: number
-  /** Версия снапшота — она же номер редакции КП. */
-  snapshotVersion: number
-  sections: SpecSection[]
   /**
    * Количество изделий в заказе (тираж, Механика §9.1).
    *
@@ -79,6 +93,36 @@ export interface KpDocument {
   tirage: number
   /** Цена заказчику, ₽, с НДС — зафиксирована снапшотом. Это цена за весь тираж. */
   totalRub: number
+  /** Версия снапшота — она же номер редакции по этой позиции. */
+  snapshotVersion: number
+  /** Версия прайса, из которой посчитан снапшот (ТЗ §3). */
+  priceListVersion: number
+  sections: SpecSection[]
+  /** Строк спецификации в позиции. */
+  rowsCount: number
+}
+
+/** Реквизиты и содержание печатной формы. */
+export interface KpDocument {
+  /**
+   * Номер документа: «КП-<8 символов id расчёта>-v<версия снапшота>» для
+   * единицы, «КП-<8 символов id проекта>» для проекта — у проекта общей
+   * редакции нет, редакции печатаются по позициям.
+   */
+  number: string
+  scope: KpScope
+  /**
+   * Дата выпуска = дата снапшота; у проекта — самого позднего из вошедших.
+   * Не «сейчас»: документ обязан быть воспроизводимым, две печати одних и тех
+   * же данных должны совпадать до символа.
+   */
+  issuedAt: Date
+  customer: string | null
+  project: string | null
+  address: string | null
+  positions: KpPosition[]
+  /** Общая сумма по позициям, ₽, с НДС. */
+  totalRub: number
   /** Справочно: НДС в составе цены, ₽. */
   vatRub: number
   vatRatePct: number
@@ -86,11 +130,11 @@ export interface KpDocument {
   positionsCount: number
 }
 
-export interface KpDocumentInput {
+/** Единица оборудования с её снапшотом — кирпич обоих документов. */
+export interface KpUnitInput {
   estimateId: string
   estimateTitle: string
   deviceType: string
-  project: { title: string; customer: string | null; address: string | null } | null
   snapshot: {
     version: number
     priceListVersion: number
@@ -99,6 +143,17 @@ export interface KpDocumentInput {
     /** Снимок дерева расчёта на момент выпуска КП. */
     bundlesJson: unknown
   }
+}
+
+export interface KpDocumentInput extends KpUnitInput {
+  project: { title: string; customer: string | null; address: string | null } | null
+}
+
+export interface KpProjectDocumentInput {
+  projectId: string
+  project: { title: string; customer: string | null; address: string | null } | null
+  /** Единицы проекта в порядке, в котором они попадут в документ. */
+  units: KpUnitInput[]
 }
 
 /** НДС, выделенный из суммы, уже включающей налог: сумма × ставка / (100 + ставка). */
@@ -111,37 +166,87 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100
 }
 
+/** Спецификация и цена одной единицы — общая часть обоих документов. */
+function buildPosition(unit: KpUnitInput, number: number): KpPosition {
+  const { snapshot } = unit
+  const spec = extractSpecification(snapshot.bundlesJson)
+  if (spec.unresolved.length > 0) {
+    throw new KpSpecificationIncomplete(spec.unresolved, unit.estimateTitle)
+  }
+
+  const totalRub = Number.isFinite(snapshot.totalRub) && snapshot.totalRub > 0 ? snapshot.totalRub : 0
+
+  return {
+    number,
+    estimateId: unit.estimateId,
+    title: unit.estimateTitle,
+    deviceType: unit.deviceType,
+    tirage: spec.tirage,
+    totalRub,
+    snapshotVersion: snapshot.version,
+    priceListVersion: snapshot.priceListVersion,
+    sections: spec.sections,
+    rowsCount: spec.sections.reduce((n, s) => n + s.rows.length, 0),
+  }
+}
+
 /**
- * Собрать модель КП из снапшота.
+ * Собрать модель КП на одну единицу оборудования.
  *
  * Источник цифры — ИМЕННО снапшот, а не текущее состояние расчёта: расчёт
  * после выпуска КП не замораживается и продолжает правиться (Механика §10),
  * поэтому документ обязан воспроизводить то, что было согласовано.
  */
 export function buildKpDocument(input: KpDocumentInput): KpDocument {
-  const { snapshot } = input
-  const spec = extractSpecification(snapshot.bundlesJson)
-  if (spec.unresolved.length > 0) throw new KpSpecificationIncomplete(spec.unresolved)
-
-  const sections = spec.sections
-  const totalRub = Number.isFinite(snapshot.totalRub) && snapshot.totalRub > 0 ? snapshot.totalRub : 0
+  const position = buildPosition(input, 1)
 
   return {
-    number: `КП-${input.estimateId.slice(0, 8).toUpperCase()}-v${snapshot.version}`,
-    issuedAt: snapshot.createdAt,
+    number: `КП-${input.estimateId.slice(0, 8).toUpperCase()}-v${input.snapshot.version}`,
+    scope: 'unit',
+    issuedAt: input.snapshot.createdAt,
     customer: input.project?.customer ?? null,
     project: input.project?.title ?? null,
     address: input.project?.address ?? null,
-    deviceTitle: input.estimateTitle,
-    deviceType: input.deviceType,
-    priceListVersion: snapshot.priceListVersion,
-    snapshotVersion: snapshot.version,
-    sections,
-    tirage: spec.tirage,
+    positions: [position],
+    totalRub: position.totalRub,
+    vatRub: vatIncludedIn(position.totalRub),
+    vatRatePct: VAT_RATE_PCT,
+    positionsCount: position.rowsCount,
+  }
+}
+
+/**
+ * Собрать модель КП на проект целиком: по позиции на каждую единицу.
+ *
+ * Общая сумма складывается из цен снапшотов, а не пересчитывается: каждая
+ * цена уже согласована по своей единице, и любое «уточнение» здесь развело бы
+ * документ с тем, что видел инженер.
+ *
+ * Единицы без снапшота сюда не доходят — маршрут отказывается печатать, пока
+ * по ним не выпущено КП: молча выброшенная из документа единица дороже отказа.
+ */
+export function buildProjectKpDocument(input: KpProjectDocumentInput): KpDocument {
+  const positions = input.units.map((unit, i) => buildPosition(unit, i + 1))
+  const totalRub = round2(positions.reduce((sum, p) => sum + p.totalRub, 0))
+
+  // Дата документа — самый поздний снапшот: документ описывает состояние на
+  // этот момент, и повторная печать тех же данных даёт ту же дату.
+  const issuedAt = new Date(
+    Math.max(...input.units.map((u) => u.snapshot.createdAt.getTime()), 0),
+  )
+
+  return {
+    number: `КП-${input.projectId.slice(0, 8).toUpperCase()}`,
+    scope: 'project',
+    issuedAt,
+    customer: input.project?.customer ?? null,
+    project: input.project?.title ?? null,
+    address: input.project?.address ?? null,
+    positions,
     totalRub,
     vatRub: vatIncludedIn(totalRub),
     vatRatePct: VAT_RATE_PCT,
-    positionsCount: sections.reduce((n, s) => n + s.rows.length, 0),
+    positionsCount: positions.reduce((n, p) => n + p.rowsCount, 0),
   }
 }
 
