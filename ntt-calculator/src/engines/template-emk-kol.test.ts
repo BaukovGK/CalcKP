@@ -62,12 +62,19 @@ const NORMS: NozzleNorm[] = [
   { dn: 400, odMm: null, minLengthMm: null, moldingMassKg: 1.1, h1Mm: null, s1Mm: null, flangeMassKg: 4.6, bolt: 'М24х100', boltCount: 16 },
 ]
 
+/** Мс при PN 4 — значение, которое эталон берёт для стыков (лист «Для расчетов»). */
+const JOINT_LAYER_MASS: Record<number, number> = { 3000: 112, 2000: 35 }
+
 const ctx: MaterializeContext = {
   priceOf: (c, n, u) => PRICES[`${c}|${n}|${u}`] ?? null,
   pipeWeightOf: (dn, pn, sn) => WEIGHTS[`${dn}|${pn}|${sn}`] ?? null,
   nozzleNormOf: (dn) => NORMS.find((n) => n.dn === dn) ?? null,
+  jointLayerMassOf: (d) => JOINT_LAYER_MASS[d] ?? null,
   priceListVersion: 1,
 }
+
+/** Тот же контекст без справочника Мс — для проверки поведения при промахе. */
+const ctxNoJoint: MaterializeContext = { ...ctx, jointLayerMassOf: () => null }
 
 beforeEach(() => __resetIds())
 
@@ -188,6 +195,24 @@ describe('материализация ЕМК', () => {
     const row = rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
     expect(row.qtyCalc).toBeNull()
     expect(row.note).toContain('матрицы «Для расчетов»')
+  })
+
+  // Ламинация стыков, в отличие от массы днищ, считается: эталон берёт её от
+  // Мс — массы формованных слоёв на стыке, а не от массы днищ, как раньше
+  // утверждал комментарий в шаблоне (лист «Калькулятор ЕМК», строка 25).
+  it('ламинация днища = (Мс/0,707 + Мс/2)·2', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, dn: 3000, placement: 'горизонтальное' }))
+    const row = rows.find((r) => r.name === 'Ламинация днища (косые и центральный стыки)')!
+    // Мс(3000) = 112 кг → 428,83 кг, ровно как в эталоне.
+    expect(row.qtyCalc).toBeCloseTo(428.83, 2)
+    expect(row.note).toContain('Мс 112 кг')
+  })
+
+  it('без справочника Мс ламинация просит ручной ввод, а не выдумывает число', () => {
+    const rows = flattenRows(materializeEmk(ctxNoJoint, { ...EMK, dn: 3000, placement: 'горизонтальное' }))
+    const row = rows.find((r) => r.name === 'Ламинация днища (косые и центральный стыки)')!
+    expect(row.qtyCalc).toBeNull()
+    expect(row.note).toContain('введите вручную')
   })
 
   it('химстойкая ёмкость меняет марку трубы на СК/ВЭС', () => {

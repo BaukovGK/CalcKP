@@ -13,6 +13,8 @@ export type PipeMaterial = 'ПЭ' | 'ПВХ' | 'ПНД' | 'ПП' | 'Асбест
 export type Grinder = 'корзина' | 'дробилка' | 'обе' | 'нет'
 export type ShuType = 'внутренний' | 'уличный'
 export type ShuStart = 'стандартный' | 'плавный' | 'ЧП'
+/** Исполнение обечайки корпуса (лист КНС, «Списки»!AI2/AI3). */
+export type PipeExecution = 'целая' | 'частями'
 
 /**
  * Общая часть опросного листа — одинакова для всех трёх изделий (КНС/ЕМК/КОЛ).
@@ -60,6 +62,12 @@ export interface KnsSurveyForm extends SurveyCommonForm {
   mvk: boolean
   insulation: boolean
   tiGlubina: string
+  /**
+   * Исполнение обечайки: одной трубой либо сегментами со сваркой на месте
+   * (лист КНС, ячейка E14). «Частями» добавляет в расчёт сегменты и
+   * ламинирование стыков — в эталоне при «целой трубе» этот блок обнулён.
+   */
+  ispolnenie: PipeExecution
 
   // ── Патрубки ──
   podvMat: PipeMaterial
@@ -127,6 +135,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     mvk: true,
     insulation: true,
     tiGlubina: '2000',
+    ispolnenie: 'целая',
 
     podvMat: 'ПЭ',
     podvDn: '250',

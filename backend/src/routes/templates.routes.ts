@@ -133,3 +133,37 @@ templatesRouter.put('/engineering', validate(matrixSchema), async (req, res: Res
     res.json(cell)
   } catch (e) { next(e) }
 })
+
+// ── Мс на стыке (JointLayerNorm, ключ d+pn) ───────────────────────────────
+
+/**
+ * Правки идут по естественному ключу (Dу; PN), как у остальных справочников.
+ * Геометрия (H, S, X, Y) на расчёт сегодня не влияет — считается только
+ * `massKg`, — но хранится и правится целиком: колонки нужны технологу, чтобы
+ * сверить строку с чертежом, а не угадывать, ту ли он правит.
+ */
+const jointLayerSchema = z.object({
+  d: z.number().int().positive(),
+  pn: z.number().int().positive(),
+  massKg: z.number().positive(),
+  odMm: z.number().nullable().optional(),
+  hMm: z.number().nullable().optional(),
+  sMm: z.number().nullable().optional(),
+  xMm: z.number().nullable().optional(),
+  yMm: z.number().nullable().optional(),
+})
+
+templatesRouter.put('/joint-layers', validate(jointLayerSchema), async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const { d, pn, massKg, odMm, hMm, sMm, xMm, yMm } = req.body
+
+    const row = await prisma.jointLayerNorm.upsert({
+      where: { d_pn: { d, pn } },
+      update: { massKg, odMm, hMm, sMm, xMm, yMm },
+      create: { d, pn, massKg, odMm, hMm, sMm, xMm, yMm },
+    })
+    await audit(auth.userId, 'template.joint_layer.upsert', 'JointLayerNorm', `${d}/${pn}`, { massKg })
+    res.json(row)
+  } catch (e) { next(e) }
+})

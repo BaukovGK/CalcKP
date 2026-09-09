@@ -121,6 +121,41 @@
         </table>
       </template>
 
+      <!-- ═══ Мс — масса формованных слоёв на стыке ═══ -->
+      <template v-else-if="tab === 'joints'">
+        <p class="tpl-hint">
+          Мс — масса формованных слоёв на стыке = ƒ(Dу, PN), лист «Для расчетов».
+          На ней стоят «Ламинирование частей корпуса» (КНС, исполнение частями)
+          и «Ламинация днища» (ЕМК).
+          <strong>Расчёт берёт строку PN&nbsp;4</strong> независимо от давления
+          изделия — так устроен эталон; остальные давления хранятся, но сегодня
+          не используются.
+        </p>
+        <div class="tpl-filter">
+          <label>Dу, мм
+            <select v-model="jointDFilter" class="ti">
+              <option v-for="d in jointDs" :key="d" :value="String(d)">{{ d }}</option>
+            </select>
+          </label>
+          <span class="tpl-filter-cnt">{{ shownJoints.length }} строк</span>
+        </div>
+        <table class="tpl-tbl tpl-tbl--narrow">
+          <thead>
+            <tr><th>PN, атм</th><th>Мс, кг *</th><th>H, мм</th><th>S, мм</th><th>X, мм</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in shownJoints" :key="`${r.d}|${r.pn}`" :class="{ 'row-used': r.pn === JOINT_LAYER_PN }">
+              <td class="key">{{ r.pn }}<span v-if="r.pn === JOINT_LAYER_PN" class="tpl-used" title="Эту строку читает расчёт">◀</span></td>
+              <td><input v-model="r.massKg" class="ti num ti-req" /></td>
+              <td><input v-model="r.hMm" class="ti num" /></td>
+              <td><input v-model="r.sMm" class="ti num" /></td>
+              <td><input v-model="r.xMm" class="ti num" /></td>
+              <td class="acts"><button class="btn-mini" title="Сохранить" @click="saveJoint(r)">💾</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+
       <!-- ═══ Матрицы: корпус / эллиптические днища ═══ -->
       <template v-else>
         <p class="tpl-hint">
@@ -182,13 +217,17 @@ import { templatesApi, type MatrixKind } from '@/api/templates'
 
 const router = useRouter()
 
-type Tab = 'nozzles' | 'weights' | 'shell' | 'bottom'
+type Tab = 'nozzles' | 'weights' | 'joints' | 'shell' | 'bottom'
 const TABS: Array<{ k: Tab; label: string }> = [
   { k: 'nozzles', label: 'Нормы патрубков' },
   { k: 'weights', label: 'Веса труб GRP' },
+  { k: 'joints', label: 'Мс на стыке' },
   { k: 'shell', label: 'Матрица корпуса' },
   { k: 'bottom', label: 'Эллиптические днища' },
 ]
+
+/** Давление, строку которого читает расчёт (см. calcTree.ts, JOINT_LAYER_PN). */
+const JOINT_LAYER_PN = 4
 const tab = ref<Tab>('nozzles')
 
 const loading = ref(true)
@@ -340,12 +379,40 @@ async function addMatrixCell() {
   } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось добавить', 'error') }
 }
 
+// ── Мс на стыке ────────────────────────────────────────────────────────────
+
+interface JointRow { d: number; pn: number; massKg: string; hMm: string; sMm: string; xMm: string; yMm: string; odMm: string }
+const jointRows = ref<JointRow[]>([])
+const jointDFilter = ref('')
+
+const jointDs = computed(() => [...new Set(jointRows.value.map((r) => r.d))].sort((a, b) => a - b))
+const shownJoints = computed(() => {
+  const d = jointDFilter.value || String(jointDs.value[0] ?? '')
+  return jointRows.value.filter((r) => String(r.d) === d)
+})
+
+// Добавления строк здесь нет намеренно: сетка (Dу, PN) закрытая — 21 диаметр
+// на 5 давлений без пропусков. Новая пара означала бы новый типоразмер, а он
+// приходит с чертежом, а не правкой в таблице.
+async function saveJoint(r: JointRow) {
+  const mass = num(r.massKg)
+  if (mass == null || mass <= 0) { toast('Мс — обязательное положительное число', 'error'); return }
+  try {
+    await templatesApi.upsertJointLayer({
+      d: r.d, pn: r.pn, massKg: mass,
+      odMm: num(r.odMm), hMm: num(r.hMm), sMm: num(r.sMm), xMm: num(r.xMm), yMm: num(r.yMm),
+    })
+    toast(`Мс Dу${r.d} · PN${r.pn} сохранена`, 'success')
+  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error') }
+}
+
 // ── Загрузка ───────────────────────────────────────────────────────────────
 
 function countOf(t: Tab): number {
   switch (t) {
     case 'nozzles': return nozzleRows.value.length
     case 'weights': return weightRows.value.length
+    case 'joints': return jointRows.value.length
     case 'shell': return shellRows.value.length
     case 'bottom': return bottomRows.value.length
   }
@@ -360,6 +427,13 @@ async function reload() {
   weightRows.value = weights.grp.map((w) => ({ dn: w.dn, pn: w.pn, sn: w.sn, wallMm: s(w.wallMm), kgPerM: s(w.kgPerM) }))
   shellRows.value = eng.shell.map((c) => ({ d: c.d, lengthMm: c.lengthMm, massKg: s(c.massKg), thicknessMm: s(c.thicknessMm) }))
   bottomRows.value = eng.ellipticBottom.map((c) => ({ d: c.d, lengthMm: c.lengthMm, massKg: s(c.massKg), thicknessMm: s(c.thicknessMm) }))
+  jointRows.value = (eng.jointLayers ?? []).map((j) => ({
+    d: j.d, pn: j.pn, massKg: s(j.massKg),
+    hMm: s(j.hMm), sMm: s(j.sMm), xMm: s(j.xMm), yMm: s(j.yMm), odMm: s(j.odMm),
+  }))
+  // Фильтр показывает тот же Dу, что и таблица: иначе селект пуст, а строки
+  // уже отфильтрованы по первому диаметру — выглядит как сбой.
+  if (!jointDFilter.value) jointDFilter.value = String(jointRows.value[0]?.d ?? '')
 }
 
 onMounted(async () => {
@@ -406,6 +480,10 @@ onMounted(async () => {
   color: var(--faint); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .tpl-tbl td { padding: 2px 4px; border-bottom: 1px solid var(--line); }
 .tpl-tbl td.key { font-weight: 600; padding: 2px 8px; white-space: nowrap; }
+
+/* Строку, которую реально читает расчёт, видно среди пяти давлений. */
+.tpl-tbl tr.row-used td { background: var(--acc-bg); }
+.tpl-used { margin-left: 6px; color: var(--acc); font-size: 11px; }
 .tpl-tbl .acts { white-space: nowrap; }
 
 .ti { width: 100%; min-width: 52px; background: var(--cellbg); border: 1px solid var(--line2);

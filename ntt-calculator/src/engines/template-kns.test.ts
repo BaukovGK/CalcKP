@@ -48,7 +48,7 @@ const PRICES: Record<string, number> = {
   'Собственное производство|Ламинирование верхнего перекрытия|кг': 310.2,
   'Собственное производство|Прорезка люков (горловин) в стеклокомпозитном перекрытии|чел. ч': 1207.8,
   'Собственное производство|Монтаж анкерных болтов к плите перекрытия|чел. ч': 1207.8,
-  'Метизы|Анкерный болт распорный 16х100|шт': 150,
+  'Метизы|Анкерный болт распорный 20х200|шт': 200,
   'Детали труб_да ПЭ ПВХ PPR|Дефлектор ПВХ Ду110|шт': 600,
   'Собственное производство|Прорезка отверстия вентиляции в перекрытии|чел. ч': 1207.8,
   'Собственное производство|Монтаж вентиляционного стояка|чел. ч': 1207.8,
@@ -74,10 +74,14 @@ const NOZZLE_NORMS: NozzleNorm[] = [
   { dn: 400, odMm: 413.1, minLengthMm: 406, moldingMassKg: 1.1, h1Mm: 101, s1Mm: 6.8, flangeMassKg: 4.6, bolt: 'М24х100', boltCount: 16 },
 ]
 
+/** Мс при PN 4 — так справочник читают оба калькулятора эталона. */
+const JOINT_LAYER_MASS: Record<number, number> = { 3000: 112, 2000: 35 }
+
 const ctx: MaterializeContext = {
   priceOf: (c, n, u) => PRICES[`${c}|${n}|${u}`] ?? null,
   pipeWeightOf: (dn, pn, sn) => WEIGHTS[`${dn}|${pn}|${sn}`] ?? null,
   nozzleNormOf: (dn) => NOZZLE_NORMS.find((n) => n.dn === dn) ?? null,
+  jointLayerMassOf: (d) => JOINT_LAYER_MASS[d] ?? null,
   priceListVersion: 1,
 }
 
@@ -173,7 +177,7 @@ describe('раздел 3 «Перекрытие» (B2, B6)', () => {
   })
 
   it('анкеры округляются ВВЕРХ до целого: пол-анкера не бывает', () => {
-    const a = byName('Анкерный болт распорный 16х100').qtyCalc!
+    const a = byName('Анкерный болт распорный 20х200').qtyCalc!
     expect(Number.isInteger(a)).toBe(true)
     expect(a).toBeGreaterThan(0)
   })
@@ -265,6 +269,15 @@ describe('раздел 1 «Корпус»', () => {
     expect(Number(byName('Ламинирование дна к фальшполу').qtyCalc!.toFixed(1))).toBe(78.9)
   })
 
+  // Исполнение «целая труба» — умолчание: блок сегментов и стыков в эталоне
+  // обнулён (`IF($E$14=Списки!$AI$2;0;…)`), у нас он просто не создаётся.
+  // Исполнение «целая труба» — умолчание: блок сегментов и стыков в эталоне
+  // обнулён (`IF($E$14=Списки!$AI$2;0;…)`), у нас он просто не создаётся.
+  it('целая труба: сегментов и ламинирования стыков нет', () => {
+    expect(rows.find((r) => r.name === 'Ламинирование частей корпуса')).toBeUndefined()
+    expect(rows.filter((r) => r.name === PIPE_NAME)).toHaveLength(1)
+  })
+
   // Гильза в прайсе — «Формовка гильз» в КГ, а не штучная позиция.
   // Диаметр уходит в примечание, масса — ручной ввод: матрица «Для расчетов»
   // ещё не извлечена, а выдуманная масса была бы хуже пустой строки.
@@ -323,6 +336,49 @@ describe('раздел 1 «Корпус»', () => {
   it('теплоизоляция включена флагом ОЛ', () => {
     const ins = korpus.components.find((c) => c.nodeCode === 'A9')!
     expect(ins.enabled).toBe(true)
+  })
+})
+
+describe('раздел 1: исполнение «труба частями»', () => {
+  const rows = materializeKns(ctx, { ...OL3487, pipeExecution: 'частями' })
+    .sections.find((s) => s.code === '1')!
+    .components.flatMap((c) => c.rows)
+
+  // Длины сегментов эталон не выводит: раскрой зависит от того, какой отрезок
+  // нашёлся на складе (строки 16 и 18 листа ждут ручного ввода).
+  it('добавляются два сегмента трубы с пустым количеством', () => {
+    const pipes = rows.filter((r) => r.name === 'Труба СК/НПС-К 3000-0,1-12000')
+    expect(pipes).toHaveLength(3) // основная + два сегмента
+    expect(pipes[1]!.qtyCalc).toBeNull()
+    expect(pipes[2]!.qtyCalc).toBeNull()
+    expect(pipes[1]!.note).toContain('Сегмент 2')
+  })
+
+  // Мс не выводится ни из каких габаритов — это табличная величина.
+  it('ламинирование частей корпуса = Мс(Dу) из справочника', () => {
+    const lam = rows.find((r) => r.name === 'Ламинирование частей корпуса')!
+    expect(lam.qtyCalc).toBe(112)
+    expect(lam.unit).toBe('кг')
+  })
+
+  // В эталоне у этой строки k = 1 (строка 21), а не 0,56, как у прочего
+  // ламинирования, — коэффициент задан явно, не по подстроке имени.
+  it('ФОТ-спутник ламинирования стыков идёт с коэффициентом 1', () => {
+    const lam = rows.find((r) => r.name === 'Ламинирование частей корпуса')!
+    const fot = rows.find((r) => r.kind === 'ФОТ' && r.parentId === lam.id)!
+    expect(fot.fotK).toBe(1)
+    // После пересчёта спутник даёт k × масса = 112 чел.ч.
+    const done = recalcFotSatellites(rows)
+    expect(done.find((r) => r.id === fot.id)!.qtyCalc).toBeCloseTo(112, 6)
+  })
+
+  it('промах справочника не выдумывает массу, а просит ввести вручную', () => {
+    const lam = materializeKns(ctx, { ...OL3487, dn: 1234, pipeExecution: 'частями' })
+      .sections.find((s) => s.code === '1')!
+      .components.flatMap((c) => c.rows)
+      .find((r) => r.name === 'Ламинирование частей корпуса')!
+    expect(lam.qtyCalc).toBeNull()
+    expect(lam.note).toContain('введите вручную')
   })
 })
 

@@ -21,7 +21,14 @@
  * калькуляторах (Библиотека, основание).
  */
 
-import { bottomMassKg, cutoutHours, insulation, laminationMassKg, marketableAppearanceHours } from './formulas'
+import {
+  bottomJointLaminationKg,
+  bottomMassKg,
+  cutoutHours,
+  insulation,
+  laminationMassKg,
+  marketableAppearanceHours,
+} from './formulas'
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import {
   buildFasteners,
@@ -275,6 +282,7 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
   // Материал зависит от среды: химстойкая -> СК/ВЭС (эталон D8).
   const material = tankMaterial(s.tankType)
   const pipeName = `Труба ${material}-К ${s.dn}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`
+  const jointMass = ctx.jointLayerMassOf?.(s.dn) ?? null
 
   const components: CalcComponent[] = [
     {
@@ -329,13 +337,19 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
           fotK: FOT_K_MECH,
           note: `Масса — из матрицы «Для расчетов» f(Dн ${s.dn}, L ${lengthMm}) · объём 2 днищ ${geo.ellipticVolumeM3?.toFixed(2)} м³ · введите вручную`,
         }),
+        // Вопреки прежнему комментарию, ламинация стыков от массы днищ НЕ
+        // зависит: эталон считает её от Мс — массы формованных слоёв на стыке
+        // из справочника f(Dу). Строка 25 листа «Калькулятор ЕМК».
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ламинация днища (косые и центральный стыки)',
           unit: 'кг',
-          qtyCalc: null,
+          qtyCalc: jointMass == null ? null : bottomJointLaminationKg(jointMass),
           fotK: FOT_K_LAMIN,
-          note: 'Зависит от массы днищ — введите после неё',
+          note:
+            jointMass == null
+              ? `Мс для Dу ${s.dn} нет в справочнике — введите вручную`
+              : `ƒ (Мс/0,707 + Мс/2)·2, Мс ${jointMass} кг`,
         }),
       ],
     })

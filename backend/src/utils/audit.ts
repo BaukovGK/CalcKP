@@ -47,6 +47,8 @@ export type AuditAction =
   | 'template.pipe_weight.upsert'
   | 'template.pipe_weight.delete'
   | 'template.engineering.upsert'
+  /** Мс — масса формованных слоёв на стыке, f(Dу, PN). */
+  | 'template.joint_layer.upsert'
 
 export async function audit(
   userId: string | null | undefined,

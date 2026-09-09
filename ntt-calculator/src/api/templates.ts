@@ -38,6 +38,18 @@ export interface MatrixCellDto {
   thicknessMm?: number | null
 }
 
+/** Мс — масса формованных слоёв на стыке, ключ (Dу; PN). */
+export interface JointLayerDto {
+  d: number
+  pn: number
+  massKg: number
+  odMm?: number | null
+  hMm?: number | null
+  sMm?: number | null
+  xMm?: number | null
+  yMm?: number | null
+}
+
 export const templatesApi = {
   upsertNozzleNorm(dn: number, dto: NozzleNormDto): Promise<void> {
     return api.put(`/templates/nozzle-norms/${dn}`, dto).then(() => undefined)
@@ -55,5 +67,9 @@ export const templatesApi = {
 
   upsertMatrixCell(dto: MatrixCellDto): Promise<void> {
     return api.put('/templates/engineering', dto).then(() => undefined)
+  },
+
+  upsertJointLayer(dto: JointLayerDto): Promise<void> {
+    return api.put('/templates/joint-layers', dto).then(() => undefined)
   },
 }

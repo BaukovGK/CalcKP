@@ -49,6 +49,16 @@ interface PumpSeed {
 }
 
 interface MatrixCellSeed { d: number; lengthMm: number; massKg: number; thicknessMm: number | null }
+interface JointLayerSeed {
+  d: number
+  pn: number
+  odMm: number | null
+  hMm: number | null
+  sMm: number | null
+  xMm: number | null
+  yMm: number | null
+  massKg: number
+}
 interface NozzleNormSeed {
   dn: number
   odMm: number | null
@@ -186,6 +196,22 @@ async function seedEngineering() {
   console.log(`  инженерные матрицы: корпус ${eng.shell.length}, днища ${eng.ellipticBottom.length}, патрубки ${nozzleCount}`)
 }
 
+/**
+ * Мс — масса формованных слоёв на стыке, f(Dу, PN). Лист «Для расчетов»
+ * J36:S143. На ней стоят «Ламинирование частей корпуса» (КНС) и «Ламинация
+ * днища» (ЕМК), поэтому потеря строк тихо занизила бы обе.
+ */
+async function seedJointLayers() {
+  const rows = load<JointLayerSeed[]>('joint-layers.json')
+
+  await prisma.jointLayerNorm.createMany({ data: rows, skipDuplicates: true })
+
+  const count = await prisma.jointLayerNorm.count()
+  if (count !== rows.length) throw new Error(`Мс на стыке: в JSON ${rows.length}, в БД ${count} — потеря при сиде`)
+
+  console.log(`  Мс на стыке: ${count} строк (Dу × PN)`)
+}
+
 // ─── Каталог насосов (utils/pump-selection.ts) ────────────────────────────────
 
 /** Паспортная характеристика Q–H (выгрузка VJ Select). */
@@ -276,6 +302,12 @@ async function verify() {
   if (!n250) errors.push('не найдена норма патрубка DN250')
   else console.log(`  контроль нормы патрубка DN250 = ${n250.moldingMassKg} кг ✓`)
 
+  // Мс при PN 4 — то самое значение, которое берут оба калькулятора.
+  // В эталонном листе КНС для DN3000 ячейка I20 показывает ровно 112 кг.
+  const joint = await prisma.jointLayerNorm.findUnique({ where: { d_pn: { d: 3000, pn: 4 } } })
+  if (joint?.massKg !== 112) errors.push(`Мс(DN3000, PN4) = ${joint?.massKg ?? '—'}, ожидалось 112 кг`)
+  else console.log(`  контроль Мс DN3000 при PN4 = ${joint.massKg} кг ✓`)
+
   // Контроль паспортной кривой: подбор идёт по ней, а не по диапазонам, и
   // потерянные при сиде точки не проявят себя ничем, кроме неверной марки.
   // Проверяем узловую точку VSL.80.37.4.5.0D из выгрузки VJ Select.
@@ -320,6 +352,7 @@ async function main() {
   await seedPrices()
   await seedPipeWeights()
   await seedEngineering()
+  await seedJointLayers()
   await seedPumps()
   await verify()
 

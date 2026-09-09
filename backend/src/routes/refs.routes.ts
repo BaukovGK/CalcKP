@@ -68,13 +68,15 @@ refsRouter.get('/price-version', async (_req, res, next) => {
  * `shell`          вес и толщина корпуса      = f(Dу, L) — 140 ячеек
  * `ellipticBottom` формовка эллиптических днищ = f(Dн, L) — 140 ячеек
  * `nozzles`        нормы простых патрубков     = f(DN)    — 26 позиций
+ * `jointLayers`    Мс, масса слоёв на стыке    = f(Dу, PN) — 105 строк
  *
  * Нормы патрубков — источник массы формовки гильз (Библиотека A5): без них
- * количество приходилось вводить вручную.
+ * количество приходилось вводить вручную. Мс — источник «Ламинирования частей
+ * корпуса» (КНС) и «Ламинации днища» (ЕМК).
  */
 refsRouter.get('/engineering', async (_req, res, next) => {
   try {
-    const [matrix, nozzles] = await Promise.all([
+    const [matrix, nozzles, jointLayers] = await Promise.all([
       prisma.engineeringMatrix.findMany({
         orderBy: [{ kind: 'asc' }, { d: 'asc' }, { lengthMm: 'asc' }],
         select: { kind: true, d: true, lengthMm: true, massKg: true, thicknessMm: true },
@@ -86,12 +88,17 @@ refsRouter.get('/engineering', async (_req, res, next) => {
           h1Mm: true, s1Mm: true, flangeMassKg: true, bolt: true, boltCount: true,
         },
       }),
+      prisma.jointLayerNorm.findMany({
+        orderBy: [{ d: 'asc' }, { pn: 'asc' }],
+        select: { d: true, pn: true, odMm: true, hMm: true, sMm: true, xMm: true, yMm: true, massKg: true },
+      }),
     ])
 
     res.json({
       shell: matrix.filter((m) => m.kind === 'SHELL').map(({ kind: _kind, ...c }) => c),
       ellipticBottom: matrix.filter((m) => m.kind === 'ELLIPTIC_BOTTOM').map(({ kind: _kind, ...c }) => c),
       nozzles,
+      jointLayers,
     })
   } catch (e) {
     next(e)

@@ -55,10 +55,27 @@ export interface NozzleNorm {
   boltCount: number | null
 }
 
+/**
+ * Мс — масса формованных слоёв на стыке, f(Dу, PN). Лист «Для расчетов»,
+ * 105 строк: Dу 1000…3000 через 100 × PN 4, 6, 10, 16, 20.
+ */
+export interface JointLayerNorm {
+  d: number
+  pn: number
+  odMm: number | null
+  hMm: number | null
+  sMm: number | null
+  xMm: number | null
+  yMm: number | null
+  massKg: number
+}
+
 export interface EngineeringRefs {
   shell: MatrixCell[]
   ellipticBottom: MatrixCell[]
   nozzles: NozzleNorm[]
+  /** Может отсутствовать, если бэкенд старее миграции `add_joint_layer_norms`. */
+  jointLayers?: JointLayerNorm[]
 }
 
 /** Активная версия прайса (ТЗ §3): та, из которой считается расчёт сейчас. */

@@ -34,6 +34,16 @@ import type { RowResult } from '@/engines/types'
  * загрузка. Никаких confirm() внутри actions (антицель хендоффа).
  */
 
+/**
+ * Давление, при котором берётся Мс из справочника f(Dу, PN).
+ *
+ * Эталон везде читает строку PN 4 независимо от фактического давления
+ * изделия — и КНС (отдельная колонка листа, заполненная только в этой
+ * строке), и ЕМК (точный поиск, попадающий в первую строку группы).
+ * Осознанно ли это, — вопрос заводу; пока воспроизводим как есть.
+ */
+const JOINT_LAYER_PN = 4
+
 /** Ставки по умолчанию — fallback, если позиции нет в прайсе (Механика §9). */
 const FALLBACK_RATES: Rates = {
   fotRub: 1207.8,
@@ -116,10 +126,18 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       // Ключ — DN гильзы; сетка дискретна, промахи дают «красную» строку.
       const normIdx = new Map(engineering.nozzles.map((n) => [n.dn, n]))
 
+      // Мс — масса формованных слоёв на стыке. Таблица приходит целиком
+      // (Dу × PN), но выбирается строка при PN 4: так делают оба калькулятора
+      // эталона независимо от давления изделия (см. JointLayerNorm в схеме).
+      const jointIdx = new Map(
+        (engineering.jointLayers ?? []).filter((j) => j.pn === JOINT_LAYER_PN).map((j) => [j.d, j.massKg]),
+      )
+
       const ctx: MaterializeContext = {
         priceOf: (c, n, u) => priceIdx.get(`${c}|${n}|${u}`) ?? null,
         pipeWeightOf: (dn, pn, sn) => weightIdx.get(`${dn}|${pn}|${sn}`) ?? null,
         nozzleNormOf: (dn) => normIdx.get(dn) ?? null,
+        jointLayerMassOf: (d) => jointIdx.get(d) ?? null,
         priceListVersion: priceListVersion.value,
       }
 
@@ -243,6 +261,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       emergencyPipeline: Boolean(kns.emergency),
       insulationEnabled: Boolean(kns.insulation),
       insulationDepthMm: n(kns.tiGlubina),
+      pipeExecution: kns.ispolnenie === 'частями' ? 'частями' : 'целая',
     }
   }
 

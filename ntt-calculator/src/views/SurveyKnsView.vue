@@ -100,6 +100,17 @@
           <label v-if="form.insulation" class="fld"><span>Глубина теплоизоляции, мм</span>
             <input v-model="form.tiGlubina" class="num" />
           </label>
+
+          <label class="fld"><span>Исполнение обечайки</span>
+            <select v-model="form.ispolnenie">
+              <option value="целая">Целая труба</option>
+              <option value="частями">Труба частями</option>
+            </select>
+          </label>
+          <div v-if="form.ispolnenie === 'частями'" class="ol-explain">
+            В расчёт добавятся сегменты трубы (длины разносите вручную) и
+            ламинирование стыков по Мс из справочника.
+          </div>
         </section>
 
         <!-- 3. Патрубки -->
@@ -457,6 +468,7 @@ const liveValues = computed(() => {
 /** Блоки шаблона, включаемые флагами ОЛ (§9.1). */
 const blocks = computed(() => [
   { t: 'Корпус (обечайка, днище, патрубки)', on: true },
+  { t: 'Труба частями: сегменты и ламинирование стыков', on: form.value.ispolnenie === 'частями' },
   { t: 'Теплоизоляция', on: form.value.insulation },
   { t: 'Лестница', on: true },
   { t: 'Перекрытие, площадка, несущие балки', on: true },
