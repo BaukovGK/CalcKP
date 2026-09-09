@@ -142,7 +142,12 @@
                        расчёта, и молчаливая подмена увела бы за собой ручные цены. -->
                   <span v-if="p.pipeExplain.value" class="ol-pick">{{ p.pipeExplain.value }}</span>
                 </label>
-                <label class="fld"><span>Кол-во</span><input v-model="form.napKol" class="num" /></label>
+                <label class="fld"><span>Кол-во</span>
+                  <input v-model="form.napKol" class="num" />
+                  <!-- Число ниток делит поток: при одной нитке на два насоса
+                       отводящий патрубок выходит крупнее стояка. -->
+                  <span v-if="p.nozzlesExplain.value" class="ol-pick">{{ p.nozzlesExplain.value }}</span>
+                </label>
                 <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.napLotok" class="num" /></label>
               </div>
             </div>

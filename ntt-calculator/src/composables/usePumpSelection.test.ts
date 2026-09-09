@@ -12,11 +12,13 @@ import { makeDefaultKnsSurvey, type KnsSurveyForm } from '@/types/survey'
 
 const selectPump = vi.fn()
 const dischargePipeDiameter = vi.fn()
+const outletNozzles = vi.fn()
 
 vi.mock('@/api/pumpStation', () => ({
   pumpStationApi: {
     selectPump: (...a: unknown[]) => selectPump(...a),
     dischargePipeDiameter: (...a: unknown[]) => dischargePipeDiameter(...a),
+    outletNozzles: (...a: unknown[]) => outletNozzles(...a),
   },
 }))
 
@@ -52,9 +54,16 @@ describe('usePumpSelection', () => {
     vi.useFakeTimers()
     vi.clearAllMocks()
     selectPump.mockResolvedValue(result('Vandjord VSL.80.37.4.5.0D'))
-    dischargePipeDiameter.mockResolvedValue({
-      diameterMm: 110, theoreticalDiameterMm: 103.2, velocityMs: 1.32,
-      designVelocityMs: 1.5, flowPerPumpM3h: 45, warnings: [],
+    const section = (dn: number, od: number, wall: number, inner: number, v: number) => ({
+      diameterMm: od, dn, wallMm: wall, innerDiameterMm: inner,
+      theoreticalDiameterMm: 103.2, velocityMs: v, designVelocityMs: 1.5,
+      flowM3h: 45, warnings: [],
+    })
+    dischargePipeDiameter.mockResolvedValue({ ...section(125, 125, 7.4, 110.2, 1.32), flowPerPumpM3h: 45 })
+    outletNozzles.mockResolvedValue({
+      perPump: section(125, 125, 7.4, 110.2, 1.32),
+      perOutlet: section(125, 125, 7.4, 110.2, 1.32),
+      manifold: false,
     })
   })
   afterEach(() => vi.useRealTimers())

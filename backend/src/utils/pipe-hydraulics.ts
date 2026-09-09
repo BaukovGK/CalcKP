@@ -1,21 +1,33 @@
 /**
- * Гидравлический подбор диаметра напорного трубопровода насосной станции.
+ * Гидравлика напорных трубопроводов насосной станции: диаметр напорного
+ * участка и диаметры выходных патрубков.
  *
- * Источник метода: лист «Гидравл. расчет» из примеров ОЛ считает диаметр
- * напорного трубопровода как ВХОДНОЙ параметр (заранее выбранную трубу) и
- * лишь проверяет скорость `V = 4·Q/(π·D²)` — готовой формулы «диаметр из
- * расхода» там нет. Здесь используется обратная, стандартная гидравлическая
- * формула — расчётный диаметр по целевой (экономической) скорости течения:
+ * Расчёт стоит на трёх параметрах опросного листа — расход, напор, количество
+ * рабочих насосов. Напор нужен подбору насоса (`pump-selection.ts`), расход и
+ * число насосов — этому модулю: он делит поток по участкам и подбирает под
+ * каждый ближайшую подходящую трубу.
+ *
+ * Диаметр считается по целевой (экономической) скорости течения:
  * ```
  * D = √(4·Q / (π·Vрасч))
  * ```
- * с округлением вверх до ближайшего типоразмера напорной ПЭ-трубы (тот же
- * ряд, что в БД: `PePipe`, `prisma/seed-data/pipe-weights-pe.json`).
+ * Vрасч по умолчанию 1,5 м/с (СП 32.13330, экономический диапазон 1…2 м/с).
  *
- * Vрасч по умолчанию — 1,5 м/с (экономическая скорость для напорных
- * канализационных трубопроводов, SP 32.13330, диапазон 1–2 м/с). Реальные
- * листы иногда берут трубу крупнее расчётной (для запаса/унификации патрубка
- * КНС) — это уже инженерный выбор поверх гидравлики, не входит в эту функцию.
+ * ❗ D в этой формуле — диаметр ПОТОКА, то есть ВНУТРЕННИЙ. Лист «Гидравл.
+ * расчет» эталона считает скорость именно по внутреннему
+ * (`B12 = 0,16 − 2·0,0095` для трубы Ø160×9,5), и здесь так же: труба
+ * подбирается по внутреннему диаметру, а не по наружному. Разница не
+ * косметическая — у ПЭ-100 SDR17 стенка съедает заметную долю сечения: Ø110
+ * даёт проход 96,8 мм, и подбор «по наружному» выдавал бы трубу, которая
+ * целевую скорость не держит.
+ *
+ * Функция даёт МИНИМАЛЬНЫЙ типоразмер, проходящий по целевой скорости.
+ * Реальные листы отклоняются от него в обе стороны, и обе — инженерный выбор
+ * поверх гидравлики: где-то берут трубу крупнее (запас, унификация с
+ * патрубком КНС), где-то мельче. Эталон ОЛ3487 — как раз второй случай: там
+ * стояк DN100 и коллектор DN150, то есть скорости 1,71 и 1,61 м/с. Это внутри
+ * экономического диапазона СП 32.13330 (1…2 м/с), но выше нашего умолчания;
+ * чтобы прийти к тем же диаметрам, достаточно поднять `designVelocityMs`.
  *
  * @module utils/pipe-hydraulics
  */
@@ -23,11 +35,63 @@
 /** Целевая (экономическая) скорость течения в напорном трубопроводе, м/с, по умолчанию. */
 export const DEFAULT_DESIGN_VELOCITY_MS = 1.5
 
-/** Стандартный ряд наружных диаметров напорных ПЭ-труб, мм (ПЭ-100 SDR17). */
-export const STANDARD_PE_OD_MM: readonly number[] = [
-  32, 40, 50, 63, 75, 90, 110, 125, 140, 160, 180, 200, 225, 250, 280, 315,
-  355, 400, 450, 500, 560, 630, 710, 800, 900, 1000,
+/** Типоразмер напорной ПЭ-трубы. */
+export interface PePipeSize {
+  /** Условный проход, мм — им оперируют опросный лист и наименования каталога. */
+  dn: number
+  /** Наружный диаметр, мм. */
+  odMm: number
+  /** Толщина стенки, мм. */
+  wallMm: number
+}
+
+/**
+ * Ряд ПЭ-100 SDR17 — тот же, что в БД (`PePipe`,
+ * `prisma/seed-data/pipe-weights-pe.json`, 26 позиций).
+ *
+ * Держится здесь копией намеренно: модуль остаётся чистой функцией без БД,
+ * как `pump-curve.ts`, и его можно считать в тесте без миграций. Расхождение
+ * с каталогом ловит тест `pipe-hydraulics.test.ts`.
+ *
+ * `dn` нерегулярен и не уникален (DN 25 → ⌀32, DN 45 → ⌀50, DN 125 → и ⌀125,
+ * и ⌀140) — это данные листа, а не ошибка переноса.
+ */
+export const PE_SDR17_SIZES: readonly PePipeSize[] = [
+  { dn: 25, odMm: 32, wallMm: 2 },
+  { dn: 40, odMm: 40, wallMm: 2.4 },
+  { dn: 45, odMm: 50, wallMm: 3 },
+  { dn: 50, odMm: 63, wallMm: 3.8 },
+  { dn: 65, odMm: 75, wallMm: 4.5 },
+  { dn: 80, odMm: 90, wallMm: 5.4 },
+  { dn: 100, odMm: 110, wallMm: 6.6 },
+  { dn: 125, odMm: 125, wallMm: 7.4 },
+  { dn: 125, odMm: 140, wallMm: 8.3 },
+  { dn: 150, odMm: 160, wallMm: 9.5 },
+  { dn: 180, odMm: 180, wallMm: 10.7 },
+  { dn: 200, odMm: 200, wallMm: 11.9 },
+  { dn: 225, odMm: 225, wallMm: 13.4 },
+  { dn: 250, odMm: 250, wallMm: 14.8 },
+  { dn: 280, odMm: 280, wallMm: 16.6 },
+  { dn: 300, odMm: 315, wallMm: 18.7 },
+  { dn: 350, odMm: 355, wallMm: 21.1 },
+  { dn: 400, odMm: 400, wallMm: 23.7 },
+  { dn: 450, odMm: 450, wallMm: 26.7 },
+  { dn: 500, odMm: 500, wallMm: 29.7 },
+  { dn: 550, odMm: 560, wallMm: 33.2 },
+  { dn: 600, odMm: 630, wallMm: 37.4 },
+  { dn: 700, odMm: 710, wallMm: 42.1 },
+  { dn: 800, odMm: 800, wallMm: 47.4 },
+  { dn: 900, odMm: 900, wallMm: 53.3 },
+  { dn: 1000, odMm: 1000, wallMm: 59.3 },
 ]
+
+/** Наружные диаметры ряда, мм — для совместимости и подписей. */
+export const STANDARD_PE_OD_MM: readonly number[] = PE_SDR17_SIZES.map((p) => p.odMm)
+
+/** Внутренний диаметр (проход), мм: `Dн − 2·стенка`. */
+export function innerDiameterMm(size: PePipeSize): number {
+  return size.odMm - 2 * size.wallMm
+}
 
 export interface PipeDiameterWarning {
   code: string
@@ -35,42 +99,94 @@ export interface PipeDiameterWarning {
 }
 
 export interface PipeDiameterResult {
-  /** Диаметр напорного трубопровода, мм — ближайший больший типоразмер из каталога. */
+  /** Наружный диаметр подобранной трубы, мм. */
   diameterMm: number
-  /** Расчётный (теоретический, без округления до каталога) диаметр, мм. */
+  /** Условный проход подобранной трубы, мм — он идёт в наименования и в ОЛ. */
+  dn: number
+  /** Толщина стенки подобранной трубы, мм. */
+  wallMm: number
+  /** Внутренний диаметр подобранной трубы (проход), мм. */
+  innerDiameterMm: number
+  /** Требуемый по скорости диаметр потока, мм — без округления до каталога. */
   theoreticalDiameterMm: number
-  /** Фактическая скорость течения при выбранном диаметре, м/с. */
+  /** Фактическая скорость течения в подобранной трубе, м/с. */
   velocityMs: number
   /** Целевая скорость, заложенная в расчёт, м/с. */
   designVelocityMs: number
-  /** Расход на ОДИН насос, м³/ч (`flowM3h / workingPumps`) — то, что реально легло в расчёт. */
-  flowPerPumpM3h: number
+  /** Расход, который реально лёг в расчёт этого участка, м³/ч. */
+  flowM3h: number
   warnings: PipeDiameterWarning[]
 }
 
+/** Подобрать наименьшую трубу ряда, чей ПРОХОД не меньше требуемого. */
+function pickByInner(
+  flowM3s: number,
+  designVelocityMs: number,
+  sizes: readonly PePipeSize[],
+): { size: PePipeSize; theoreticalDiameterMm: number; warnings: PipeDiameterWarning[] } {
+  const warnings: PipeDiameterWarning[] = []
+  const theoreticalDiameterMm = Math.sqrt((4 * flowM3s) / (Math.PI * designVelocityMs)) * 1000
+
+  const sorted = [...sizes].sort((a, b) => innerDiameterMm(a) - innerDiameterMm(b))
+  let size = sorted.find((s) => innerDiameterMm(s) >= theoreticalDiameterMm)
+  if (size == null) {
+    size = sorted[sorted.length - 1]!
+    warnings.push({
+      code: 'DIAMETER_ABOVE_CATALOG',
+      message:
+        `Требуемый проход ${theoreticalDiameterMm.toFixed(1)} мм больше максимума каталога ` +
+        `(⌀${size.odMm}, проход ${innerDiameterMm(size).toFixed(1)} мм) — взят максимум, ` +
+        `скорость будет выше целевой.`,
+    })
+  }
+  return { size, theoreticalDiameterMm, warnings }
+}
+
+/** Собрать результат по участку с известным расходом. */
+function sizeSection(
+  flowM3h: number,
+  designVelocityMs: number,
+  sizes: readonly PePipeSize[],
+): PipeDiameterResult {
+  const flowM3s = flowM3h / 3600
+  const { size, theoreticalDiameterMm, warnings } = pickByInner(flowM3s, designVelocityMs, sizes)
+  const inner = innerDiameterMm(size)
+
+  return {
+    diameterMm: size.odMm,
+    dn: size.dn,
+    wallMm: size.wallMm,
+    innerDiameterMm: inner,
+    theoreticalDiameterMm,
+    // Скорость — по проходу, а не по наружному: иначе она выходит оптимистичной
+    // на треть и труба выглядит подходящей, когда не подходит.
+    velocityMs: (4 * flowM3s) / (Math.PI * (inner / 1000) ** 2),
+    designVelocityMs,
+    flowM3h,
+    warnings,
+  }
+}
+
 /**
- * Рассчитать диаметр напорного трубопровода насосной станции по расходу.
+ * Диаметр внутристанционного напорного участка — того, что идёт от насоса
+ * вверх (стояк на АТМ).
  *
- * Внутренний напорный трубопровод в КНС — это отдельный подъёмный участок на
- * КАЖДЫЙ насос (см. лист `ОЛ_НАСОСНАЯ_СТАНЦИЯ`: скорость там считается по
- * B4 = E51/(3.6·E55), т.е. по притоку на один насос, не по общему притоку на
- * станцию). Поэтому диаметр считается по `flowM3h / workingPumps`, а не по
- * общему притоку — та же логика деления, что и в `pump-selection.ts` и
- * `pump-station-dimensions.ts`.
+ * Считается по притоку НА ОДИН НАСОС: в КНС это отдельный подъёмный участок
+ * на каждый насос (лист `ОЛ_НАСОСНАЯ_СТАНЦИЯ`: скорость там по
+ * `B4 = E51/(3,6·E55)`, то есть по притоку на один насос). Та же логика
+ * деления, что в `pump-selection.ts` и `pump-station-dimensions.ts`.
  *
- * @param flowM3h Общий приток на станцию (все рабочие насосы вместе), м³/ч. Обязателен, > 0.
- * @param workingPumps Количество рабочих насосов (не считая резервных), шт.
- *   По умолчанию 1 (весь приток — на один насос, как было до этого параметра).
+ * @param flowM3h Общий приток на станцию (все рабочие насосы вместе), м³/ч.
+ * @param workingPumps Количество рабочих насосов, шт (по умолчанию 1).
  * @param designVelocityMs Целевая скорость течения, м/с (по умолчанию 1,5).
- * @param standardSizesMm Ряд стандартных диаметров для округления, мм
- *   (по умолчанию — каталог ПЭ-труб {@link STANDARD_PE_OD_MM}).
+ * @param sizes Ряд типоразмеров (по умолчанию {@link PE_SDR17_SIZES}).
  */
 export function calcDischargePipeDiameterMm(
   flowM3h: number,
   workingPumps = 1,
   designVelocityMs: number = DEFAULT_DESIGN_VELOCITY_MS,
-  standardSizesMm: readonly number[] = STANDARD_PE_OD_MM,
-): PipeDiameterResult {
+  sizes: readonly PePipeSize[] = PE_SDR17_SIZES,
+): PipeDiameterResult & { flowPerPumpM3h: number } {
   if (!(flowM3h > 0)) {
     throw new Error('flowM3h (общий приток, м³/ч) обязателен и должен быть > 0.')
   }
@@ -81,26 +197,72 @@ export function calcDischargePipeDiameterMm(
     throw new Error('designVelocityMs (расчётная скорость, м/с) должен быть > 0.')
   }
 
-  const warnings: PipeDiameterWarning[] = []
-
   const flowPerPumpM3h = flowM3h / workingPumps
-  const flowM3s = flowPerPumpM3h / 3600
-  const theoreticalDiameterM = Math.sqrt((4 * flowM3s) / (Math.PI * designVelocityMs))
-  const theoreticalDiameterMm = theoreticalDiameterM * 1000
+  return { ...sizeSection(flowPerPumpM3h, designVelocityMs, sizes), flowPerPumpM3h }
+}
 
-  const sorted = [...standardSizesMm].sort((a, b) => a - b)
-  let diameterMm = sorted.find((d) => d >= theoreticalDiameterMm)
-  if (diameterMm == null) {
-    diameterMm = sorted[sorted.length - 1]
-    warnings.push({
-      code: 'DIAMETER_ABOVE_CATALOG',
-      message:
-        `Расчётный диаметр ${theoreticalDiameterMm.toFixed(1)} мм больше максимума каталога ` +
-        `(${diameterMm} мм) — взят максимум, скорость будет выше целевой.`,
-    })
+export interface OutletNozzlesResult {
+  /**
+   * Напорный патрубок насоса: участок от одного насоса, расход — приток,
+   * делённый на число рабочих.
+   */
+  perPump: PipeDiameterResult
+  /**
+   * Выходной (отводящий) патрубок станции: расход — приток, делённый на число
+   * напорных трубопроводов. При одной нитке через неё идёт весь приток, при
+   * двух — половина.
+   */
+  perOutlet: PipeDiameterResult
+  /**
+   * Ниток меньше, чем рабочих насосов: часть насосов сходится в общий
+   * коллектор, и его диаметр больше диаметра стояка. Такую компоновку лист
+   * называет «сложной».
+   */
+  manifold: boolean
+}
+
+/**
+ * Диаметры выходных патрубков станции.
+ *
+ * Из трёх параметров ОЛ (расход, напор, число рабочих насосов) напор уходит в
+ * подбор насоса, а расход с числом насосов делят поток на два участка:
+ *
+ * - **напорный патрубок насоса** — приток / рабочих насосов;
+ * - **отводящий патрубок станции** — приток / число напорных трубопроводов.
+ *
+ * Когда ниток столько же, сколько рабочих насосов, оба диаметра совпадают —
+ * это прямая нитка. Когда ниток меньше, отводящий выходит крупнее: насосы
+ * сходятся в коллектор (в эталоне — стояки DN100 в коллектор DN150).
+ *
+ * @param flowM3h Общий приток на станцию, м³/ч.
+ * @param workingPumps Количество рабочих насосов, шт.
+ * @param outletCount Количество напорных трубопроводов на выходе, шт.
+ * @param designVelocityMs Целевая скорость течения, м/с (по умолчанию 1,5).
+ * @param sizes Ряд типоразмеров (по умолчанию {@link PE_SDR17_SIZES}).
+ */
+export function selectOutletNozzles(
+  flowM3h: number,
+  workingPumps: number,
+  outletCount: number,
+  designVelocityMs: number = DEFAULT_DESIGN_VELOCITY_MS,
+  sizes: readonly PePipeSize[] = PE_SDR17_SIZES,
+): OutletNozzlesResult {
+  if (!(flowM3h > 0)) {
+    throw new Error('flowM3h (общий приток, м³/ч) обязателен и должен быть > 0.')
+  }
+  if (!(workingPumps > 0) || !Number.isInteger(workingPumps)) {
+    throw new Error('workingPumps (количество рабочих насосов) должен быть целым числом > 0.')
+  }
+  if (!(outletCount > 0) || !Number.isInteger(outletCount)) {
+    throw new Error('outletCount (количество напорных трубопроводов) должен быть целым числом > 0.')
+  }
+  if (!(designVelocityMs > 0)) {
+    throw new Error('designVelocityMs (расчётная скорость, м/с) должен быть > 0.')
   }
 
-  const velocityMs = (4 * flowM3s) / (Math.PI * (diameterMm / 1000) ** 2)
-
-  return { diameterMm, theoreticalDiameterMm, velocityMs, designVelocityMs, flowPerPumpM3h, warnings }
+  return {
+    perPump: sizeSection(flowM3h / workingPumps, designVelocityMs, sizes),
+    perOutlet: sizeSection(flowM3h / outletCount, designVelocityMs, sizes),
+    manifold: outletCount < workingPumps,
+  }
 }

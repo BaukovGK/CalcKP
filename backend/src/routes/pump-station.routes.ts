@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { requireAuth } from '../middleware/auth'
 import { calcPumpStationDimensions } from '../utils/pump-station-dimensions'
 import { calcRingStiffnessPa } from '../utils/ring-stiffness'
-import { calcDischargePipeDiameterMm } from '../utils/pipe-hydraulics'
+import { calcDischargePipeDiameterMm, selectOutletNozzles } from '../utils/pipe-hydraulics'
 import { selectPump } from '../utils/pump-selection'
 import { prisma } from '../utils/prisma'
 
@@ -81,6 +81,35 @@ pumpStationRouter.post('/discharge-pipe-diameter', (req, res, next) => {
   try {
     const { flowM3h, workingPumps, designVelocityMs } = pipeDiameterSchema.parse(req.body)
     res.json(calcDischargePipeDiameterMm(flowM3h, workingPumps, designVelocityMs))
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })
+      return
+    }
+    next(e)
+  }
+})
+
+const outletNozzlesSchema = z.object({
+  flowM3h: z.number().positive(),
+  workingPumps: z.number().int().positive(),
+  outletCount: z.number().int().positive(),
+  designVelocityMs: z.number().positive().optional(),
+})
+
+/**
+ * POST /api/pump-station/outlet-nozzles — диаметры выходных патрубков.
+ *
+ * Из трёх параметров ОЛ (расход, напор, число рабочих насосов) напор уходит в
+ * подбор насоса, а расход с числом насосов делят поток на два участка:
+ * напорный патрубок насоса (приток / рабочих) и отводящий патрубок станции
+ * (приток / число напорных трубопроводов). Чистый расчёт
+ * `selectOutletNozzles` — см. `utils/pipe-hydraulics.ts`.
+ */
+pumpStationRouter.post('/outlet-nozzles', (req, res, next) => {
+  try {
+    const { flowM3h, workingPumps, outletCount, designVelocityMs } = outletNozzlesSchema.parse(req.body)
+    res.json(selectOutletNozzles(flowM3h, workingPumps, outletCount, designVelocityMs))
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })

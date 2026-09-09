@@ -76,13 +76,32 @@ export interface PumpSelectionResult {
 }
 
 export interface PipeDiameterResult {
-  /** Ближайший больший типоразмер напорной ПЭ-трубы, мм. */
+  /** Наружный диаметр подобранной ПЭ-трубы, мм. */
   diameterMm: number
+  /** Условный проход — он идёт в ОЛ и в наименования каталога. */
+  dn: number
+  wallMm: number
+  /** Внутренний диаметр (проход), мм — по нему считается скорость. */
+  innerDiameterMm: number
   theoreticalDiameterMm: number
   velocityMs: number
   designVelocityMs: number
-  flowPerPumpM3h: number
+  /** Расход, лёгший в расчёт этого участка, м³/ч. */
+  flowM3h: number
   warnings: PumpWarning[]
+}
+
+/** Результат `dischargePipeDiameter`: тот же участок плюс расход на насос. */
+export interface DischargePipeResult extends PipeDiameterResult {
+  flowPerPumpM3h: number
+}
+
+/** Диаметры выходных патрубков: стояк насоса и отводящий патрубок станции. */
+export interface OutletNozzlesResult {
+  perPump: PipeDiameterResult
+  perOutlet: PipeDiameterResult
+  /** Ниток меньше, чем насосов: насосы сходятся в общий коллектор. */
+  manifold: boolean
 }
 
 export const pumpStationApi = {
@@ -98,10 +117,20 @@ export const pumpStationApi = {
       .then((r) => r.data)
   },
 
-  /** Диаметр напорного трубопровода по расходу и числу рабочих насосов. */
-  dischargePipeDiameter(flowM3h: number, workingPumps: number): Promise<PipeDiameterResult> {
+  /** Диаметр напорного участка насоса по расходу и числу рабочих насосов. */
+  dischargePipeDiameter(flowM3h: number, workingPumps: number): Promise<DischargePipeResult> {
     return api
-      .post<PipeDiameterResult>('/pump-station/discharge-pipe-diameter', { flowM3h, workingPumps })
+      .post<DischargePipeResult>('/pump-station/discharge-pipe-diameter', { flowM3h, workingPumps })
+      .then((r) => r.data)
+  },
+
+  /**
+   * Диаметры выходных патрубков: стояк насоса (приток / рабочих насосов) и
+   * отводящий патрубок станции (приток / число напорных трубопроводов).
+   */
+  outletNozzles(flowM3h: number, workingPumps: number, outletCount: number): Promise<OutletNozzlesResult> {
+    return api
+      .post<OutletNozzlesResult>('/pump-station/outlet-nozzles', { flowM3h, workingPumps, outletCount })
       .then((r) => r.data)
   },
 }

@@ -1,7 +1,13 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { toLps } from '@/engines/survey-kns'
 import { tryEvalExpr } from '@/engines/expr'
-import { pumpStationApi, type PipeDiameterResult, type PumpCandidate, type PumpSelectionResult } from '@/api/pumpStation'
+import {
+  pumpStationApi,
+  type DischargePipeResult,
+  type OutletNozzlesResult,
+  type PumpCandidate,
+  type PumpSelectionResult,
+} from '@/api/pumpStation'
 import type { KnsSurveyForm } from '@/types/survey'
 
 /**
@@ -46,6 +52,12 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     return n != null && Number.isInteger(n) && n > 0 ? n : null
   })
 
+  /** Количество напорных трубопроводов на выходе — делит поток по ниткам. */
+  const outletCount = computed<number | null>(() => {
+    const n = num(form.value.napKol)
+    return n != null && Number.isInteger(n) && n > 0 ? n : null
+  })
+
   /** Чего не хватает для подбора — экран объясняет это пользователю. */
   const missing = computed<string[]>(() => {
     const miss: string[] = []
@@ -58,7 +70,8 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
   const ready = computed(() => missing.value.length === 0)
 
   const selection = ref<PumpSelectionResult | null>(null)
-  const pipe = ref<PipeDiameterResult | null>(null)
+  const pipe = ref<DischargePipeResult | null>(null)
+  const nozzles = ref<OutletNozzlesResult | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -69,22 +82,25 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
    */
   let seq = 0
 
-  async function request(flow: number, head: number, pumps: number) {
+  async function request(flow: number, head: number, pumps: number, outlets: number) {
     const mine = ++seq
     loading.value = true
     error.value = null
     try {
-      const [sel, pd] = await Promise.all([
+      const [sel, pd, nz] = await Promise.all([
         pumpStationApi.selectPump(flow, head, pumps),
         pumpStationApi.dischargePipeDiameter(flow, pumps),
+        pumpStationApi.outletNozzles(flow, pumps, outlets),
       ])
       if (mine !== seq) return
       selection.value = sel
       pipe.value = pd
+      nozzles.value = nz
     } catch (e) {
       if (mine !== seq) return
       selection.value = null
       pipe.value = null
+      nozzles.value = null
       const r = (e as { response?: { data?: { message?: string } } }).response
       error.value = r?.data?.message ?? 'Не удалось получить подбор с сервера'
     } finally {
@@ -93,19 +109,22 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
   }
 
   watch(
-    () => [flowM3h.value, headM.value, workingPumps.value] as const,
-    ([flow, head, pumps]) => {
+    () => [flowM3h.value, headM.value, workingPumps.value, outletCount.value] as const,
+    ([flow, head, pumps, outlets]) => {
       if (timer) clearTimeout(timer)
       if (flow == null || head == null || pumps == null) {
         // Ответ на прежние значения уже не относится к делу — гасим его.
         seq++
         selection.value = null
         pipe.value = null
+        nozzles.value = null
         loading.value = false
         error.value = null
         return
       }
-      timer = setTimeout(() => void request(flow, head, pumps), DEBOUNCE_MS)
+      // Ниток по умолчанию столько же, сколько рабочих насосов: пока поле ОЛ
+      // не заполнено, считаем прямую нитку, а не коллектор.
+      timer = setTimeout(() => void request(flow, head, pumps, outlets ?? pumps), DEBOUNCE_MS)
     },
     { immediate: true },
   )
@@ -198,8 +217,30 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
   const pipeExplain = computed<string | null>(() => {
     const p = pipe.value
     if (!p) return null
-    const v = p.velocityMs.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
-    return `расчётный Ø${p.diameterMm} мм · скорость ${v} м/с при целевой ${p.designVelocityMs} м/с`
+    return (
+      `расчётный DN${p.dn} (⌀${p.diameterMm}×${nf(p.wallMm, 1)}, проход ${nf(p.innerDiameterMm, 0)} мм) · ` +
+      `скорость ${nf(p.velocityMs, 2)} м/с при целевой ${nf(p.designVelocityMs, 2)} м/с`
+    )
+  })
+
+  /**
+   * Подсказка по выходным патрубкам: стояк насоса и отводящий патрубок.
+   *
+   * Когда ниток столько же, сколько насосов, оба диаметра совпадают, и
+   * повторять одно и то же дважды незачем — показываем одну строку.
+   */
+  const nozzlesExplain = computed<string | null>(() => {
+    const n = nozzles.value
+    if (!n) return null
+    const fmt = (r: { dn: number; diameterMm: number; velocityMs: number }) =>
+      `DN${r.dn} (⌀${r.diameterMm}, ${nf(r.velocityMs, 2)} м/с)`
+    if (!n.manifold && n.perPump.dn === n.perOutlet.dn) {
+      return `патрубок насоса и отводящий — ${fmt(n.perPump)}`
+    }
+    return (
+      `патрубок насоса ${fmt(n.perPump)} · отводящий ${fmt(n.perOutlet)}` +
+      (n.manifold ? ' · насосы сходятся в коллектор' : '')
+    )
   })
 
   /** Предупреждения подбора — показываем как есть, они объясняют границы каталога. */
@@ -226,6 +267,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     choose,
     resetToCalculated,
     pipeExplain,
+    nozzlesExplain,
     warnings,
   }
 }
