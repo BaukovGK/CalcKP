@@ -57,9 +57,21 @@
           </div>
         </section>
 
-        <!-- 2. Корпус -->
+        <!-- 2. Тип изделия -->
         <section :id="'sec-2'" class="ol-sec">
-          <h2 class="ol-h">2 · Корпус</h2>
+          <h2 class="ol-h">2 · Тип изделия</h2>
+          <DeviceTypeSection
+            :model-value="deviceType"
+            :types="deviceTypes"
+            :can-change="canChangeType"
+            :project-title="projectTitle"
+            @update:model-value="$emit('update:deviceType', $event)"
+          />
+        </section>
+
+        <!-- 3. Корпус -->
+        <section :id="'sec-3'" class="ol-sec">
+          <h2 class="ol-h">3 · Корпус</h2>
           <div class="ol-grid">
             <label class="fld"><span>DN корпуса, мм</span>
               <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
@@ -97,9 +109,31 @@
             <ToggleYesNo v-model="form.mvk" label="По ТТ МВК" />
             <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" />
           </div>
-          <label v-if="form.insulation" class="fld"><span>Глубина теплоизоляции, мм</span>
-            <input v-model="form.tiGlubina" class="num" />
-          </label>
+          <!-- Глубина теплоизоляции почти всегда типовая, поэтому убрана под
+               «изменить вручную» — как PN и SN трубы: значение видно, но не
+               занимает поле ввода и не просит внимания на каждом заказе. -->
+          <div v-if="form.insulation" class="ol-card">
+            <div class="ol-card-h">
+              Глубина теплоизоляции
+              <span class="f-mark" title="Типовая глубина; меняется вручную">ƒ</span>
+            </div>
+            <div class="ol-grade">{{ fmtInt(TI_DEPTH_DEFAULT_MM) }} мм</div>
+            <div v-if="tiOverridden" class="ol-explain">
+              задано вручную: {{ form.tiGlubina }} мм
+            </div>
+
+            <label class="ol-chk">
+              <input v-model="form.tiManual" type="checkbox" />
+              <span>изменить вручную</span>
+            </label>
+
+            <div v-if="form.tiManual" class="ol-manual">
+              <label class="fld"><span>Глубина, мм</span>
+                <input v-model="form.tiGlubina" class="num" />
+              </label>
+              <button class="ol-reset" @click="resetTi">↺ вернуть типовую</button>
+            </div>
+          </div>
 
           <label class="fld"><span>Исполнение обечайки</span>
             <select v-model="form.ispolnenie">
@@ -113,9 +147,9 @@
           </div>
         </section>
 
-        <!-- 3. Патрубки -->
-        <section :id="'sec-3'" class="ol-sec">
-          <h2 class="ol-h">3 · Патрубки</h2>
+        <!-- 4. Патрубки -->
+        <section :id="'sec-4'" class="ol-sec">
+          <h2 class="ol-h">4 · Патрубки</h2>
           <div class="ol-cards">
             <div class="ol-card">
               <div class="ol-card-h">Подводящий</div>
@@ -186,9 +220,9 @@
           </div>
         </section>
 
-        <!-- 4. Насосное оборудование -->
-        <section :id="'sec-4'" class="ol-sec">
-          <h2 class="ol-h">4 · Насосное оборудование</h2>
+        <!-- 5. Насосное оборудование -->
+        <section :id="'sec-5'" class="ol-sec">
+          <h2 class="ol-h">5 · Насосное оборудование</h2>
           <div class="ol-grid">
             <label class="fld"><span>Максимальный приток <b class="req">*</b></span>
               <div class="ol-unit">
@@ -247,9 +281,9 @@
           <div class="ol-toggles"><ToggleYesNo v-model="form.vzryv" label="Взрывозащита" /></div>
         </section>
 
-        <!-- 5. Автоматика -->
-        <section :id="'sec-5'" class="ol-sec">
-          <h2 class="ol-h">5 · Автоматика</h2>
+        <!-- 6. Автоматика -->
+        <section :id="'sec-6'" class="ol-sec">
+          <h2 class="ol-h">6 · Автоматика</h2>
           <div class="ol-toggles">
             <ToggleYesNo v-model="form.shu" label="Шкаф управления" />
             <ToggleYesNo v-model="form.datchikiDavl" label="Датчики давления" />
@@ -351,6 +385,8 @@ import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
+import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
+import type { DeviceType } from '@/api/estimates'
 import CalcField from '@/components/survey/CalcField.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
@@ -379,7 +415,14 @@ const props = defineProps<{
   projectId?: string | null
   initial?: Partial<KnsSurveyForm> | null
   surveyRev?: number
+  /** Тип изделия и его переключение — секция 2 листа (владелец — SurveyView). */
+  deviceType: DeviceType
+  deviceTypes: ReadonlyArray<{ value: DeviceType; label: string }>
+  canChangeType: boolean
+  projectTitle?: string | null
 }>()
+
+defineEmits<{ 'update:deviceType': [DeviceType] }>()
 
 const router = useRouter()
 const { theme, toggle } = useTheme()
@@ -430,10 +473,11 @@ const backLabel = computed(() => (props.projectId ? '← Проект' : '← П
 
 const SECTIONS = [
   { n: 1, title: 'Общие' },
-  { n: 2, title: 'Корпус' },
-  { n: 3, title: 'Патрубки' },
-  { n: 4, title: 'Насосное' },
-  { n: 5, title: 'Автоматика' },
+  { n: 2, title: 'Тип изделия' },
+  { n: 3, title: 'Корпус' },
+  { n: 4, title: 'Патрубки' },
+  { n: 5, title: 'Насосное' },
+  { n: 6, title: 'Автоматика' },
 ]
 
 const NS_TYPES = ['Канализационная', 'Ливневая', 'Дренажная', 'Водопроводная'] as const
@@ -442,6 +486,9 @@ const MATERIALS = ['ПЭ', 'ПВХ', 'ПНД', 'ПП', 'Асбестцемент
 const GRINDERS = ['корзина', 'дробилка', 'обе', 'нет'] as const
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
 const SN_LIST = ['1250', '2500', '5000', '10000'] as const
+
+/** Типовая глубина теплоизоляции, мм — меняется вручную по флажку. */
+const TI_DEPTH_DEFAULT_MM = 2000
 /**
  * Домен DN — ровно как в справочнике весов (30 значений, 162 строки GRP):
  * 300…500 с шагом 50, дальше 600…3000 с шагом 100. Промежуточных значений
@@ -509,12 +556,14 @@ function secDone(n: number): boolean {
     case 1:
       return has(f.zayavka) && has(f.zakazchik) && has(f.obekt)
     case 2:
-      return has(f.dn)
+      return true // тип изделия выбран всегда: пустого значения у него нет
     case 3:
-      return has(f.podvLotok)
+      return has(f.dn)
     case 4:
-      return has(f.rashod) && has(f.napor) && (tryEvalExpr(f.nRab) ?? 0) >= 1
+      return has(f.podvLotok)
     case 5:
+      return has(f.rashod) && has(f.napor) && (tryEvalExpr(f.nRab) ?? 0) >= 1
+    case 6:
       return true // в автоматике обязательных полей нет
     default:
       return true
@@ -543,6 +592,14 @@ function resetPipe() {
   form.value.pipeManual = false
   form.value.pnManual = ''
   form.value.snManual = ''
+}
+
+/** Глубина теплоизоляции задана вручную и отличается от типовой. */
+const tiOverridden = computed(() => tryEvalExpr(form.value.tiGlubina) !== TI_DEPTH_DEFAULT_MM)
+
+function resetTi() {
+  form.value.tiManual = false
+  form.value.tiGlubina = String(TI_DEPTH_DEFAULT_MM)
 }
 
 function acceptDepth() {
@@ -625,10 +682,10 @@ async function createEstimate() {
 .ol-top { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 8px 14px; border-bottom: 2px solid var(--line); background: var(--panel); flex: none; }
 .ol-top-l { display: flex; align-items: baseline; gap: 10px; }
-.ol-name { font-size: 15px; font-weight: 700; }
-.ol-zayavka { font-size: 11.5px; color: var(--muted); }
+.ol-name { font-size: 18px; font-weight: 700; }
+.ol-zayavka { font-size: 13.8px; color: var(--muted); }
 .ol-top-r { display: flex; align-items: center; gap: 10px; }
-.ol-draft { font-size: 11px; color: var(--faint); }
+.ol-draft { font-size: 13.2px; color: var(--faint); }
 
 .ol-body { flex: 1; display: flex; min-height: 0; }
 
@@ -637,39 +694,39 @@ async function createEstimate() {
   padding: 8px 0; overflow-y: auto; }
 .ol-step { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   padding: 7px 12px; background: transparent; border: none; border-left: 3px solid transparent;
-  color: var(--muted); font-size: 12px; }
+  color: var(--muted); font-size: 14.4px; }
 .ol-step:hover { color: var(--text); background: var(--panel2); }
 .ol-step.is-active { border-left-color: var(--acc); background: var(--panel2); color: var(--text); }
-.ol-step-m { font-size: 10px; min-width: 10px; }
+.ol-step-m { font-size: 12px; min-width: 10px; }
 .ol-step-m.ok { color: var(--green); }
 .ol-step-m.todo { color: var(--acc); }
-.ol-steps-hint { padding: 10px 12px; font-size: 9.5px; color: var(--faint); line-height: 1.5; }
+.ol-steps-hint { padding: 10px 12px; font-size: 11.4px; color: var(--faint); line-height: 1.5; }
 .ol-step-t { flex: 1; }
 
 /* Форма */
 .ol-form { flex: 1; overflow-y: auto; padding: 16px 20px; min-width: 0; }
 .ol-sec { max-width: 820px; margin: 0 auto 26px; }
-.ol-h { font-size: 15px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px;
+.ol-h { font-size: 18px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px;
   border-bottom: 2px solid var(--line); }
 .ol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .ol-tail { height: 40vh; }
 
 .fld { display: flex; flex-direction: column; gap: 3px; }
 .fld--wide { grid-column: span 2; }
-.fld > span { font-size: 11px; color: var(--muted); }
+.fld > span { font-size: 13.2px; color: var(--muted); }
 .req { color: var(--acc); }
 .fld input, .fld select {
   background: var(--cellbg); border: 1px solid var(--line2); color: var(--text);
-  padding: 5px 9px; font-size: 12.5px; font-family: inherit;
+  padding: 5px 9px; font-size: 15px; font-family: inherit;
 }
 .fld input.num { text-align: right; }
 .fld input.is-missing { border-color: var(--acc); background: var(--acc-bg); }
 
 /* Подсказка подбора под полем: марка насоса, расчётный диаметр напорного. */
-.ol-pick { font-size: 10px; color: var(--faint); line-height: 1.45; display: block; }
+.ol-pick { font-size: 12px; color: var(--faint); line-height: 1.45; display: block; }
 .ol-pick--warn { color: var(--amber); }
 .ol-pick-btn {
-  font: inherit; font-size: 10px; margin-left: 6px; padding: 0;
+  font: inherit; font-size: 12px; margin-left: 6px; padding: 0;
   background: none; border: none; border-bottom: 1px dashed currentColor;
   color: var(--acc); cursor: pointer;
 }
@@ -678,14 +735,14 @@ async function createEstimate() {
 /* Карточка (труба корпуса, патрубки) */
 .ol-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ol-card { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-top: 10px; }
-.ol-card-h { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 8px; }
-.ol-grade { font-size: 14px; font-weight: 600; }
+.ol-card-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 8px; }
+.ol-grade { font-size: 16.8px; font-weight: 600; }
 .ol-grade--empty { color: var(--faint); font-weight: 400; }
-.ol-explain { font-size: 11px; color: var(--muted); margin-top: 3px; }
-.ol-chk { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+.ol-explain { font-size: 13.2px; color: var(--muted); margin-top: 3px; }
+.ol-chk { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13.8px; color: var(--muted); }
 .ol-manual { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px;
   padding: 8px; background: var(--blue-bg); border-left: 3px solid var(--blue); }
-.ol-reset { background: transparent; border: none; color: var(--blue); font-size: 11px; text-decoration: underline; }
+.ol-reset { background: transparent; border: none; color: var(--blue); font-size: 13.2px; text-decoration: underline; }
 
 .ol-toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
 
@@ -696,37 +753,37 @@ async function createEstimate() {
 /* Live-панель */
 .ol-live { width: 300px; flex: none; border-left: 2px solid var(--line); background: var(--panel);
   padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.ol-live-h { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
-.ol-live-lbl { font-size: 10.5px; color: var(--muted); }
-.ol-live-npodz { font-size: 22px; font-weight: 700; }
-.ol-live-hint { font-size: 9.5px; color: var(--faint); line-height: 1.5; }
-.f-mark { color: var(--faint); font-size: 9px; }
-.ol-live-u { font-size: 13px; font-weight: 400; color: var(--muted); }
-.ol-live-ovr { font-size: 10px; color: var(--blue); margin-top: -8px; }
+.ol-live-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+.ol-live-lbl { font-size: 12.6px; color: var(--muted); }
+.ol-live-npodz { font-size: 26.4px; font-weight: 700; }
+.ol-live-hint { font-size: 11.4px; color: var(--faint); line-height: 1.5; }
+.f-mark { color: var(--faint); font-size: 10.8px; }
+.ol-live-u { font-size: 15.6px; font-weight: 400; color: var(--muted); }
+.ol-live-ovr { font-size: 12px; color: var(--blue); margin-top: -8px; }
 .ol-live-vals { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 8px; }
-.ol-live-row { display: flex; justify-content: space-between; font-size: 11.5px; }
+.ol-live-row { display: flex; justify-content: space-between; font-size: 13.8px; }
 .ol-live-row dt { color: var(--muted); }
-.ol-f { color: var(--faint); font-size: 9px; }
+.ol-f { color: var(--faint); font-size: 10.8px; }
 .ol-live-act { display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--line); padding-top: 8px; }
 .ol-live-prev { border: 1px solid var(--line); padding: 8px; background: var(--panel2); }
-.ol-prev-t { font-size: 12.5px; font-weight: 600; }
-.ol-prev-s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.ol-prev-t { font-size: 15px; font-weight: 600; }
+.ol-prev-s { font-size: 13.2px; color: var(--muted); margin-top: 2px; }
 .ol-live-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
-.ol-hint { font-size: 11px; color: var(--amber); }
+.ol-hint { font-size: 13.2px; color: var(--amber); }
 
 .ol-btn { background: transparent; border: 1px solid var(--line2); color: var(--muted);
-  padding: 5px 11px; font-size: 11.5px; }
+  padding: 5px 11px; font-size: 13.8px; }
 .ol-btn:hover:not(:disabled) { color: var(--text); }
 .ol-btn--acc { border-color: var(--acc); color: var(--acc); }
 .ol-btn:disabled { opacity: .4; }
 .ol-create { background: var(--acc); border: 1px solid var(--acc); color: #fff;
-  padding: 8px 14px; font-size: 12.5px; font-weight: 600; }
+  padding: 8px 14px; font-size: 15px; font-weight: 600; }
 .ol-create:disabled { opacity: .4; }
 
 /* Модал */
-.mo-h { font-size: 15px; font-weight: 700; }
-.mo-sub { font-size: 11.5px; color: var(--muted); margin: 4px 0 10px; }
-.mo-list { list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.mo-h { font-size: 18px; font-weight: 700; }
+.mo-sub { font-size: 13.8px; color: var(--muted); margin: 4px 0 10px; }
+.mo-list { list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 14.4px; }
 .mo-on { color: var(--green); }
 .mo-off { color: var(--faint); }
 

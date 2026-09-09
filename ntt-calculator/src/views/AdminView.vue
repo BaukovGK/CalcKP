@@ -386,45 +386,45 @@ onMounted(loadUsers)
 </script>
 
 <style scoped>
-.adm-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 13.2px; }
 .adm-table th {
-  text-align: left; padding: 5px 12px; font-size: 9px; font-weight: 600;
+  text-align: left; padding: 5px 12px; font-size: 10.8px; font-weight: 600;
   color: var(--tx3); background: var(--bg1); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 1;
 }
 .adm-table td { padding: 6px 12px; border-bottom: 1px solid var(--border); color: var(--tx2); vertical-align: middle; }
 .adm-table tr:hover td { background: var(--bg3); }
 
-.adm-email  { font-family: Archivo, system-ui, sans-serif; font-size: 10px; color: var(--tx3); }
-.adm-date   { font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; }
-.adm-entity { font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--tx3); }
-.adm-action { font-family: Archivo, system-ui, sans-serif; font-size: 10px; color: var(--accent); }
+.adm-email  { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--tx3); }
+.adm-date   { font-size: 10.8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; }
+.adm-entity { font-family: Archivo, system-ui, sans-serif; font-size: 10.8px; color: var(--tx3); }
+.adm-action { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--accent); }
 
-.adm-role-sel { padding: 2px 5px; height: 24px; font-size: 10px; width: 140px; }
+.adm-role-sel { padding: 2px 5px; height: 24px; font-size: 12px; width: 140px; }
 
 .adm-toggle {
-  font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 10px; border: none; cursor: pointer; transition: all .15s;
+  font-size: 10.8px; font-weight: 700; padding: 2px 8px; border-radius: 10px; border: none; cursor: pointer; transition: all .15s;
 }
 .adm-toggle--on  { background: color-mix(in srgb, #10b981 20%, transparent); color: #10b981; }
 .adm-toggle--off { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
 
-.nav-section { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
-.nav-link    { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 11px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
+.nav-section { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
+.nav-link    { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 13.2px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
 .nav-link:hover    { background: var(--bg3); color: var(--tx1); }
 .nav-link--active  { background: var(--bg3); color: var(--accent); font-weight: 600; }
 
 .dash-state    { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 12px; color: var(--tx3); }
+.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
 .dash-err      { color: var(--danger); }
 
 /* Вкладка «База данных» */
-.db-note { font-size: 11px; color: var(--tx3); line-height: 1.5; margin: 0 0 10px; max-width: 78ch; }
-.db-err  { font-size: 11.5px; color: var(--danger); margin: 0 0 10px; white-space: pre-line; }
-.db-ok   { font-size: 11.5px; color: var(--tx2); margin: 0 0 10px; }
-.db-warn { font-size: 12px; color: var(--danger); line-height: 1.5; margin: 0 0 8px; }
+.db-note { font-size: 13.2px; color: var(--tx3); line-height: 1.5; margin: 0 0 10px; max-width: 78ch; }
+.db-err  { font-size: 13.8px; color: var(--danger); margin: 0 0 10px; white-space: pre-line; }
+.db-ok   { font-size: 13.8px; color: var(--tx2); margin: 0 0 10px; }
+.db-warn { font-size: 14.4px; color: var(--danger); line-height: 1.5; margin: 0 0 8px; }
 .adm-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .db-acts { white-space: nowrap; text-align: right; }
-.db-acts .btn-xs { padding: 2px 7px; font-size: 10.5px; line-height: 1.5; }
+.db-acts .btn-xs { padding: 2px 7px; font-size: 12.6px; line-height: 1.5; }
 .db-acts .btn-xs + .btn-xs { margin-left: 4px; }
 .btn.is-busy { opacity: .5; pointer-events: none; }
 </style>

@@ -135,7 +135,7 @@
 
     <!-- Подтверждение удаления единицы -->
     <BaseModal :show="!!deleteEstimateId" title="Удалить единицу?" @close="deleteEstimateId = null">
-      <div style="font-size:12px;color:var(--tx2)">
+      <div style="font-size:14.4px;color:var(--tx2)">
         Удалить <strong>{{ deleteEstimateTitle }}</strong>? Действие необратимо.
       </div>
       <div v-if="deleteError" class="auth-err" style="margin-top:8px">{{ deleteError }}</div>
@@ -276,7 +276,7 @@ onMounted(() => projects.fetchOne(projectId))
 </script>
 
 <style scoped>
-.pv-ro { font-size: 10px; color: var(--tx3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; }
+.pv-ro { font-size: 12px; color: var(--tx3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; }
 
 .pv-unit-link {
   display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 4px;
@@ -284,13 +284,13 @@ onMounted(() => projects.fetchOne(projectId))
 }
 .pv-unit-link:hover { background: var(--bg3); }
 .pv-unit-badge {
-  font-family: Archivo, system-ui, sans-serif; font-size: 8px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 9.6px; font-weight: 700;
   padding: 1px 4px; border-radius: 2px; background: var(--accent); color: #fff; flex-shrink: 0;
 }
 .pv-unit-badge--emk { background: #8b5cf6; }
 .pv-unit-badge--kol { background: #10b981; }
-.pv-unit-name { font-size: 10px; color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pv-empty-nav { font-size: 10px; color: var(--tx3); padding: 4px 8px; font-style: italic; }
+.pv-unit-name { font-size: 12px; color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-empty-nav { font-size: 12px; color: var(--tx3); padding: 4px 8px; font-style: italic; }
 
 .pv-meta-card {
   margin: 12px; padding: 10px 14px; background: var(--bg2);
@@ -298,8 +298,8 @@ onMounted(() => projects.fetchOne(projectId))
   display: flex; flex-wrap: wrap; gap: 6px 20px;
 }
 .pv-meta-row   { display: flex; gap: 6px; align-items: baseline; }
-.pv-meta-lbl   { font-size: 8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
-.pv-meta-val   { font-size: 11px; color: var(--tx1); }
+.pv-meta-lbl   { font-size: 9.6px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.pv-meta-val   { font-size: 13.2px; color: var(--tx1); }
 
 .pv-units-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -314,32 +314,32 @@ onMounted(() => projects.fetchOne(projectId))
 
 .pv-uc-top  { display: flex; align-items: center; gap: 6px; }
 .pv-uc-type {
-  font-family: Archivo, system-ui, sans-serif; font-size: 8px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 9.6px; font-weight: 700;
   padding: 1px 5px; border-radius: 2px; background: var(--accent); color: #fff;
 }
 .pv-uc-type--emk { background: #8b5cf6; }
 .pv-uc-type--kol { background: #10b981; }
-.pv-uc-status { font-size: 9px; color: var(--tx3); }
+.pv-uc-status { font-size: 10.8px; color: var(--tx3); }
 .pv-uc-status--approved { color: #10b981; }
 .pv-uc-status--review   { color: #f59e0b; }
-.pv-uc-date   { margin-left: auto; font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
+.pv-uc-date   { margin-left: auto; font-size: 10.8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 
-.pv-uc-title  { font-size: 12px; font-weight: 600; color: var(--tx1); }
+.pv-uc-title  { font-size: 14.4px; font-weight: 600; color: var(--tx1); }
 .pv-uc-params { display: flex; flex-wrap: wrap; gap: 4px; }
 .pv-uc-param  {
-  font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--tx3);
+  font-family: Archivo, system-ui, sans-serif; font-size: 10.8px; color: var(--tx3);
   background: var(--bg1); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px;
 }
 .pv-uc-total  {
-  font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 13.2px; font-weight: 700;
   color: var(--accent); text-align: right;
 }
 .dash-state     { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 12px; color: var(--tx3); }
+.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
 .dash-err       { color: var(--danger); }
 .pv-uc-del {
   margin-left: auto; background: transparent; border: none; color: var(--tx3);
-  font-size: 14px; line-height: 1; cursor: pointer; padding: 0 2px;
+  font-size: 16.8px; line-height: 1; cursor: pointer; padding: 0 2px;
   transition: color .12s;
 }
 .pv-uc-del:hover { color: var(--danger); }

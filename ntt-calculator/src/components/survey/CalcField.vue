@@ -54,16 +54,16 @@ function reset() {
 
 <style scoped>
 .cf { display: flex; flex-direction: column; gap: 3px; }
-.cf-l { font-size: 11px; color: var(--muted); }
+.cf-l { font-size: 13.2px; color: var(--muted); }
 .cf-row { display: flex; align-items: center; gap: 4px; }
 .cf-i {
   flex: 1; min-width: 0; text-align: right;
   background: var(--cellbg); border: 1px solid var(--line2); color: var(--text);
-  padding: 5px 9px; font-size: 12.5px; font-family: inherit;
+  padding: 5px 9px; font-size: 15px; font-family: inherit;
 }
 /* Override — синий: канал ручного ввода (Механика §5). */
 .cf-i.is-ovr { color: var(--blue); border-color: var(--blue); background: var(--blue-bg); }
 .cf-i::placeholder { color: var(--text); opacity: 1; }
-.cf-reset { background: transparent; border: none; color: var(--blue); font-size: 12px; padding: 0 2px; }
-.cf-f { font-size: 10px; color: var(--faint); }
+.cf-reset { background: transparent; border: none; color: var(--blue); font-size: 14.4px; padding: 0 2px; }
+.cf-f { font-size: 12px; color: var(--faint); }
 </style>

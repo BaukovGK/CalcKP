@@ -17,10 +17,10 @@ const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
 
 <style scoped>
 .tg { display: flex; align-items: center; gap: 8px; }
-.tg-l { font-size: 11.5px; color: var(--muted); }
+.tg-l { font-size: 13.8px; color: var(--muted); }
 .tg-seg { display: flex; }
 .tg-b {
-  padding: 4px 14px; font-size: 12px; font-family: inherit;
+  padding: 4px 14px; font-size: 14.4px; font-family: inherit;
   border: 1px solid var(--line2); background: transparent; color: var(--muted);
 }
 .tg-b + .tg-b { margin-left: -1px; }

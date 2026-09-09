@@ -31,8 +31,20 @@
         </div>
       </section>
 
+      <!-- 2. Тип изделия -->
       <section id="sec-2" class="ol-sec">
-        <h2 class="ol-h">2 · Корпус</h2>
+        <h2 class="ol-h">2 · Тип изделия</h2>
+        <DeviceTypeSection
+          :model-value="deviceType"
+          :types="deviceTypes"
+          :can-change="canChangeType"
+          :project-title="projectTitle"
+          @update:model-value="$emit('update:deviceType', $event)"
+        />
+      </section>
+
+      <section id="sec-3" class="ol-sec">
+        <h2 class="ol-h">3 · Корпус</h2>
         <div class="ol-grid">
           <label class="fld"><span>DN рабочей части, мм <b class="req">*</b></span>
             <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
@@ -84,8 +96,8 @@
         </div>
       </section>
 
-      <section id="sec-3" class="ol-sec">
-        <h2 class="ol-h">3 · Смола и стоки</h2>
+      <section id="sec-4" class="ol-sec">
+        <h2 class="ol-h">4 · Смола и стоки</h2>
         <div class="ol-grid">
           <label class="fld"><span>Тип смолы</span>
             <select v-model="form.resin"><option v-for="r in RESINS" :key="r">{{ r }}</option></select>
@@ -100,8 +112,8 @@
         </div>
       </section>
 
-      <section id="sec-4" class="ol-sec">
-        <h2 class="ol-h">4 · Патрубки</h2>
+      <section id="sec-5" class="ol-sec">
+        <h2 class="ol-h">5 · Патрубки</h2>
         <div class="ol-cards">
           <div class="ol-card">
             <div class="ol-card-h">Подводящий</div>
@@ -128,8 +140,8 @@
         </div>
       </section>
 
-      <section id="sec-5" class="ol-sec">
-        <h2 class="ol-h">5 · Доп. оборудование</h2>
+      <section id="sec-6" class="ol-sec">
+        <h2 class="ol-h">6 · Доп. оборудование</h2>
         <div class="ol-grid">
           <label class="fld"><span>Дробилка / корзина</span>
             <select v-model="form.grinder"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>
@@ -198,6 +210,8 @@ import { useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import SurveyShell from '@/components/survey/SurveyShell.vue'
 import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
+import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
+import type { DeviceType } from '@/api/estimates'
 import { useKolSurvey } from '@/composables/useEmkKolSurvey'
 import { toast } from '@/composables/useToast'
 import { tryEvalExpr } from '@/engines/expr'
@@ -213,7 +227,14 @@ const props = defineProps<{
   projectId?: string | null
   initial?: Partial<KolSurveyForm> | null
   surveyRev?: number
+  /** Тип изделия и его переключение — секция 2 листа (владелец — SurveyView). */
+  deviceType: DeviceType
+  deviceTypes: ReadonlyArray<{ value: DeviceType; label: string }>
+  canChangeType: boolean
+  projectTitle?: string | null
 }>()
+
+defineEmits<{ 'update:deviceType': [DeviceType] }>()
 
 const router = useRouter()
 const form = ref<KolSurveyForm>({ ...makeDefaultKolSurvey(), ...props.initial })
@@ -247,10 +268,11 @@ const num = (v: string) => tryEvalExpr(v)
 
 const steps = computed(() => [
   { n: 1, title: 'Общие', done: form.value.zakazchik.trim() !== '' },
-  { n: 2, title: 'Корпус', done: num(form.value.dn) != null && num(form.value.depthMm) != null },
-  { n: 3, title: 'Смола и стоки', done: true },
-  { n: 4, title: 'Патрубки', done: num(form.value.podvDn) != null },
-  { n: 5, title: 'Доп. оборудование', done: true },
+  { n: 2, title: 'Тип изделия', done: true },
+  { n: 3, title: 'Корпус', done: num(form.value.dn) != null && num(form.value.depthMm) != null },
+  { n: 4, title: 'Смола и стоки', done: true },
+  { n: 5, title: 'Патрубки', done: num(form.value.podvDn) != null },
+  { n: 6, title: 'Доп. оборудование', done: true },
 ])
 
 const liveValues = computed(() => {

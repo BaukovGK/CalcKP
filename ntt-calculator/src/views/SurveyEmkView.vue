@@ -32,8 +32,20 @@
         </div>
       </section>
 
+      <!-- 2. Тип изделия -->
       <section id="sec-2" class="ol-sec">
-        <h2 class="ol-h">2 · Габариты</h2>
+        <h2 class="ol-h">2 · Тип изделия</h2>
+        <DeviceTypeSection
+          :model-value="deviceType"
+          :types="deviceTypes"
+          :can-change="canChangeType"
+          :project-title="projectTitle"
+          @update:model-value="$emit('update:deviceType', $event)"
+        />
+      </section>
+
+      <section id="sec-3" class="ol-sec">
+        <h2 class="ol-h">3 · Габариты</h2>
         <div class="ol-grid">
           <label class="fld"><span>Объём, м³ <b class="req">*</b></span>
             <input v-model="form.volumeM3" class="num" :class="{ 'is-missing': !form.volumeM3 }" />
@@ -87,8 +99,8 @@
         </div>
       </section>
 
-      <section id="sec-3" class="ol-sec">
-        <h2 class="ol-h">3 · Патрубки</h2>
+      <section id="sec-4" class="ol-sec">
+        <h2 class="ol-h">4 · Патрубки</h2>
         <div class="ol-cards">
           <div class="ol-card">
             <div class="ol-card-h">Подводящий</div>
@@ -115,8 +127,8 @@
         </div>
       </section>
 
-      <section id="sec-4" class="ol-sec">
-        <h2 class="ol-h">4 · Насосное оборудование</h2>
+      <section id="sec-5" class="ol-sec">
+        <h2 class="ol-h">5 · Насосное оборудование</h2>
         <div class="ol-toggles">
           <ToggleYesNo v-model="form.hasPumps" label="Насосное оборудование" />
         </div>
@@ -131,8 +143,8 @@
         <p v-else class="ol-live-hint">Без насосов раздел «Напорный трубопровод» в расчёте останется пустым.</p>
       </section>
 
-      <section id="sec-5" class="ol-sec">
-        <h2 class="ol-h">5 · Доп. оборудование</h2>
+      <section id="sec-6" class="ol-sec">
+        <h2 class="ol-h">6 · Доп. оборудование</h2>
         <div class="ol-grid">
           <label class="fld"><span>Дробилка / корзина</span>
             <select v-model="form.grinder"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>
@@ -204,6 +216,8 @@ import { useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import SurveyShell from '@/components/survey/SurveyShell.vue'
 import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
+import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
+import type { DeviceType } from '@/api/estimates'
 import { useEmkSurvey } from '@/composables/useEmkKolSurvey'
 import { toast } from '@/composables/useToast'
 import { tryEvalExpr } from '@/engines/expr'
@@ -219,7 +233,14 @@ const props = defineProps<{
   projectId?: string | null
   initial?: Partial<EmkSurveyForm> | null
   surveyRev?: number
+  /** Тип изделия и его переключение — секция 2 листа (владелец — SurveyView). */
+  deviceType: DeviceType
+  deviceTypes: ReadonlyArray<{ value: DeviceType; label: string }>
+  canChangeType: boolean
+  projectTitle?: string | null
 }>()
+
+defineEmits<{ 'update:deviceType': [DeviceType] }>()
 
 const router = useRouter()
 const form = ref<EmkSurveyForm>({ ...makeDefaultEmkSurvey(), ...props.initial })
@@ -255,10 +276,11 @@ const num = (v: string) => tryEvalExpr(v)
 
 const steps = computed(() => [
   { n: 1, title: 'Общие', done: form.value.zakazchik.trim() !== '' },
-  { n: 2, title: 'Габариты', done: s.lengthMm.value != null },
-  { n: 3, title: 'Патрубки', done: num(form.value.podvDn) != null },
-  { n: 4, title: 'Насосное', done: !form.value.hasPumps || (num(form.value.nRab) ?? 0) >= 1 },
-  { n: 5, title: 'Доп. оборудование', done: true },
+  { n: 2, title: 'Тип изделия', done: true },
+  { n: 3, title: 'Габариты', done: s.lengthMm.value != null },
+  { n: 4, title: 'Патрубки', done: num(form.value.podvDn) != null },
+  { n: 5, title: 'Насосное', done: !form.value.hasPumps || (num(form.value.nRab) ?? 0) >= 1 },
+  { n: 6, title: 'Доп. оборудование', done: true },
 ])
 
 const liveValues = computed(() => {

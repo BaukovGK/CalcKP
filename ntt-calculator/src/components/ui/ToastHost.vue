@@ -22,7 +22,7 @@ const { items, dismiss } = useToasts()
 .th-i {
   pointer-events: auto; cursor: pointer;
   background: var(--panel2); border: 1px solid var(--line2); color: var(--text);
-  padding: 8px 14px; font-size: 12px; box-shadow: 0 4px 18px rgba(0, 0, 0, .3);
+  padding: 8px 14px; font-size: 14.4px; box-shadow: 0 4px 18px rgba(0, 0, 0, .3);
 }
 .th-i--error { border-color: var(--acc); background: var(--acc-bg); }
 .th-i--success { border-color: var(--green); background: var(--green-bg); }

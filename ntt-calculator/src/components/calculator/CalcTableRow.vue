@@ -175,7 +175,7 @@ function onPrice(e: Event) {
   gap: 8px; align-items: center;
   min-height: 32px; padding: 0 8px;
   border-bottom: 1px solid var(--line);
-  font-size: 11.5px;
+  font-size: 13.8px;
 }
 .r:nth-child(even) { background: var(--panel); }
 .r.is-red { background: var(--acc-bg); }
@@ -184,19 +184,19 @@ function onPrice(e: Event) {
 
 .chip {
   display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 9.5px; padding: 1px 5px; border: 1px solid var(--line2); color: var(--muted);
+  font-size: 11.4px; padding: 1px 5px; border: 1px solid var(--line2); color: var(--muted);
 }
 .c-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* ФОТ-спутник — вложенная строка с отступом */
 .c-name.is-sat { padding-left: 30px; color: var(--muted); }
-.sat-tag { font-size: 9px; color: var(--faint); white-space: nowrap; }
+.sat-tag { font-size: 10.8px; color: var(--faint); white-space: nowrap; }
 
 .c-qty, .c-price { display: flex; align-items: center; gap: 2px; }
 .cell {
   width: 100%; min-width: 0;
   background: var(--cellbg); border: 1px solid transparent; color: var(--text);
-  padding: 3px 6px; font-size: 11.5px; font-family: inherit;
+  padding: 3px 6px; font-size: 13.8px; font-family: inherit;
 }
 .cell.num { text-align: right; }
 .cell:focus { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-bg); outline: none; }
@@ -216,15 +216,15 @@ function onPrice(e: Event) {
 /* ФОТ-спутник: пунктирные ячейки */
 .is-sat-row .cell { border-style: dashed; border-color: var(--line2); }
 
-.rst { background: transparent; border: none; color: var(--blue); font-size: 12px; padding: 0 1px; line-height: 1; }
-.c-unit { font-size: 10.5px; color: var(--muted); }
+.rst { background: transparent; border: none; color: var(--blue); font-size: 14.4px; padding: 0 1px; line-height: 1; }
+.c-unit { font-size: 12.6px; color: var(--muted); }
 .c-sum { text-align: right; font-weight: 500; }
-.c-note { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--faint); min-width: 0; }
+.c-note { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--faint); min-width: 0; }
 .note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-red { color: var(--acc); }
-.rm { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 12px; padding: 0 3px; }
+.rm { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 14.4px; padding: 0 3px; }
 .rm:hover { color: var(--acc); }
 .was { color: var(--amber); white-space: nowrap; }
-.btn-amber { border: 1px solid var(--amber); color: var(--amber); background: transparent; font-size: 9.5px; padding: 1px 6px; white-space: nowrap; }
-.btn-plain { border: 1px solid var(--line2); color: var(--muted); background: transparent; font-size: 9.5px; padding: 1px 6px; white-space: nowrap; }
+.btn-amber { border: 1px solid var(--amber); color: var(--amber); background: transparent; font-size: 11.4px; padding: 1px 6px; white-space: nowrap; }
+.btn-plain { border: 1px solid var(--line2); color: var(--muted); background: transparent; font-size: 11.4px; padding: 1px 6px; white-space: nowrap; }
 </style>

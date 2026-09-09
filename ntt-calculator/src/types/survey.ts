@@ -63,6 +63,14 @@ export interface KnsSurveyForm extends SurveyCommonForm {
   insulation: boolean
   tiGlubina: string
   /**
+   * Чекбокс «изменить вручную» у глубины теплоизоляции.
+   *
+   * Глубина почти всегда типовая (2000 мм), поэтому поле ввода скрыто за
+   * флажком — так же, как PN и SN трубы: значение видно, но не просит
+   * внимания на каждом заказе.
+   */
+  tiManual: boolean
+  /**
    * Исполнение обечайки: одной трубой либо сегментами со сваркой на месте
    * (лист КНС, ячейка E14). «Частями» добавляет в расчёт сегменты и
    * ламинирование стыков — в эталоне при «целой трубе» этот блок обнулён.
@@ -144,6 +152,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     mvk: true,
     insulation: true,
     tiGlubina: '2000',
+    tiManual: false,
     ispolnenie: 'целая',
 
     podvMat: 'ПЭ',

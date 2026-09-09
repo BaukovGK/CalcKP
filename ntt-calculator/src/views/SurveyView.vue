@@ -3,32 +3,22 @@
   <div v-else-if="loadError" class="sv-state sv-state--err">{{ loadError }}</div>
 
   <div v-else class="sv-wrap">
-    <!-- Переключатель типа изделия — только при создании нового ОЛ.
-         У существующего расчёта тип зафиксирован: сменить его — значит
-         пересоздать расчёт другим шаблоном. -->
-    <div v-if="!estimateId" class="sv-typebar">
-      <span class="sv-typebar-lbl">Тип изделия</span>
-      <button
-        v-for="t in DEVICE_TYPES"
-        :key="t.value"
-        class="sv-type"
-        :class="{ active: deviceType === t.value }"
-        type="button"
-        @click="deviceType = t.value"
-      >
-        <span class="sv-type-code">{{ t.value }}</span>
-        <span class="sv-type-name">{{ t.label }}</span>
-      </button>
-      <span v-if="projectId" class="sv-typebar-note">→ в проект «{{ projectTitle ?? '…' }}»</span>
-    </div>
-
-    <!-- Ветвление: общий каркас ОЛ, состав полей — по типу изделия -->
+    <!-- Ветвление: общий каркас ОЛ, состав полей — по типу изделия.
+         Сам выбор типа живёт ВНУТРИ листа, вторым пунктом после общих данных:
+         он часть заполнения, а не настройка над ним. Менять тип можно только
+         при создании — у существующего расчёта смена типа означала бы
+         пересоздание другим шаблоном. -->
     <SurveyKnsView
       v-if="deviceType === 'KNS'"
       :estimate-id="estimateId"
       :project-id="projectId"
       :initial="initialKns"
       :survey-rev="surveyRev"
+      :device-type="deviceType"
+      :device-types="DEVICE_TYPES"
+      :can-change-type="!estimateId"
+      :project-title="projectTitle"
+      @update:device-type="deviceType = $event"
     />
     <SurveyEmkView
       v-else-if="deviceType === 'EMK'"
@@ -36,6 +26,11 @@
       :project-id="projectId"
       :initial="initialEmk"
       :survey-rev="surveyRev"
+      :device-type="deviceType"
+      :device-types="DEVICE_TYPES"
+      :can-change-type="!estimateId"
+      :project-title="projectTitle"
+      @update:device-type="deviceType = $event"
     />
     <SurveyKolView
       v-else
@@ -43,6 +38,11 @@
       :project-id="projectId"
       :initial="initialKol"
       :survey-rev="surveyRev"
+      :device-type="deviceType"
+      :device-types="DEVICE_TYPES"
+      :can-change-type="!estimateId"
+      :project-title="projectTitle"
+      @update:device-type="deviceType = $event"
     />
   </div>
 </template>
@@ -145,7 +145,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.sv-state { padding: 24px; font-size: 12px; color: var(--muted); }
+.sv-state { padding: 24px; font-size: 14.4px; color: var(--muted); }
 .sv-state--err { color: var(--acc); }
 
 .sv-wrap { display: flex; flex-direction: column; height: 100vh; }
@@ -155,12 +155,12 @@ onMounted(async () => {
 
 .sv-typebar { display: flex; align-items: center; gap: 8px; padding: 6px 14px;
   border-bottom: 1px solid var(--line); background: var(--panel2); flex: none; }
-.sv-typebar-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+.sv-typebar-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
 .sv-type { display: flex; align-items: baseline; gap: 6px; padding: 4px 10px;
   background: transparent; border: 1px solid var(--line2); color: var(--muted); cursor: pointer; }
 .sv-type:hover { color: var(--text); }
 .sv-type.active { border-color: var(--acc); color: var(--text); background: var(--acc-bg); }
-.sv-type-code { font-size: 11px; font-weight: 700; }
-.sv-type-name { font-size: 10.5px; }
-.sv-typebar-note { margin-left: auto; font-size: 10.5px; color: var(--muted); }
+.sv-type-code { font-size: 13.2px; font-weight: 700; }
+.sv-type-name { font-size: 12.6px; }
+.sv-typebar-note { margin-left: auto; font-size: 12.6px; color: var(--muted); }
 </style>

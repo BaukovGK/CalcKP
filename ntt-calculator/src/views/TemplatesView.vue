@@ -458,42 +458,42 @@ onMounted(async () => {
 
 .tpl-top { display: flex; align-items: center; gap: 12px; padding: 8px 14px;
   border-bottom: 2px solid var(--line); background: var(--panel); flex: none; }
-.tpl-title { font-size: 14px; font-weight: 700; }
-.tpl-sub { font-size: 10.5px; color: var(--muted); }
+.tpl-title { font-size: 16.8px; font-weight: 700; }
+.tpl-sub { font-size: 12.6px; color: var(--muted); }
 .tpl-spacer { flex: 1; }
 
 .tpl-tabs { display: flex; gap: 4px; padding: 6px 14px; border-bottom: 1px solid var(--line);
   background: var(--panel); flex: none; }
 .tpl-tab { background: transparent; border: 1px solid var(--line2); color: var(--muted);
-  font-size: 11.5px; padding: 4px 10px; cursor: pointer; }
+  font-size: 13.8px; padding: 4px 10px; cursor: pointer; }
 .tpl-tab:hover { color: var(--text); }
 .tpl-tab.on { border-color: var(--acc); color: var(--text); background: var(--acc-bg); }
-.tpl-cnt { font-size: 9.5px; color: var(--faint); }
+.tpl-cnt { font-size: 11.4px; color: var(--faint); }
 
-.tpl-state { padding: 24px; font-size: 12px; color: var(--muted); }
+.tpl-state { padding: 24px; font-size: 14.4px; color: var(--muted); }
 .tpl-state--err { color: var(--acc); }
 
 .tpl-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
-.tpl-hint { font-size: 11px; color: var(--muted); margin-bottom: 10px; max-width: 760px; line-height: 1.5; }
+.tpl-hint { font-size: 13.2px; color: var(--muted); margin-bottom: 10px; max-width: 760px; line-height: 1.5; }
 
-.tpl-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 11.5px; color: var(--muted); }
+.tpl-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 13.8px; color: var(--muted); }
 .tpl-filter label { display: flex; align-items: center; gap: 6px; }
-.tpl-filter-cnt { font-size: 10.5px; color: var(--faint); }
+.tpl-filter-cnt { font-size: 12.6px; color: var(--faint); }
 
-.tpl-tbl { border-collapse: collapse; font-size: 12px; width: 100%; max-width: 1100px; }
+.tpl-tbl { border-collapse: collapse; font-size: 14.4px; width: 100%; max-width: 1100px; }
 .tpl-tbl--narrow { max-width: 620px; }
-.tpl-tbl th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em;
+.tpl-tbl th { text-align: left; font-size: 11.4px; text-transform: uppercase; letter-spacing: .05em;
   color: var(--faint); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .tpl-tbl td { padding: 2px 4px; border-bottom: 1px solid var(--line); }
 .tpl-tbl td.key { font-weight: 600; padding: 2px 8px; white-space: nowrap; }
 
 /* Строку, которую реально читает расчёт, видно среди пяти давлений. */
 .tpl-tbl tr.row-used td { background: var(--acc-bg); }
-.tpl-used { margin-left: 6px; color: var(--acc); font-size: 11px; }
+.tpl-used { margin-left: 6px; color: var(--acc); font-size: 13.2px; }
 .tpl-tbl .acts { white-space: nowrap; }
 
 .ti { width: 100%; min-width: 52px; background: var(--cellbg); border: 1px solid var(--line2);
-  color: var(--text); padding: 3px 6px; font-size: 12px; font-family: inherit; }
+  color: var(--text); padding: 3px 6px; font-size: 14.4px; font-family: inherit; }
 .ti.num { text-align: right; font-variant-numeric: tabular-nums; }
 .ti-req { border-color: var(--line2); }
 .ti-req:invalid, .ti-req:placeholder-shown { border-color: var(--amber); }
@@ -501,10 +501,10 @@ onMounted(async () => {
 .new-row td { background: var(--panel2); }
 
 .btn { background: transparent; border: 1px solid var(--line2); color: var(--muted);
-  font-size: 11.5px; padding: 4px 10px; cursor: pointer; }
+  font-size: 13.8px; padding: 4px 10px; cursor: pointer; }
 .btn:hover { color: var(--text); }
 .btn-mini { background: transparent; border: 1px solid var(--line2); color: var(--muted);
-  font-size: 11px; padding: 2px 6px; cursor: pointer; }
+  font-size: 13.2px; padding: 2px 6px; cursor: pointer; }
 .btn-mini:hover { color: var(--text); border-color: var(--acc); }
 .btn-mini--del:hover { color: var(--acc); border-color: var(--acc); }
 </style>

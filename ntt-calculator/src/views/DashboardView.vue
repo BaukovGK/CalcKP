@@ -56,7 +56,7 @@
 
     <!-- Подтверждение удаления проекта -->
     <BaseModal :show="!!deleteProjectId" title="Удалить проект?" @close="deleteProjectId = null">
-      <div style="font-size:12px;color:var(--tx2)">
+      <div style="font-size:14.4px;color:var(--tx2)">
         Удалить <strong>{{ deleteProjectTitle }}</strong> со всеми единицами оборудования? Действие необратимо.
       </div>
       <div v-if="deleteError" class="auth-err" style="margin-top:8px">{{ deleteError }}</div>
@@ -190,10 +190,10 @@ onMounted(() => projects.fetchAll())
 .dash-search  { flex: 1; min-width: 0; }
 .dash-grid    { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; padding: 12px; align-content: start; }
 .dash-state   { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 12px; color: var(--tx3); }
+.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
 .dash-err     { color: var(--danger); }
-.nav-section  { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
-.nav-link     { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 11px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
+.nav-section  { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
+.nav-link     { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 13.2px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
 .nav-link:hover   { background: var(--bg3); color: var(--tx1); }
 .nav-link--active { background: var(--bg3); color: var(--accent); font-weight: 600; }
 </style>

@@ -28,7 +28,7 @@
       <div class="topbar">
         <div class="tb-title">Реестр цен</div>
         <div class="tb-spacer"></div>
-        <div style="font-size:10px;color:var(--tx3)">{{ filtered.length }} позиций</div>
+        <div style="font-size:12px;color:var(--tx3)">{{ filtered.length }} позиций</div>
       </div>
 
       <div class="pr-toolbar">
@@ -281,31 +281,31 @@ onMounted(load)
 
 <style scoped>
 .pr-tb-spacer { flex: 1; }
-.pr-hint { font-size: 10px; color: var(--faint); }
+.pr-hint { font-size: 12px; color: var(--faint); }
 .pr-imp { margin: 8px 12px; border: 1px solid var(--line2); background: var(--panel); padding: 8px 10px; }
-.pr-imp-h { display: flex; align-items: center; font-size: 11.5px; font-weight: 600; margin-bottom: 6px; }
-.pr-imp-x { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 12px; }
-.pr-imp-row { display: flex; gap: 16px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+.pr-imp-h { display: flex; align-items: center; font-size: 13.8px; font-weight: 600; margin-bottom: 6px; }
+.pr-imp-x { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 14.4px; }
+.pr-imp-row { display: flex; gap: 16px; font-size: 13.2px; color: var(--muted); flex-wrap: wrap; }
 .pr-imp-row .is-warn { color: var(--amber); }
 .pr-imp-d { margin-top: 6px; }
-.pr-imp-d summary { font-size: 10.5px; color: var(--faint); cursor: pointer; }
-.pr-imp-i { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
-.pr-imp-note { font-size: 10px; color: var(--faint); margin-top: 6px; }
+.pr-imp-d summary { font-size: 12.6px; color: var(--faint); cursor: pointer; }
+.pr-imp-i { font-size: 12.6px; color: var(--muted); margin-top: 3px; }
+.pr-imp-note { font-size: 12px; color: var(--faint); margin-top: 6px; }
 
 .pr-toolbar { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg1); flex-shrink: 0; }
 .pr-search  { flex: 1; min-width: 0; }
 
 .pr-cat-hdr {
-  font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  font-size: 10.8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--accent); font-family: Archivo, system-ui, sans-serif;
   padding: 10px 14px 4px; border-bottom: 1px solid var(--border);
 }
 
 .pr-table {
-  width: 100%; border-collapse: collapse; font-size: 11px;
+  width: 100%; border-collapse: collapse; font-size: 13.2px;
 }
 .pr-table th {
-  text-align: left; padding: 4px 10px; font-size: 9px; font-weight: 600;
+  text-align: left; padding: 4px 10px; font-size: 10.8px; font-weight: 600;
   color: var(--tx3); background: var(--bg1); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 1;
 }
@@ -314,30 +314,30 @@ onMounted(load)
 }
 .pr-table tr:hover td { background: var(--bg3); }
 
-.pr-unit     { font-family: Archivo, system-ui, sans-serif; font-size: 9px; color: var(--tx3); white-space: nowrap; width: 40px; }
+.pr-unit     { font-family: Archivo, system-ui, sans-serif; font-size: 10.8px; color: var(--tx3); white-space: nowrap; width: 40px; }
 .pr-price    { width: 110px; }
-.pr-price-val { cursor: pointer; font-family: Archivo, system-ui, sans-serif; font-size: 11px; font-weight: 600; color: var(--accent); }
+.pr-price-val { cursor: pointer; font-family: Archivo, system-ui, sans-serif; font-size: 13.2px; font-weight: 600; color: var(--accent); }
 .pr-price-val:hover { text-decoration: underline; }
 .pr-supplier  { width: 160px; }
 .pr-sup-val   { cursor: pointer; }
 .pr-sup-val:hover { text-decoration: underline; color: var(--tx1); }
-.pr-date      { font-size: 9px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; width: 70px; white-space: nowrap; }
+.pr-date      { font-size: 10.8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; width: 70px; white-space: nowrap; }
 .pr-actions   { width: 70px; white-space: nowrap; }
 
-.pr-inp      { padding: 2px 5px; font-size: 11px; height: 24px; width: 100%; }
-.pr-save-btn { padding: 2px 7px; font-size: 11px; height: 24px; min-width: 0; }
+.pr-inp      { padding: 2px 5px; font-size: 13.2px; height: 24px; width: 100%; }
+.pr-save-btn { padding: 2px 7px; font-size: 13.2px; height: 24px; min-width: 0; }
 .pr-edit-btn {
-  background: transparent; border: none; color: var(--tx3); font-size: 13px;
+  background: transparent; border: none; color: var(--tx3); font-size: 15.6px;
   cursor: pointer; padding: 2px 4px; transition: color .12s;
 }
 .pr-edit-btn:hover { color: var(--accent); }
 
-.nav-section { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
-.nav-link    { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 11px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
+.nav-section { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
+.nav-link    { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 13.2px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
 .nav-link:hover    { background: var(--bg3); color: var(--tx1); }
 .nav-link--active  { background: var(--bg3); color: var(--accent); font-weight: 600; }
 
 .dash-state    { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 12px; color: var(--tx3); }
+.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
 .dash-err      { color: var(--danger); }
 </style>
