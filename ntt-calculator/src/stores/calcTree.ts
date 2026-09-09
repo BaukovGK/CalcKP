@@ -277,7 +277,9 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       insulationDepthMm: n(kns.tiGlubina),
       pipeExecution: kns.ispolnenie === 'частями' ? 'частями' : 'целая',
       hasFlowMeter: Boolean(kns.rashodomer),
-      emergencyHoseNutGm: n(kns.gaykaGm) || undefined,
+      // `gaykaGm` — прежнее имя поля (переименовано в тот же день, когда
+      // появилось): расчёты, сохранённые между двумя релизами, читаются им.
+      emergencyCouplingGm: n(kns.muftaGm ?? kns.gaykaGm) || undefined,
     }
   }
 

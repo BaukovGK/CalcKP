@@ -287,7 +287,7 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
   })
 
   // Состав аварийной линии шире, чем в листе: завод назвал обратный клапан,
-  // задвижку и два фланца сверх гайки с резьбовым патрубком.
+  // задвижку и два фланца сверх муфты с резьбовым патрубком.
   it('аварийная линия несёт клапан, задвижку и два фланца', () => {
     const rows2 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true })
       .sections.find((s) => s.code === '5')!
@@ -297,15 +297,15 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
     expect(rows2.find((r) => r.name === PRESSURE_PIPE_KITS[150]!.freeFlange.name)!.qtyCalc).toBe(2)
   })
 
-  // Труба аварийной линии идёт по DN напорного, а гайка — нет: её размер
+  // Труба аварийной линии идёт по DN напорного, а муфта — нет: её размер
   // отдельное поле ОЛ, и в прайсе он стоит от 250 до 2000 ₽.
-  it('размер быстросъёмной гайки берётся из ОЛ, а не из DN напорного', () => {
-    const rows80 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true, emergencyHoseNutGm: 80 })
+  it('размер быстросъёмной муфты берётся из ОЛ, а не из DN напорного', () => {
+    const rows80 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true, emergencyCouplingGm: 80 })
       .sections.find((s) => s.code === '5')!
       .components.find((c) => c.title === 'Аварийный трубопровод')!.rows
     expect(rows80.find((r) => r.name === 'Гайка пожарная ГМ80')).toBeDefined()
     // Резьбовой патрубок под ГМ80 в прайсе не назван — не выдумываем позицию,
-    // а объясняем, чему он должен удовлетворять: резьба под гайку и сварка с
+    // а объясняем, чему он должен удовлетворять: резьба под муфту и сварка с
     // трубой аварийной линии (её DN — напорный).
     const nozzle = rows80.find((r) => r.name.startsWith('Патрубок резьбовой'))!
     expect(nozzle.qtyCalc).toBe(1)
@@ -319,7 +319,7 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
     const rows150 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true })
       .sections.find((s) => s.code === '5')!
       .components.find((c) => c.title === 'Аварийный трубопровод')!.rows
-    expect(OL3487.emergencyHoseNutGm).toBeUndefined()
+    expect(OL3487.emergencyCouplingGm).toBeUndefined()
     expect(rows150.find((r) => r.name === 'Гайка пожарная ГМ150')).toBeDefined()
     expect(rows150.find((r) => r.name.startsWith('Патрубок резьбовой М150х6'))).toBeDefined()
   })

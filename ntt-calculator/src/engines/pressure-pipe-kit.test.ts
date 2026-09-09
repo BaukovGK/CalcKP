@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest'
 // В сборку приложения файл не попадает: он виден только этому тесту.
 import prices from '../../../backend/prisma/seed-data/prices.json'
 import {
-  hoseNutItem,
-  HOSE_NUT_NOZZLES,
-  HOSE_NUT_SIZES,
+  couplingItem,
+  COUPLING_NOZZLES,
+  COUPLING_SIZES,
   PRESSURE_PIPE_EXTRAS,
   PRESSURE_PIPE_KITS,
   type KitItem,
@@ -46,21 +46,21 @@ describe('комплекты напорной нитки против прайс
 
   // В листе позиция названа «РОТ-ГАЙКА ГМ150», в прайсе — «Гайка пожарная
   // ГМ150». Ключ ищется по прайсу, поэтому берётся второе имя.
-  it('гайка аварийного трубопровода названа так, как в прайсе, а не в листе', () => {
-    expect(PRESSURE_PIPE_EXTRAS.hoseNut.name).toBe('Гайка пожарная ГМ150')
+  it('муфта аварийного трубопровода названа так, как в прайсе, а не в листе', () => {
+    expect(PRESSURE_PIPE_EXTRAS.coupling.name).toBe('Гайка пожарная ГМ150')
     expect(KEYS.has('Прочие материалы|РОТ-ГАЙКА ГМ150|шт')).toBe(false)
   })
 
-  // Размер гайки выбирается в ОЛ, поэтому каждый предлагаемый вариант обязан
+  // Размер муфты выбирается в ОЛ, поэтому каждый предлагаемый вариант обязан
   // находиться в прайсе: иначе выбор молча даст «красную» строку.
-  it('все размеры гайки из списка ОЛ есть в прайсе', () => {
-    for (const gm of HOSE_NUT_SIZES) {
-      expect(KEYS.has(key(hoseNutItem(gm))), `нет в прайсе: ГМ${gm}`).toBe(true)
+  it('все размеры муфты из списка ОЛ есть в прайсе', () => {
+    for (const gm of COUPLING_SIZES) {
+      expect(KEYS.has(key(couplingItem(gm))), `нет в прайсе: ГМ${gm}`).toBe(true)
     }
   })
 
-  it('известные пары «гайка ↔ резьбовой патрубок» тоже есть в прайсе', () => {
-    for (const item of Object.values(HOSE_NUT_NOZZLES)) {
+  it('известные пары «муфта ↔ резьбовой патрубок» тоже есть в прайсе', () => {
+    for (const item of Object.values(COUPLING_NOZZLES)) {
       expect(KEYS.has(key(item)), `нет в прайсе: ${item.name}`).toBe(true)
     }
   })

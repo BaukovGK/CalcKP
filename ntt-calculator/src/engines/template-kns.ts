@@ -32,9 +32,9 @@ import {
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import type { CostBucket } from './economics'
 import {
-  DEFAULT_HOSE_NUT_GM,
-  hoseNutItem,
-  HOSE_NUT_NOZZLES,
+  DEFAULT_COUPLING_GM,
+  couplingItem,
+  COUPLING_NOZZLES,
   PRESSURE_PIPE_EXTRAS,
   PRESSURE_PIPE_HOURS,
   PRESSURE_PIPE_KITS,
@@ -91,13 +91,14 @@ export interface KnsSurveyParams {
   /** Аварийный трубопровод. */
   emergencyPipeline: boolean
   /**
-   * Размер быстросъёмной (пожарной) гайки аварийной линии, ГМ.
+   * Размер быстросъёмной муфты аварийной линии, ГМ.
    *
-   * Сам аварийный трубопровод идёт тем же DN, что напорный, а гайка — нет:
-   * ею определяется, чем подключится машина. В прайсе ГМ50…ГМ150 с разбросом
-   * цены в восемь раз, поэтому размер задаётся в ОЛ, а не выводится.
+   * Муфта приваривается к трубопроводу, наружу торчит только ответная часть
+   * под подключение машины. Сам аварийный трубопровод идёт тем же DN, что
+   * напорный, а муфта — нет: ею определяется, чем подключатся. В прайсе
+   * ГМ50…ГМ150 с разбросом цены в восемь раз, поэтому размер задаётся в ОЛ.
    */
-  emergencyHoseNutGm?: number
+  emergencyCouplingGm?: number
   /**
    * Расходомер на напорной линии (флаг ОЛ, блок автоматики).
    *
@@ -724,8 +725,8 @@ export function buildPressurePipe(
     outletDn: number
     outletCount: number
     emergencyPipeline?: boolean
-    /** Размер быстросъёмной гайки аварийной линии, ГМ (у ЕМК и КОЛ его нет). */
-    emergencyHoseNutGm?: number
+    /** Размер быстросъёмной муфты аварийной линии, ГМ (у ЕМК и КОЛ его нет). */
+    emergencyCouplingGm?: number
     hasFlowMeter?: boolean
   },
 ): CalcComponent[] {
@@ -819,18 +820,18 @@ export function buildPressurePipe(
   // вечно выключенный блок был бы у них шумом. Поэтому у КНС компонент есть
   // всегда (включённый или нет), а у остальных изделий его нет вовсе.
   if (s.emergencyPipeline !== undefined) {
-    // Состав шире, чем в листе: помимо быстросъёмной гайки и резьбового
+    // Состав шире, чем в листе: помимо быстросъёмной муфты и резьбового
     // патрубка завод назвал (2026-09-09) обратный клапан, задвижку и два
     // фланца. Наименования клапана и задвижки строятся по шаблону НН с
     // подстановкой DN — прайс держит ряд DN50…DN300, так что при типовом
     // напорном строка находит цену; при нетиповом останется «красной», и
     // инженер выберет позицию сам.
-    // Труба аварийной линии идёт тем же DN, что напорная, а вот размер
-    // быстросъёмной гайки от него не зависит — им определяется, чем
-    // подключится машина, и задаётся он в опросном листе.
-    const gm = s.emergencyHoseNutGm ?? DEFAULT_HOSE_NUT_GM
-    const nut = hoseNutItem(gm)
-    const nozzle = HOSE_NUT_NOZZLES[gm] ?? null
+    // Труба аварийной линии идёт тем же DN, что напорная, а размер муфты от
+    // него не зависит: муфта приваривается к трубопроводу, наружу торчит
+    // только ответная часть, и её размером определяется, чем подключатся.
+    const gm = s.emergencyCouplingGm ?? DEFAULT_COUPLING_GM
+    const nut = couplingItem(gm)
+    const nozzle = COUPLING_NOZZLES[gm] ?? null
 
     const emergencyRows = [
       makeRow(ctx, {
@@ -839,18 +840,18 @@ export function buildPressurePipe(
         name: nut.name,
         unit: nut.unit,
         qtyCalc: 1,
-        note: 'ƒ одна на станцию · размер из опросного листа',
+        note: 'ƒ одна на станцию · приваривается к трубопроводу, размер из ОЛ',
       }),
       makeRow(ctx, {
         kind: 'МАТЕРИАЛ',
         category: nozzle?.category ?? 'Прочие материалы',
-        name: nozzle?.name ?? `Патрубок резьбовой под гайку ГМ${gm}`,
+        name: nozzle?.name ?? `Патрубок резьбовой под муфту ГМ${gm}`,
         unit: 'шт',
         qtyCalc: 1,
         note: nozzle
           ? 'ƒ один на станцию, приваривается к трубе аварийной линии'
           : `Резьба под ГМ${gm} в прайсе не указана — подберите патрубок из каталога: ` +
-            `резьба под гайку, приваривается к трубе аварийной линии DN${s.outletDn}`,
+            `резьба под муфту, приваривается к трубе аварийной линии DN${s.outletDn}`,
       }),
     ]
 
