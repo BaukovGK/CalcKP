@@ -1,6 +1,7 @@
 import { computed, type Ref } from 'vue'
 import {
   checkValveCount,
+  pressureGateValveCount,
   computeDepth,
   gateValveCount,
   pipeGradeName,
@@ -84,14 +85,26 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const gates = computed(() => num(form.value.zadvManual) ?? gatesCalc.value)
   const gatesOverridden = computed(() => num(form.value.zadvManual) != null)
 
-  // «Краны» на экране ОЛ — это обратные клапаны напорной стороны: по схеме
-  // завода шаровых кранов на напорной линии нет, а те, что есть, относятся к
-  // обвязке датчика давления и считаются в разделе 5.
-  const ballsCalc = computed(() =>
+  // Напорная сторона: по схеме завода там ЗАДВИЖКИ, а не шаровые краны —
+  // на стояке каждого установленного насоса и на каждом отводящем патрубке.
+  // Ключ формы остался прежним (kranManual): переименование осиротило бы
+  // сохранённые опросные листы, а значение он несёт то же — ручной override.
+  const pressureGatesCalc = computed(() =>
+    pressureGateValveCount(
+      num(form.value.nRab) ?? 0,
+      num(form.value.nRez) ?? 0,
+      num(form.value.napKol) ?? 0,
+    ),
+  )
+  const pressureGates = computed(() => num(form.value.kranManual) ?? pressureGatesCalc.value)
+  const pressureGatesOverridden = computed(() => num(form.value.kranManual) != null)
+
+  // Обратные клапаны — по одному на установленный насос (включая резервный).
+  const checkValvesCalc = computed(() =>
     checkValveCount(num(form.value.nRab) ?? 0, num(form.value.nRez) ?? 0),
   )
-  const balls = computed(() => num(form.value.kranManual) ?? ballsCalc.value)
-  const ballsOverridden = computed(() => num(form.value.kranManual) != null)
+  const checkValves = computed(() => num(form.value.klapanManual) ?? checkValvesCalc.value)
+  const checkValvesOverridden = computed(() => num(form.value.klapanManual) != null)
 
   // Формулировки разбивки — как в прототипе: он объясняет смысл, а не
   // повторяет арифметику («по кол-ву подводящих патрубков = 1»).
@@ -100,9 +113,13 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
       ? `по кол-ву подводящих патрубков = ${gatesCalc.value}`
       : 'арматура на подводящем выключена = 0',
   )
-  const ballsExplain = computed(
+  const pressureGatesExplain = computed(
     () =>
-      `напорные (${form.value.nRab}+${form.value.nRez}) + коллектор 1${form.value.emergency ? ' + аварийный 1' : ''} = ${ballsCalc.value}`,
+      `насосов (${form.value.nRab}+${form.value.nRez}) + отводящих ${form.value.napKol} = ${pressureGatesCalc.value}` +
+      (form.value.emergency ? ' · плюс задвижка аварийной линии' : ''),
+  )
+  const checkValvesExplain = computed(
+    () => `по одному на установленный насос = ${checkValvesCalc.value}`,
   )
 
   // ── Полный габарит и мини-превью изделия ──
@@ -146,10 +163,14 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
     gatesCalc,
     gatesOverridden,
     gatesExplain,
-    balls,
-    ballsCalc,
-    ballsOverridden,
-    ballsExplain,
+    pressureGates,
+    pressureGatesCalc,
+    pressureGatesOverridden,
+    pressureGatesExplain,
+    checkValves,
+    checkValvesCalc,
+    checkValvesOverridden,
+    checkValvesExplain,
     fullHeightMm,
     title,
     missingRequired,

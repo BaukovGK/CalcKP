@@ -95,13 +95,22 @@
               <label class="fld"><span>SN, Па</span>
                 <select v-model="form.snManual"><option value="">расчётное</option><option v-for="v in SN_LIST" :key="v">{{ v }}</option></select>
               </label>
-              <!-- Возвышение и глубина теплоизоляции живут здесь же: это
+              <!-- Возвышение, исполнение и теплоизоляция живут здесь же: это
                    такие же типовые величины, что PN и SN, и трогают их так же
                    редко. Глубина показывается только при включённой
                    теплоизоляции — иначе она ни на что не влияет. -->
               <label class="fld"><span>Возвышение над землёй, мм</span>
                 <input v-model="form.vozv" class="num" :placeholder="String(ELEVATION_DEFAULT_MM)" />
               </label>
+              <label class="fld"><span>Исполнение обечайки</span>
+                <select v-model="form.ispolnenie">
+                  <option value="частями">Труба частями</option>
+                  <option value="целая">Целая труба</option>
+                </select>
+              </label>
+              <div class="ol-manual-tg">
+                <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" />
+              </div>
               <label v-if="form.insulation" class="fld"><span>Глубина теплоизоляции, мм</span>
                 <input v-model="form.tiGlubina" class="num" :placeholder="String(TI_DEPTH_DEFAULT_MM)" />
               </label>
@@ -109,20 +118,16 @@
             </div>
           </div>
 
+          <!-- Что из свёрнутого меняет состав расчёта — видно и без раскрытия. -->
+          <div v-if="form.ispolnenie === 'частями'" class="ol-explain">
+            Труба частями: в расчёт добавятся сегменты (длины разносите вручную)
+            и ламинирование стыков по Мс из справочника.
+          </div>
+          <div v-if="!form.insulation" class="ol-explain">Теплоизоляция выключена.</div>
+
           <div class="ol-toggles">
             <ToggleYesNo v-model="form.underRoadway" label="Под проезжей частью" />
             <ToggleYesNo v-model="form.mvk" label="По ТТ МВК" />
-            <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" />
-          </div>
-          <label class="fld"><span>Исполнение обечайки</span>
-            <select v-model="form.ispolnenie">
-              <option value="целая">Целая труба</option>
-              <option value="частями">Труба частями</option>
-            </select>
-          </label>
-          <div v-if="form.ispolnenie === 'частями'" class="ol-explain">
-            В расчёт добавятся сегменты трубы (длины разносите вручную) и
-            ламинирование стыков по Мс из справочника.
           </div>
         
         </section>
@@ -192,12 +197,20 @@
               </span>
               <span v-if="p.alternativesExplain.value" class="ol-pick">{{ p.alternativesExplain.value }}</span>
             </label>
-            <label class="fld"><span>Дробилка / корзина</span>
-              <select v-model="form.drobilka"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>
-            </label>
           </div>
-          <div class="ol-toggles"><ToggleYesNo v-model="form.vzryv" label="Взрывозащита" /></div>
-        
+
+          <!-- Корзина и дробилка — независимые признаки: бывает и то, и другое
+               сразу. Одним селектом это выражалось значением «обе», которое
+               читалось хуже двух тумблеров. -->
+          <div class="ol-toggles">
+            <ToggleYesNo v-model="hasBasket" label="Корзина" />
+            <ToggleYesNo v-model="hasGrinder" label="Дробилка" />
+            <ToggleYesNo v-model="form.vzryv" label="Взрывозащита" />
+          </div>
+          <div v-if="hasGrinder" class="ol-explain">
+            Узел дробилки в расчёт пока не материализуется — строки добавьте
+            вручную (doc/Вопросы_заводу.md: ждём модели и состав).
+          </div>
         </section>
 
         <!-- 4. Патрубки -->
@@ -264,11 +277,19 @@
             />
             <CalcField
               v-model="form.kranManual"
-              label="Шаровые краны — напорная линия"
-              :calc="s.ballsCalc.value"
-              :value="s.balls.value"
-              :overridden="s.ballsOverridden.value"
-              :explain="s.ballsExplain.value"
+              label="Задвижки — напорная сторона"
+              :calc="s.pressureGatesCalc.value"
+              :value="s.pressureGates.value"
+              :overridden="s.pressureGatesOverridden.value"
+              :explain="s.pressureGatesExplain.value"
+            />
+            <CalcField
+              v-model="form.klapanManual"
+              label="Обратные клапаны"
+              :calc="s.checkValvesCalc.value"
+              :value="s.checkValves.value"
+              :overridden="s.checkValvesOverridden.value"
+              :explain="s.checkValvesExplain.value"
             />
           </div>
         
@@ -392,7 +413,7 @@ import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { usePumpSelection } from '@/composables/usePumpSelection'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
-import { makeDefaultKnsSurvey, pickCommon, type KnsSurveyForm } from '@/types/survey'
+import { makeDefaultKnsSurvey, pickCommon, type Grinder, type KnsSurveyForm, type PipeExecution } from '@/types/survey'
 import { tryEvalExpr } from '@/engines/expr'
 import { COUPLING_SIZES } from '@/engines/pressure-pipe-kit'
 import { estimatesApi } from '@/api/estimates'
@@ -481,7 +502,6 @@ const SECTIONS = [
 const NS_TYPES = ['Канализационная', 'Ливневая', 'Дренажная', 'Водопроводная'] as const
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const
 const MATERIALS = ['ПЭ', 'ПВХ', 'ПНД', 'ПП', 'Асбестцемент', 'Корсис', 'стеклокомпозит'] as const
-const GRINDERS = ['корзина', 'дробилка', 'обе', 'нет'] as const
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
 const SN_LIST = ['1250', '2500', '5000', '10000'] as const
 
@@ -490,6 +510,9 @@ const TI_DEPTH_DEFAULT_MM = 2000
 
 /** Типовое возвышение корпуса над землёй, мм — там же, за флажком. */
 const ELEVATION_DEFAULT_MM = 300
+
+/** Типовое исполнение обечайки: цельную трубу нужной длины берут не всегда. */
+const PIPE_EXECUTION_DEFAULT: PipeExecution = 'частями'
 /**
  * Домен DN — ровно как в справочнике весов (30 значений, 162 строки GRP):
  * 300…500 с шагом 50, дальше 600…3000 с шагом 100. Промежуточных значений
@@ -588,12 +611,38 @@ function onScroll() {
   activeSec.value = best
 }
 
+/**
+ * Корзина и дробилка — два независимых тумблера над ОДНИМ полем модели.
+ *
+ * В опросном листе завода это одно поле с четырьмя значениями
+ * («корзина» / «дробилка» / «обе» / «нет»), и таким оно сохраняется: менять
+ * форму хранения ради вида экрана значило бы осиротить сохранённые расчёты.
+ * Тумблеры — проекция: пара булевых однозначно ложится на четвёрку и обратно.
+ */
+function grinderValue(basket: boolean, grinder: boolean): Grinder {
+  if (basket && grinder) return 'обе'
+  if (basket) return 'корзина'
+  if (grinder) return 'дробилка'
+  return 'нет'
+}
+
+const hasBasket = computed({
+  get: () => form.value.drobilka === 'корзина' || form.value.drobilka === 'обе',
+  set: (v: boolean) => { form.value.drobilka = grinderValue(v, hasGrinder.value) },
+})
+
+const hasGrinder = computed({
+  get: () => form.value.drobilka === 'дробилка' || form.value.drobilka === 'обе',
+  set: (v: boolean) => { form.value.drobilka = grinderValue(hasBasket.value, v) },
+})
+
 function resetPipe() {
   form.value.pipeManual = false
   form.value.pnManual = ''
   form.value.snManual = ''
   form.value.tiGlubina = String(TI_DEPTH_DEFAULT_MM)
   form.value.vozv = String(ELEVATION_DEFAULT_MM)
+  form.value.ispolnenie = PIPE_EXECUTION_DEFAULT
 }
 
 function acceptDepth() {
@@ -623,7 +672,10 @@ function surveyPayload() {
       pipeGrade: s.pipeGrade.value,
       fullHeightMm: s.fullHeightMm.value,
       gates: s.gates.value,
-      balls: s.balls.value,
+      // Ключ `balls` в сохранённых листах остался от шаровых кранов; по схеме
+      // завода на напорной стороне задвижки, их и пишем.
+      balls: s.pressureGates.value,
+      checkValves: s.checkValves.value,
       // Марка насоса: подобранная сервером либо введённая вручную. Идёт в
       // наименование строки насоса, а оттуда — в спецификацию КП.
       pumpModel: p.pumpModel.value,
@@ -743,6 +795,8 @@ async function createEstimate() {
 .ol-explain { font-size: 13.2px; color: var(--muted); margin-top: 3px; }
 .ol-chk { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13.8px; color: var(--muted); }
 .ol-manual { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px;
+/* Тумблер внутри сетки ручных полей: занимает свою ячейку и не ломает ряд. */
+.ol-manual-tg { display: flex; align-items: flex-end; padding-bottom: 4px; }
   padding: 8px; background: var(--blue-bg); border-left: 3px solid var(--blue); }
 .ol-reset { background: transparent; border: none; color: var(--blue); font-size: 13.2px; text-decoration: underline; }
 

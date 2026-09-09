@@ -51,9 +51,12 @@ defineEmits<{ 'update:modelValue': [DeviceType] }>()
 
 <style scoped>
 .dt { display: flex; flex-direction: column; gap: 8px; }
+/* Кнопки делят ширину поровну — как один сегментированный переключатель, а
+   не как три ярлыка разной длины по левому краю. */
 .dt-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.dt-row > .dt-btn { flex: 1 1 0; min-width: 160px; }
 
-.dt-btn { display: flex; align-items: baseline; gap: 7px; padding: 7px 14px;
+.dt-btn { display: flex; align-items: baseline; justify-content: center; gap: 7px; padding: 9px 14px;
   background: transparent; border: 1px solid var(--line2); color: var(--muted);
   cursor: pointer; transition: all .1s; }
 .dt-btn:hover:not(.locked) { color: var(--text); }

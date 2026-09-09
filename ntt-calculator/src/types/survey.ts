@@ -74,6 +74,10 @@ export interface KnsSurveyForm extends SurveyCommonForm {
    * Исполнение обечайки: одной трубой либо сегментами со сваркой на месте
    * (лист КНС, ячейка E14). «Частями» добавляет в расчёт сегменты и
    * ламинирование стыков — в эталоне при «целой трубе» этот блок обнулён.
+   *
+   * Типовое исполнение — ЧАСТЯМИ (решение завода 2026-09-09): цельную трубу
+   * нужной длины удаётся взять не всегда. В эталонном листе стояла «целая»,
+   * но это свойство того экземпляра, а не правило.
    */
   ispolnenie: PipeExecution
 
@@ -102,9 +106,16 @@ export interface KnsSurveyForm extends SurveyCommonForm {
    * она стоит от 250 до 2000 ₽ в зависимости от размера.
    */
   muftaGm: string
-  /** Override кол-ва арматуры: пусто — расчётное. */
+  /**
+   * Override количеств арматуры: пусто — расчётное.
+   *
+   * `kranManual` исторически назывался по шаровым кранам; по схеме завода на
+   * напорной стороне стоят ЗАДВИЖКИ, и поле переопределяет именно их. Ключ
+   * не переименован намеренно: он лежит в сохранённых опросных листах.
+   */
   zadvManual: string
   kranManual: string
+  klapanManual: string
 
   // ── Насосное оборудование ──
   rashod: string
@@ -153,7 +164,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     insulation: true,
     tiGlubina: '2000',
     tiManual: false,
-    ispolnenie: 'целая',
+    ispolnenie: 'частями',
 
     podvMat: 'ПЭ',
     podvDn: '250',
@@ -168,6 +179,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     emergency: false,
     zadvManual: '',
     kranManual: '',
+    klapanManual: '',
 
     rashod: '25,13',
     rashodUnit: 'l/s',
