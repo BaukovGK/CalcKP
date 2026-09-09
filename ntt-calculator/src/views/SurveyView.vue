@@ -86,7 +86,13 @@ const deviceType = ref<DeviceType>(
   ['KNS', 'EMK', 'KOL'].includes(String(route.query.type)) ? (String(route.query.type) as DeviceType) : 'KNS',
 )
 
-const loading = ref(false)
+/**
+ * Ждём данные ДО первой отрисовки ветки: форма забирает `initial` один раз,
+ * при создании (`{ ...defaults, ...initial }`), и значения, пришедшие позже,
+ * в неё уже не попадают. Раньше карточка проекта грузилась параллельно с
+ * отрисовкой — и «Заказчик» с «Объектом» оставались демонстрационными.
+ */
+const loading = ref(Boolean(estimateId.value || queryProjectId.value))
 const loadError = ref<string | null>(null)
 const projectTitle = ref<string | null>(null)
 
@@ -129,16 +135,25 @@ onMounted(async () => {
       loading.value = false
     }
   } else if (projectId.value) {
-    // Подпись проекта в шапке; общий блок можно предзаполнить из карточки.
+    // Подпись проекта в шапке; общий блок предзаполняется из карточки.
     try {
       const p = await projectsApi.get(projectId.value)
       projectTitle.value = p.title
-      const common = { zakazchik: p.customer ?? '', obekt: p.address ?? p.title }
+      // В карточке проекта название объекта и его адрес — два поля, в ОЛ
+      // «Объект» одно, поэтому склеиваем: «ГКБ №52, ул. Пехотная, 3».
+      // Пустое у проекта значение затирает демонстрационное: приписывать
+      // проекту чужого заказчика хуже, чем оставить поле пустым.
+      const common = {
+        zakazchik: p.customer ?? '',
+        obekt: [p.title, p.address].filter(Boolean).join(', '),
+      }
       initialKns.value = common
       initialEmk.value = common
       initialKol.value = common
     } catch {
       // Не блокируем создание: проект подтянется на бэке по projectId.
+    } finally {
+      loading.value = false
     }
   }
 })
