@@ -1,6 +1,6 @@
 import { computed, type Ref } from 'vue'
 import {
-  ballValveCount,
+  checkValveCount,
   computeDepth,
   gateValveCount,
   pipeGradeName,
@@ -84,8 +84,11 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const gates = computed(() => num(form.value.zadvManual) ?? gatesCalc.value)
   const gatesOverridden = computed(() => num(form.value.zadvManual) != null)
 
+  // «Краны» на экране ОЛ — это обратные клапаны напорной стороны: по схеме
+  // завода шаровых кранов на напорной линии нет, а те, что есть, относятся к
+  // обвязке датчика давления и считаются в разделе 5.
   const ballsCalc = computed(() =>
-    ballValveCount(num(form.value.nRab) ?? 0, num(form.value.nRez) ?? 0, form.value.emergency),
+    checkValveCount(num(form.value.nRab) ?? 0, num(form.value.nRez) ?? 0),
   )
   const balls = computed(() => num(form.value.kranManual) ?? ballsCalc.value)
   const ballsOverridden = computed(() => num(form.value.kranManual) != null)

@@ -6,7 +6,7 @@ import {
   DEFAULT_DESIGN_VELOCITY_MS,
   innerDiameterMm,
   PE_SDR17_SIZES,
-  selectOutletNozzles,
+  selectPressurePiping,
   STANDARD_PE_OD_MM,
   type PePipeSize,
 } from './pipe-hydraulics'
@@ -121,38 +121,52 @@ describe('calcDischargePipeDiameterMm — напорный участок нас
   })
 })
 
-describe('selectOutletNozzles — выходные патрубки станции', () => {
+describe('selectPressurePiping — стояк, коллектор, выходной патрубок', () => {
   // ОЛ3487: приток 90,468 м³/ч, 2 рабочих насоса, 2 напорных трубопровода.
-  it('ниток столько же, сколько насосов → оба патрубка одного диаметра', () => {
-    const r = selectOutletNozzles(90.468, 2, 2)
-    expect(r.perPump.dn).toBe(r.perOutlet.dn)
-    expect(r.perPump.flowM3h).toBeCloseTo(45.234, 9)
-    expect(r.perOutlet.flowM3h).toBeCloseTo(45.234, 9)
-    expect(r.manifold).toBe(false)
+  it('стояк идёт по расходу одного насоса, коллектор — по полному', () => {
+    const r = selectPressurePiping(90.468, 2, 2)
+    expect(r.riser.flowM3h).toBeCloseTo(45.234, 9)
+    expect(r.collector.flowM3h).toBeCloseTo(90.468, 9)
+    expect(r.collector.innerDiameterMm).toBeGreaterThan(r.riser.innerDiameterMm)
+    expect(r.collectorWiderThanRiser).toBe(true)
   })
 
-  // Одна нитка на два насоса — коллекторная («сложная») компоновка эталона.
-  it('одна нитка на два насоса → отводящий крупнее стояка, поднят флаг коллектора', () => {
-    const r = selectOutletNozzles(90.468, 2, 1)
-    expect(r.perOutlet.flowM3h).toBeCloseTo(90.468, 9)
-    expect(r.perOutlet.innerDiameterMm).toBeGreaterThan(r.perPump.innerDiameterMm)
-    expect(r.manifold).toBe(true)
+  it('два выхода делят полный расход пополам — выход уже коллектора', () => {
+    const r = selectPressurePiping(90.468, 2, 2)
+    expect(r.outlet.flowM3h).toBeCloseTo(45.234, 9)
+    expect(r.outlet.dn).toBe(r.riser.dn)
+    expect(r.outlet.innerDiameterMm).toBeLessThan(r.collector.innerDiameterMm)
   })
 
-  it('оба участка держат целевую скорость', () => {
-    const r = selectOutletNozzles(90.468, 2, 1)
-    expect(r.perPump.velocityMs).toBeLessThanOrEqual(DEFAULT_DESIGN_VELOCITY_MS)
-    expect(r.perOutlet.velocityMs).toBeLessThanOrEqual(DEFAULT_DESIGN_VELOCITY_MS)
+  it('один выход на два насоса — выход равен коллектору', () => {
+    const r = selectPressurePiping(90.468, 2, 1)
+    expect(r.outlet.flowM3h).toBeCloseTo(90.468, 9)
+    expect(r.outlet.dn).toBe(r.collector.dn)
   })
 
-  it('участок насоса совпадает с отдельным расчётом напорного участка', () => {
-    const nozzles = selectOutletNozzles(90.468, 2, 2)
+  // Один насос — сборки нет: собирать нечего, все три участка одинаковы.
+  it('единственный рабочий насос: стояк, коллектор и выход совпадают', () => {
+    const r = selectPressurePiping(45.234, 1, 1)
+    expect(r.riser.dn).toBe(r.collector.dn)
+    expect(r.collector.dn).toBe(r.outlet.dn)
+    expect(r.collectorWiderThanRiser).toBe(false)
+  })
+
+  it('все три участка держат целевую скорость', () => {
+    const r = selectPressurePiping(90.468, 2, 1)
+    for (const s of [r.riser, r.collector, r.outlet]) {
+      expect(s.velocityMs).toBeLessThanOrEqual(DEFAULT_DESIGN_VELOCITY_MS)
+    }
+  })
+
+  it('стояк совпадает с отдельным расчётом напорного участка насоса', () => {
+    const piping = selectPressurePiping(90.468, 2, 2)
     const direct = calcDischargePipeDiameterMm(90.468, 2)
-    expect(nozzles.perPump.dn).toBe(direct.dn)
-    expect(nozzles.perPump.velocityMs).toBeCloseTo(direct.velocityMs, 9)
+    expect(piping.riser.dn).toBe(direct.dn)
+    expect(piping.riser.velocityMs).toBeCloseTo(direct.velocityMs, 9)
   })
 
-  it('нулевое число ниток → бросает ошибку', () => {
-    expect(() => selectOutletNozzles(90.468, 2, 0)).toThrow(/outletCount/)
+  it('нулевое число выходов → бросает ошибку', () => {
+    expect(() => selectPressurePiping(90.468, 2, 0)).toThrow(/outletCount/)
   })
 })

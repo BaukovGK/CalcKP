@@ -38,11 +38,12 @@ import {
   type KitItem,
 } from './pressure-pipe-kit'
 import {
-  ballValveCount,
+  checkValveCount,
   floatSwitchCount,
   gateValveCount,
   pipeGradeName,
   pnForWeightLookup,
+  pressureGateValveCount,
   sleeveDiameter,
 } from './survey-kns'
 import type { EngineRow } from './types'
@@ -1033,7 +1034,9 @@ export function buildFasteners(ctx: MaterializeContext, s: { outletDn: number; o
 
 function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
   const gates = gateValveCount(s.inletCount, s.valveOnInlet)
-  const balls = ballValveCount(s.pumpsWorking, s.pumpsReserve, s.emergencyPipeline)
+  const pressureGates = pressureGateValveCount(s.pumpsWorking, s.pumpsReserve, s.outletCount)
+  const checkValves = checkValveCount(s.pumpsWorking, s.pumpsReserve)
+  const pumps = s.pumpsWorking + s.pumpsReserve
 
   return [
     {
@@ -1054,20 +1057,30 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
           qtyCalc: gates,
           note: `ƒ = подводящих (${s.inletCount}) × флаг «арматура на подводящем»`,
         }),
-        // В прайсе НН есть ровно одна позиция «Кран шаровой» — DN25
-        // («Прочее оборудование»). Напорный DN у КНС обычно 50…300, поэтому
-        // строка почти всегда рождается «красной». Это не промах ключа, а
-        // пробел каталога (doc/Вопросы_заводу.md §3): позицию под нужный DN
-        // инженер выбирает из прайса вручную, как и задвижку выше.
+        // Напорная сторона: по схеме завода на стояке каждого установленного
+        // насоса стоят задвижка и обратный клапан, плюс задвижка на каждом
+        // отводящем патрубке. Резервный насос обвязан как рабочий, поэтому
+        // здесь считаются ВСЕ насосы: рабочие задают расход (гидравлика),
+        // установленные — состав.
+        //
+        // Прежде здесь стоял «Кран шаровой DN{напорного}» — на схеме шаровых
+        // кранов на напорной линии нет, а те, что есть в эталоне, относятся к
+        // обвязке датчика давления и материализуются в разделе 5.
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
-          category: 'Прочее оборудование',
-          name: `Кран шаровой DN${s.outletDn}`,
+          category: 'Запорная арматура',
+          name: `Задвижка чугунная клиновая металл/металл DN${s.outletDn} PN10/16 клин бронза`,
           unit: 'шт',
-          qtyCalc: balls,
-          note:
-            `ƒ = (раб ${s.pumpsWorking} + рез ${s.pumpsReserve}) + коллектор 1${s.emergencyPipeline ? ' + аварийный 1' : ''}` +
-            (s.outletDn === 25 ? '' : ' · в прайсе только DN25 — выберите позицию вручную'),
+          qtyCalc: pressureGates,
+          note: `ƒ = насосов (${pumps}) + отводящих (${s.outletCount}) = ${pressureGates} шт`,
+        }),
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: 'Запорная арматура',
+          name: `Клапан обратный фланцевый с мягким уплотнением и наклонным седлом DN${s.outletDn} PN10/16`,
+          unit: 'шт',
+          qtyCalc: checkValves,
+          note: `ƒ = по клапану на каждый установленный насос (${pumps})`,
         }),
       ],
     },

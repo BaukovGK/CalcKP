@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ballValveCount,
+  checkValveCount,
+  pressureGateValveCount,
   computeDepth,
   floatSwitchCount,
   fromLps,
@@ -219,12 +220,20 @@ describe('арматура — авторасчёт с override (§5.6 ТЗ)', (
     expect(gateValveCount(2, false)).toBe(0)
   })
 
-  it('ОЛ3487: 2 раб + 1 рез + 1 коллектор → 4 шаровых крана', () => {
-    expect(ballValveCount(2, 1, false)).toBe(4)
+  // Схема завода: задвижка на стояке КАЖДОГО установленного насоса (включая
+  // резервный — он обвязан так же) плюс по задвижке на отводящий патрубок.
+  it('ОЛ3487: 3 насоса + 2 отводящих → 5 задвижек напорной стороны', () => {
+    expect(pressureGateValveCount(2, 1, 2)).toBe(5)
   })
 
-  it('аварийный трубопровод добавляет 1 кран', () => {
-    expect(ballValveCount(2, 1, true)).toBe(5)
+  // Итог сходится с опросным листом: 5 напорных + подводящая + аварийная = 7,
+  // и ровно 7 стоит в поле «Количество задвижек» ОЛ3487.
+  it('вместе с подводящей и аварийной выходит 7 — как в опросном листе', () => {
+    expect(pressureGateValveCount(2, 1, 2) + gateValveCount(1, true) + 1).toBe(7)
+  })
+
+  it('обратные клапаны — по одному на установленный насос', () => {
+    expect(checkValveCount(2, 1)).toBe(3)
   })
 
   it('поплавки = раб + рез + 2', () => {

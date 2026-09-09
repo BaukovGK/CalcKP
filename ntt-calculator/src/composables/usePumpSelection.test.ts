@@ -12,13 +12,13 @@ import { makeDefaultKnsSurvey, type KnsSurveyForm } from '@/types/survey'
 
 const selectPump = vi.fn()
 const dischargePipeDiameter = vi.fn()
-const outletNozzles = vi.fn()
+const pressurePiping = vi.fn()
 
 vi.mock('@/api/pumpStation', () => ({
   pumpStationApi: {
     selectPump: (...a: unknown[]) => selectPump(...a),
     dischargePipeDiameter: (...a: unknown[]) => dischargePipeDiameter(...a),
-    outletNozzles: (...a: unknown[]) => outletNozzles(...a),
+    pressurePiping: (...a: unknown[]) => pressurePiping(...a),
   },
 }))
 
@@ -60,10 +60,11 @@ describe('usePumpSelection', () => {
       flowM3h: 45, warnings: [],
     })
     dischargePipeDiameter.mockResolvedValue({ ...section(125, 125, 7.4, 110.2, 1.32), flowPerPumpM3h: 45 })
-    outletNozzles.mockResolvedValue({
-      perPump: section(125, 125, 7.4, 110.2, 1.32),
-      perOutlet: section(125, 125, 7.4, 110.2, 1.32),
-      manifold: false,
+    pressurePiping.mockResolvedValue({
+      riser: section(125, 125, 7.4, 110.2, 1.32),
+      collector: section(180, 180, 10.7, 158.6, 1.27),
+      outlet: section(125, 125, 7.4, 110.2, 1.32),
+      collectorWiderThanRiser: true,
     })
   })
   afterEach(() => vi.useRealTimers())

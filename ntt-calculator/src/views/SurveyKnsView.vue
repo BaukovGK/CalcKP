@@ -146,7 +146,7 @@
                   <input v-model="form.napKol" class="num" />
                   <!-- Число ниток делит поток: при одной нитке на два насоса
                        отводящий патрубок выходит крупнее стояка. -->
-                  <span v-if="p.nozzlesExplain.value" class="ol-pick">{{ p.nozzlesExplain.value }}</span>
+                  <span v-if="p.pipingExplain.value" class="ol-pick">{{ p.pipingExplain.value }}</span>
                 </label>
                 <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.napLotok" class="num" /></label>
               </div>

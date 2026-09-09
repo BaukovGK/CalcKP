@@ -201,52 +201,71 @@ export function calcDischargePipeDiameterMm(
   return { ...sizeSection(flowPerPumpM3h, designVelocityMs, sizes), flowPerPumpM3h }
 }
 
-export interface OutletNozzlesResult {
+export interface PressurePipingResult {
   /**
-   * Напорный патрубок насоса: участок от одного насоса, расход — приток,
-   * делённый на число рабочих.
+   * Стояк насоса — от насоса до коллектора. Через него идёт расход ОДНОГО
+   * насоса: приток, делённый на число рабочих.
    */
-  perPump: PipeDiameterResult
+  riser: PipeDiameterResult
   /**
-   * Выходной (отводящий) патрубок станции: расход — приток, делённый на число
-   * напорных трубопроводов. При одной нитке через неё идёт весь приток, при
-   * двух — половина.
+   * Коллектор — горизонтальная сборка, в которую сходятся все стояки. Через
+   * него идёт ПОЛНЫЙ рабочий расход: рабочие насосы включаются вместе,
+   * резервный их не добавляет, а замещает.
    */
-  perOutlet: PipeDiameterResult
+  collector: PipeDiameterResult
   /**
-   * Ниток меньше, чем рабочих насосов: часть насосов сходится в общий
-   * коллектор, и его диаметр больше диаметра стояка. Такую компоновку лист
-   * называет «сложной».
+   * Выходной патрубок станции. Расход — полный, делённый на число напорных
+   * трубопроводов: при одном выходе через него идёт всё, при двух — половина.
    */
-  manifold: boolean
+  outlet: PipeDiameterResult
+  /**
+   * Коллектор шире стояка — насосов больше одного, и сборка действительно
+   * собирает потоки. При единственном рабочем насосе все три участка
+   * совпадают, и различать их незачем.
+   */
+  collectorWiderThanRiser: boolean
 }
 
 /**
- * Диаметры выходных патрубков станции.
+ * Диаметры напорного трубопровода станции: стояк, коллектор, выходной патрубок.
  *
- * Из трёх параметров ОЛ (расход, напор, число рабочих насосов) напор уходит в
- * подбор насоса, а расход с числом насосов делят поток на два участка:
+ * Подбор идёт в три шага, и этот модуль отвечает за второй и третий:
  *
- * - **напорный патрубок насоса** — приток / рабочих насосов;
- * - **отводящий патрубок станции** — приток / число напорных трубопроводов.
+ * 1. Насосы — по расходу, напору и числу рабочих (`pump-selection.ts`).
+ * 2. **Выходной патрубок** — по расходу рабочих насосов, делённому на число
+ *    напорных трубопроводов (их бывает один или два).
+ * 3. **Трубопроводы внутри напорного узла** — стояк каждого насоса и
+ *    коллектор, в который они сходятся.
  *
- * Когда ниток столько же, сколько рабочих насосов, оба диаметра совпадают —
- * это прямая нитка. Когда ниток меньше, отводящий выходит крупнее: насосы
- * сходятся в коллектор (в эталоне — стояки DN100 в коллектор DN150).
+ * Схема узла (принципиальная, от завода): каждый насос → задвижка → обратный
+ * клапан → коллектор; из коллектора вверх уходят выходные патрубки со своими
+ * задвижками и, если он есть, аварийный трубопровод с обратным клапаном,
+ * задвижкой и быстросъёмной гайкой.
  *
- * @param flowM3h Общий приток на станцию, м³/ч.
+ * ```
+ *   ⌇ аварийный   ⌇ выход 1   ⌇ выход 2
+ *   ⧗ задвижка    ⧗           ⧗
+ *   ▽ клапан
+ *   └─────────────┴───────────┴──── коллектор (полный расход)
+ *          ▲            ▲            ▲
+ *          ▽ клапан     ▽            ▽
+ *          ⧗ задвижка   ⧗            ⧗
+ *          ⊗ насос      ⊗            ⊗   ← стояк = расход одного насоса
+ * ```
+ *
+ * @param flowM3h Общий приток на станцию (все рабочие насосы вместе), м³/ч.
  * @param workingPumps Количество рабочих насосов, шт.
  * @param outletCount Количество напорных трубопроводов на выходе, шт.
  * @param designVelocityMs Целевая скорость течения, м/с (по умолчанию 1,5).
  * @param sizes Ряд типоразмеров (по умолчанию {@link PE_SDR17_SIZES}).
  */
-export function selectOutletNozzles(
+export function selectPressurePiping(
   flowM3h: number,
   workingPumps: number,
   outletCount: number,
   designVelocityMs: number = DEFAULT_DESIGN_VELOCITY_MS,
   sizes: readonly PePipeSize[] = PE_SDR17_SIZES,
-): OutletNozzlesResult {
+): PressurePipingResult {
   if (!(flowM3h > 0)) {
     throw new Error('flowM3h (общий приток, м³/ч) обязателен и должен быть > 0.')
   }
@@ -260,9 +279,13 @@ export function selectOutletNozzles(
     throw new Error('designVelocityMs (расчётная скорость, м/с) должен быть > 0.')
   }
 
+  const riser = sizeSection(flowM3h / workingPumps, designVelocityMs, sizes)
+  const collector = sizeSection(flowM3h, designVelocityMs, sizes)
+
   return {
-    perPump: sizeSection(flowM3h / workingPumps, designVelocityMs, sizes),
-    perOutlet: sizeSection(flowM3h / outletCount, designVelocityMs, sizes),
-    manifold: outletCount < workingPumps,
+    riser,
+    collector,
+    outlet: sizeSection(flowM3h / outletCount, designVelocityMs, sizes),
+    collectorWiderThanRiser: collector.innerDiameterMm > riser.innerDiameterMm,
   }
 }

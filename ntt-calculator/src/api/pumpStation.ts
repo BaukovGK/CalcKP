@@ -96,12 +96,16 @@ export interface DischargePipeResult extends PipeDiameterResult {
   flowPerPumpM3h: number
 }
 
-/** Диаметры выходных патрубков: стояк насоса и отводящий патрубок станции. */
-export interface OutletNozzlesResult {
-  perPump: PipeDiameterResult
-  perOutlet: PipeDiameterResult
-  /** Ниток меньше, чем насосов: насосы сходятся в общий коллектор. */
-  manifold: boolean
+/** Диаметры напорного узла: стояк насоса, коллектор и выходной патрубок. */
+export interface PressurePipingResult {
+  /** Стояк насоса — расход одного рабочего насоса. */
+  riser: PipeDiameterResult
+  /** Коллектор — полный расход рабочих насосов. */
+  collector: PipeDiameterResult
+  /** Выходной патрубок — полный расход, делённый на число отводящих. */
+  outlet: PipeDiameterResult
+  /** Коллектор шире стояка: рабочих насосов больше одного. */
+  collectorWiderThanRiser: boolean
 }
 
 export const pumpStationApi = {
@@ -125,12 +129,12 @@ export const pumpStationApi = {
   },
 
   /**
-   * Диаметры выходных патрубков: стояк насоса (приток / рабочих насосов) и
-   * отводящий патрубок станции (приток / число напорных трубопроводов).
+   * Диаметры напорного узла: стояк насоса (приток / рабочих насосов),
+   * коллектор (полный приток) и выходной патрубок (приток / число отводящих).
    */
-  outletNozzles(flowM3h: number, workingPumps: number, outletCount: number): Promise<OutletNozzlesResult> {
+  pressurePiping(flowM3h: number, workingPumps: number, outletCount: number): Promise<PressurePipingResult> {
     return api
-      .post<OutletNozzlesResult>('/pump-station/outlet-nozzles', { flowM3h, workingPumps, outletCount })
+      .post<PressurePipingResult>('/pump-station/pressure-piping', { flowM3h, workingPumps, outletCount })
       .then((r) => r.data)
   },
 }

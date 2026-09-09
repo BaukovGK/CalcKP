@@ -4,7 +4,7 @@ import { tryEvalExpr } from '@/engines/expr'
 import {
   pumpStationApi,
   type DischargePipeResult,
-  type OutletNozzlesResult,
+  type PressurePipingResult,
   type PumpCandidate,
   type PumpSelectionResult,
 } from '@/api/pumpStation'
@@ -71,7 +71,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
 
   const selection = ref<PumpSelectionResult | null>(null)
   const pipe = ref<DischargePipeResult | null>(null)
-  const nozzles = ref<OutletNozzlesResult | null>(null)
+  const piping = ref<PressurePipingResult | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -90,17 +90,17 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
       const [sel, pd, nz] = await Promise.all([
         pumpStationApi.selectPump(flow, head, pumps),
         pumpStationApi.dischargePipeDiameter(flow, pumps),
-        pumpStationApi.outletNozzles(flow, pumps, outlets),
+        pumpStationApi.pressurePiping(flow, pumps, outlets),
       ])
       if (mine !== seq) return
       selection.value = sel
       pipe.value = pd
-      nozzles.value = nz
+      piping.value = nz
     } catch (e) {
       if (mine !== seq) return
       selection.value = null
       pipe.value = null
-      nozzles.value = null
+      piping.value = null
       const r = (e as { response?: { data?: { message?: string } } }).response
       error.value = r?.data?.message ?? 'Не удалось получить подбор с сервера'
     } finally {
@@ -117,7 +117,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
         seq++
         selection.value = null
         pipe.value = null
-        nozzles.value = null
+        piping.value = null
         loading.value = false
         error.value = null
         return
@@ -224,23 +224,24 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
   })
 
   /**
-   * Подсказка по выходным патрубкам: стояк насоса и отводящий патрубок.
+   * Подсказка по напорному узлу: стояк насоса, коллектор и выходной патрубок.
    *
-   * Когда ниток столько же, сколько насосов, оба диаметра совпадают, и
-   * повторять одно и то же дважды незачем — показываем одну строку.
+   * Одинаковые диаметры не повторяются: при одном рабочем насосе все три
+   * участка совпадают, и три раза «DN125» — шум, а не информация.
    */
-  const nozzlesExplain = computed<string | null>(() => {
-    const n = nozzles.value
-    if (!n) return null
+  const pipingExplain = computed<string | null>(() => {
+    const p = piping.value
+    if (!p) return null
     const fmt = (r: { dn: number; diameterMm: number; velocityMs: number }) =>
       `DN${r.dn} (⌀${r.diameterMm}, ${nf(r.velocityMs, 2)} м/с)`
-    if (!n.manifold && n.perPump.dn === n.perOutlet.dn) {
-      return `патрубок насоса и отводящий — ${fmt(n.perPump)}`
+
+    const parts: string[] = [`стояк насоса ${fmt(p.riser)}`]
+    if (p.collectorWiderThanRiser) parts.push(`коллектор ${fmt(p.collector)}`)
+    if (p.outlet.dn !== p.riser.dn || p.outlet.dn !== p.collector.dn) {
+      parts.push(`отводящий ${fmt(p.outlet)}`)
     }
-    return (
-      `патрубок насоса ${fmt(n.perPump)} · отводящий ${fmt(n.perOutlet)}` +
-      (n.manifold ? ' · насосы сходятся в коллектор' : '')
-    )
+    if (parts.length === 1) return `весь напорный узел — ${fmt(p.riser)}`
+    return parts.join(' · ')
   })
 
   /** Предупреждения подбора — показываем как есть, они объясняют границы каталога. */
@@ -267,7 +268,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     choose,
     resetToCalculated,
     pipeExplain,
-    nozzlesExplain,
+    pipingExplain,
     warnings,
   }
 }
