@@ -24,6 +24,7 @@ import {
   laminationMassKg,
   marketableAppearanceHours,
   pipeLengthM,
+  pressureFlangeCount,
   pumpGuidesM,
   topSlabMassKg,
   type NozzleNorm,
@@ -85,6 +86,13 @@ export interface KnsSurveyParams {
   valveOnInlet: boolean
   /** Аварийный трубопровод. */
   emergencyPipeline: boolean
+  /**
+   * Расходомер на напорной линии (флаг ОЛ, блок автоматики).
+   *
+   * Влияет не только на сам прибор: расходомер врезается в разрыв нитки и
+   * требует двух фланцевых патрубков — см. `pressureFlangeCount`.
+   */
+  hasFlowMeter?: boolean
 
   /** Теплоизоляция и её глубина, мм. */
   insulationEnabled: boolean
@@ -453,6 +461,52 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
     })
   }
 
+  // A6 — Фланцевый патрубок под задвижку на подводящем (лист, строки 32–38).
+  //
+  // Номинал диктует подводящий патрубок: течение там безнапорное, но задвижка
+  // всегда идёт с номинальным PN в наименовании. Масса ручной формовки фланца
+  // берётся из норм листа «Для расчетов» — колонка «Мф фланца» по DN, а не по
+  // диаметру гильзы: формуется фланец под арматуру, не проходное отверстие.
+  //
+  // ❗ Расхождение с эталоном (осознанное): лист ставит ДВА патрубка на каждый
+  // подводящий (`I32 = 2×K5`), завод уточнил (2026-09-09) — один. Берём один.
+  const inletFlangeNorm = ctx.nozzleNormOf?.(s.inletDn) ?? null
+  const inletFlanges = s.valveOnInlet ? s.inletCount : 0
+  const inletFlangeMass =
+    inletFlangeNorm?.flangeMassKg != null ? inletFlangeNorm.flangeMassKg * inletFlanges : null
+
+  components.push({
+    id: nextId('c'),
+    nodeCode: 'A6',
+    title: `Фланцевый патрубок под задвижку на подводящем DN${s.inletDn}`,
+    enabled: s.valveOnInlet,
+    rows: [
+      ...operationWithFot(ctx, {
+        category: 'Собственное производство',
+        name: 'Ручная формовка фланца для задвижки на подводящем трубопроводе',
+        unit: 'кг',
+        qtyCalc: inletFlangeMass,
+        // В листе у этой строки k = 1 («*руч*» → 1), а не 0,56.
+        fotK: FOT_K_MANUAL,
+        note:
+          inletFlangeMass == null
+            ? `Мф фланца для DN${s.inletDn} в нормах «Для расчетов» нет — введите массу вручную`
+            : `ƒ Мф фланца(DN${s.inletDn}) × ${inletFlanges} = ${inletFlangeMass.toFixed(2)} кг`,
+      }),
+      ...operationWithFot(ctx, {
+        category: 'Собственное производство',
+        name: 'Ламинирование патрубка к корпусу',
+        unit: 'кг',
+        qtyCalc: inletFlangeMass == null ? null : laminationMassKg(inletFlangeMass),
+        fotK: FOT_K_LAMIN,
+        note:
+          inletFlangeMass == null
+            ? 'ƒ масса фланца × 3/10 — введите после массы фланца'
+            : `ƒ ${inletFlangeMass.toFixed(2)} кг × 3/10`,
+      }),
+    ],
+  })
+
   // A9 — Теплоизоляция: включается флагом ОЛ (Механика §7.2).
   const ins = insulation(s.dn, s.insulationDepthMm, { protectiveThickness: INSULATION_LAYER_MM / 1000 })
   components.push({
@@ -658,12 +712,27 @@ export function buildPressurePipe(
     outletDn: number
     outletCount: number
     emergencyPipeline?: boolean
+    hasFlowMeter?: boolean
   },
 ): CalcComponent[] {
   const guides = pumpGuidesM(s.depthMm / 1000, s.pumpsWorking, s.pumpsReserve)
   const kit = PRESSURE_PIPE_KITS[s.outletDn] ?? null
   const n = s.outletCount
   const components: CalcComponent[] = []
+
+  // Свободные фланцы: раньше это был ручной обмер — лист их не выводит. Завод
+  // дал правило (2026-09-09): по патрубку у насоса, задвижки и обратного
+  // клапана на каждый насос, два на расходомер и по одному на отводящий.
+  // Прокладки и борт-шайбы следуют за ними, поэтому тоже стали расчётными.
+  const pumps = s.pumpsWorking + s.pumpsReserve
+  const meters = s.hasFlowMeter ? n : 0
+  const flanges = pressureFlangeCount({
+    pumpsWorking: s.pumpsWorking,
+    pumpsReserve: s.pumpsReserve,
+    outletCount: n,
+    hasFlowMeter: Boolean(s.hasFlowMeter),
+  })
+  const flangeNote = `ƒ 3×насосов (${pumps}) + 2×расходомеров (${meters}) + отводящих (${n}) = ${flanges} шт`
 
   // C2 — комплект нитки. Соотношения внутри него заданы эталоном и от заказа
   // не зависят; якорные величины (метраж стальной трубы, число свободных
@@ -699,9 +768,9 @@ export function buildPressurePipe(
         makeRow(ctx, item(kit.peWeld, n, `ƒ по одному стыку на нитку, ниток ${n}`)),
         makeRow(ctx, item(kit.steelPipe, null, 'Метраж по компоновке — введите вручную')),
         makeRow(ctx, item(kit.weldFlange, n, `ƒ по одному на нитку, ниток ${n}`)),
-        makeRow(ctx, item(kit.freeFlange, null, 'Число по компоновке — введите вручную')),
-        makeRow(ctx, item(kit.gasket, null, 'ƒ свободных фланцев + 2 — введите после фланцев')),
-        makeRow(ctx, item(kit.backingRing, null, 'ƒ по свободному фланцу — введите после фланцев')),
+        makeRow(ctx, item(kit.freeFlange, flanges, flangeNote)),
+        makeRow(ctx, item(kit.gasket, flanges + 2, `ƒ свободных фланцев (${flanges}) + 2`)),
+        makeRow(ctx, item(kit.backingRing, flanges, `ƒ по одной на свободный фланец (${flanges})`)),
         makeRow(ctx, item(kit.elbow, null, 'Число по компоновке — введите вручную')),
         makeRow(ctx, item(kit.tee, null, 'Число по компоновке — введите вручную')),
       ],
@@ -736,21 +805,61 @@ export function buildPressurePipe(
   // вечно выключенный блок был бы у них шумом. Поэтому у КНС компонент есть
   // всегда (включённый или нет), а у остальных изделий его нет вовсе.
   if (s.emergencyPipeline !== undefined) {
+    // Состав шире, чем в листе: помимо быстросъёмной гайки и резьбового
+    // патрубка завод назвал (2026-09-09) обратный клапан, задвижку и два
+    // фланца. Наименования клапана и задвижки строятся по шаблону НН с
+    // подстановкой DN — прайс держит ряд DN50…DN300, так что при типовом
+    // напорном строка находит цену; при нетиповом останется «красной», и
+    // инженер выберет позицию сам.
+    const emergencyRows = [PRESSURE_PIPE_EXTRAS.hoseNut, PRESSURE_PIPE_EXTRAS.threadedNozzle].map((k) =>
+      makeRow(ctx, {
+        kind: 'МАТЕРИАЛ',
+        category: k.category,
+        name: k.name,
+        unit: k.unit,
+        qtyCalc: 1,
+        note: 'ƒ один комплект на станцию',
+      }),
+    )
+
+    emergencyRows.push(
+      makeRow(ctx, {
+        kind: 'МАТЕРИАЛ',
+        category: 'Запорная арматура',
+        name: `Клапан обратный фланцевый с мягким уплотнением и наклонным седлом DN${s.outletDn} PN10/16`,
+        unit: 'шт',
+        qtyCalc: 1,
+        note: 'ƒ один на аварийную линию',
+      }),
+      makeRow(ctx, {
+        kind: 'МАТЕРИАЛ',
+        category: 'Запорная арматура',
+        name: `Задвижка чугунная клиновая металл/металл DN${s.outletDn} PN10/16 клин бронза`,
+        unit: 'шт',
+        qtyCalc: 1,
+        note: 'ƒ одна на аварийную линию',
+      }),
+    )
+
+    if (kit) {
+      emergencyRows.push(
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: kit.freeFlange.category,
+          name: kit.freeFlange.name,
+          unit: kit.freeFlange.unit,
+          qtyCalc: 2,
+          note: 'ƒ два фланца на аварийную линию',
+        }),
+      )
+    }
+
     components.push({
       id: nextId('c'),
       nodeCode: 'C2',
       title: 'Аварийный трубопровод',
       enabled: s.emergencyPipeline,
-      rows: [PRESSURE_PIPE_EXTRAS.hoseNut, PRESSURE_PIPE_EXTRAS.threadedNozzle].map((k) =>
-        makeRow(ctx, {
-          kind: 'МАТЕРИАЛ',
-          category: k.category,
-          name: k.name,
-          unit: k.unit,
-          qtyCalc: 1,
-          note: 'ƒ один комплект на станцию',
-        }),
-      ),
+      rows: emergencyRows,
     })
   }
 

@@ -228,13 +228,35 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
     expect(by(kit.pePipe.name).qtyCalc).toBe(1) // 0,5 м × 2
   })
 
-  // Раньше отводов и тройников не было вовсе; теперь строки есть, но пустые —
-  // лист их тоже не выводит, а выдуманное число хуже пустой строки.
-  it('отводы, тройники, метраж и фланцы — пустые: их снимают с компоновки', () => {
+  // Метраж, отводы и тройники лист не выводит и завод правила не дал —
+  // остаются пустыми: выдуманное число хуже пустой строки.
+  it('метраж, отводы и тройники — пустые: их снимают с компоновки', () => {
     const kit = PRESSURE_PIPE_KITS[150]!
-    for (const item of [kit.steelPipe, kit.freeFlange, kit.gasket, kit.backingRing, kit.elbow, kit.tee]) {
+    for (const item of [kit.steelPipe, kit.elbow, kit.tee]) {
       expect(rows.find((r) => r.name === item.name)!.qtyCalc, item.name).toBeNull()
     }
+  })
+
+  // Правило завода (2026-09-09): по патрубку у насоса, задвижки и обратного
+  // клапана на каждый насос, два на расходомер, один на отводящий патрубок.
+  // ОЛ3487: насосов 2+1, расходомера нет, отводящих 2 → 3·3 + 0 + 2 = 11.
+  it('свободные фланцы считаются, а не вводятся руками', () => {
+    const kit = PRESSURE_PIPE_KITS[150]!
+    expect(rows.find((r) => r.name === kit.freeFlange.name)!.qtyCalc).toBe(11)
+  })
+
+  it('прокладки = фланцев + 2, борт-шайбы = фланцам', () => {
+    const kit = PRESSURE_PIPE_KITS[150]!
+    expect(rows.find((r) => r.name === kit.gasket.name)!.qtyCalc).toBe(13)
+    expect(rows.find((r) => r.name === kit.backingRing.name)!.qtyCalc).toBe(11)
+  })
+
+  it('расходомер добавляет по два фланца на каждый отводящий', () => {
+    const withMeter = materializeKns(ctx, { ...OL3487, hasFlowMeter: true })
+      .sections.find((s) => s.code === '5')!
+      .components.flatMap((c) => c.rows)
+    // 3·3 + 2·2 + 2 = 15.
+    expect(withMeter.find((r) => r.name === PRESSURE_PIPE_KITS[150]!.freeFlange.name)!.qtyCalc).toBe(15)
   })
 
   it('обвязка датчика давления — по комплекту на нитку', () => {
@@ -261,6 +283,17 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
       .components.find((c) => c.title === 'Аварийный трубопровод')!
     expect(on.enabled).toBe(true)
     expect(on.rows.find((r) => r.name === 'Гайка пожарная ГМ150')!.qtyCalc).toBe(1)
+  })
+
+  // Состав аварийной линии шире, чем в листе: завод назвал обратный клапан,
+  // задвижку и два фланца сверх гайки с резьбовым патрубком.
+  it('аварийная линия несёт клапан, задвижку и два фланца', () => {
+    const rows2 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true })
+      .sections.find((s) => s.code === '5')!
+      .components.find((c) => c.title === 'Аварийный трубопровод')!.rows
+    expect(rows2.find((r) => r.name.startsWith('Клапан обратный'))!.qtyCalc).toBe(1)
+    expect(rows2.find((r) => r.name.startsWith('Задвижка чугунная'))!.qtyCalc).toBe(1)
+    expect(rows2.find((r) => r.name === PRESSURE_PIPE_KITS[150]!.freeFlange.name)!.qtyCalc).toBe(2)
   })
 
   // DN, которого в эталоне нет, не должен молча давать пустой раздел.
@@ -332,6 +365,24 @@ describe('раздел 1 «Корпус»', () => {
 
   // Исполнение «целая труба» — умолчание: блок сегментов и стыков в эталоне
   // обнулён (`IF($E$14=Списки!$AI$2;0;…)`), у нас он просто не создаётся.
+  // A6: фланцевый патрубок под задвижку. Масса — «Мф фланца» из норм по DN
+  // ПОДВОДЯЩЕГО (номинал диктует он), а не по диаметру гильзы.
+  // ОЛ3487: подводящий DN250 → Мф фланца 2,3 кг × 1 патрубок.
+  it('фланец под задвижку: Мф фланца(DN подводящего) × число патрубков', () => {
+    const flange = byName('Ручная формовка фланца для задвижки на подводящем трубопроводе')
+    expect(flange.qtyCalc).toBeCloseTo(2.3, 6)
+    // Ламинирование к корпусу — 3/10 от массы фланца.
+    const lam = rows.filter((r) => r.name === 'Ламинирование патрубка к корпусу')
+    expect(lam[lam.length - 1]!.qtyCalc).toBeCloseTo(0.69, 6)
+  })
+
+  it('без арматуры на подводящем узел выключен, а не отсутствует', () => {
+    const off = materializeKns(ctx, { ...OL3487, valveOnInlet: false })
+      .sections.find((s) => s.code === '1')!
+      .components.find((c) => c.nodeCode === 'A6')!
+    expect(off.enabled).toBe(false)
+  })
+
   // Исполнение «целая труба» — умолчание: блок сегментов и стыков в эталоне
   // обнулён (`IF($E$14=Списки!$AI$2;0;…)`), у нас он просто не создаётся.
   it('целая труба: сегментов и ламинирования стыков нет', () => {

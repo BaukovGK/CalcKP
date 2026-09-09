@@ -99,6 +99,33 @@ export function laminationMassKg(partMassKg: number): number {
 }
 
 /**
+ * Число фланцевых патрубков напорной стороны, шт.
+ *
+ * Правило завода (2026-09-09): на каждый установленный насос — по патрубку у
+ * самого насоса, у задвижки и у обратного клапана; на расходомер — два (он
+ * врезается в разрыв нитки); на каждый отводящий патрубок — один.
+ *
+ * ```
+ * 3 × насосов + 2 × расходомеров + отводящих
+ * ```
+ *
+ * Насосы считаются вместе с резервными: резервный физически стоит в станции
+ * со своей задвижкой и обратным клапаном — тем же множителем, что и запорная
+ * арматура (`ballValveCount`). Расходомеров столько же, сколько отводящих
+ * патрубков (лист КНС, строка 417 = ОЛ!I44), и только при флаге ОЛ.
+ */
+export function pressureFlangeCount(input: {
+  pumpsWorking: number
+  pumpsReserve: number
+  outletCount: number
+  hasFlowMeter: boolean
+}): number {
+  const pumps = input.pumpsWorking + input.pumpsReserve
+  const meters = input.hasFlowMeter ? input.outletCount : 0
+  return 3 * pumps + 2 * meters + input.outletCount
+}
+
+/**
  * Ламинация днища ЕМК по косым и центральному стыкам, кг (лист «Калькулятор
  * ЕМК», строка 25):
  *
