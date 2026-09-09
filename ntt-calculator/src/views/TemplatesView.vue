@@ -127,9 +127,10 @@
           Мс — масса формованных слоёв на стыке = ƒ(Dу, PN&nbsp;в&nbsp;атм), лист
           «Для расчетов». На ней стоят «Ламинирование частей корпуса» (КНС,
           исполнение частями) и «Ламинация днища» (ЕМК).
-          <strong>Расчёт берёт строку PN&nbsp;4</strong> — ламинация считается по
-          нормативу 0,4&nbsp;МПа, а это те же 4&nbsp;атм. Остальные давления
-          хранятся справочно, для сверки строки с чертежом.
+          <strong>Расчёт берёт строку с наименьшим давлением</strong> — изделия
+          безнапорные, и ламинация считается минимально возможная; сегодня это
+          4&nbsp;атм, то есть 0,4&nbsp;МПа. Остальные давления хранятся
+          справочно, для сверки строки с чертежом.
         </p>
         <div class="tpl-filter">
           <label>Dу, мм
@@ -144,8 +145,8 @@
             <tr><th>PN, атм</th><th>Мс, кг *</th><th>H, мм</th><th>S, мм</th><th>X, мм</th><th></th></tr>
           </thead>
           <tbody>
-            <tr v-for="r in shownJoints" :key="`${r.d}|${r.pn}`" :class="{ 'row-used': r.pn === JOINT_LAYER_PN }">
-              <td class="key">{{ r.pn }}<span v-if="r.pn === JOINT_LAYER_PN" class="tpl-used" title="Эту строку читает расчёт">◀</span></td>
+            <tr v-for="r in shownJoints" :key="`${r.d}|${r.pn}`" :class="{ 'row-used': r.pn === usedJointPn }">
+              <td class="key">{{ r.pn }}<span v-if="r.pn === usedJointPn" class="tpl-used" title="Эту строку читает расчёт">◀</span></td>
               <td><input v-model="r.massKg" class="ti num ti-req" /></td>
               <td><input v-model="r.hMm" class="ti num" /></td>
               <td><input v-model="r.sMm" class="ti num" /></td>
@@ -226,8 +227,13 @@ const TABS: Array<{ k: Tab; label: string }> = [
   { k: 'bottom', label: 'Эллиптические днища' },
 ]
 
-/** Давление, строку которого читает расчёт (см. calcTree.ts, JOINT_LAYER_PN). */
-const JOINT_LAYER_PN = 4
+/**
+ * Строка, которую читает расчёт, — с МИНИМАЛЬНЫМ давлением для этого диаметра
+ * (изделия безнапорные, ламинация считается минимально возможная; см.
+ * `jointLayerIndex` в stores/calcTree.ts). Ищется, а не задаётся числом,
+ * чтобы пометка не разошлась с расчётом, если таблицу пополнят снизу.
+ */
+const usedJointPn = computed(() => Math.min(...shownJoints.value.map((r) => r.pn)))
 const tab = ref<Tab>('nozzles')
 
 const loading = ref(true)
