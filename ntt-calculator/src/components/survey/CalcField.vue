@@ -54,7 +54,12 @@ function reset() {
 
 <style scoped>
 .cf { display: flex; flex-direction: column; gap: 3px; }
-.cf-l { font-size: 13.2px; color: var(--muted); }
+/* Подпись и подсказка получают по две строки всегда, даже если занимают одну.
+   Соседние поля бывают разной длины («Обратные клапаны» против «Задвижки —
+   напорная сторона»), и без резерва их высоты расходились: поля ввода вставали
+   на разной высоте, а строка «плыла». Резерв делает все поля равными по
+   высоте, поэтому выравнивание работает и по верху, и по низу. */
+.cf-l { font-size: 13.2px; color: var(--muted); min-height: 2.5em; display: block; }
 .cf-row { display: flex; align-items: center; gap: 4px; }
 .cf-i {
   flex: 1; min-width: 0; text-align: right;
