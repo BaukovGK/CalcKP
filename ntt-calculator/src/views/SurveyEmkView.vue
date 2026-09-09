@@ -15,20 +15,22 @@
     <template #form>
       <section id="sec-1" class="ol-sec">
         <h2 class="ol-h">1 · Общие</h2>
+        <!-- Порядок и ширины — как в КНС: сверху то, чем лист опознают
+             (заявка, тип, стадия, дата), снизу — чей объект. -->
         <div class="ol-grid">
-          <label class="fld"><span>№ заявки ОЛ</span><input v-model="form.zayavka" /></label>
-          <label class="fld"><span>Тип ёмкости</span>
+          <label class="fld fld--3"><span>№ заявки ОЛ</span><input v-model="form.zayavka" /></label>
+          <label class="fld fld--3"><span>Тип ёмкости</span>
             <select v-model="form.tankType"><option v-for="t in TANK_TYPES" :key="t">{{ t }}</option></select>
           </label>
-          <label class="fld"><span>Стадия</span>
+          <label class="fld fld--3"><span>Стадия</span>
             <select v-model="form.stadiya"><option v-for="t in STAGES" :key="t">{{ t }}</option></select>
           </label>
-          <label class="fld"><span>Заказчик <b class="req">*</b></span>
+          <label class="fld fld--3"><span>Дата</span><input v-model="form.data" /></label>
+          <label class="fld fld--4"><span>Заказчик <b class="req">*</b></span>
             <input v-model="form.zakazchik" :class="{ 'is-missing': !form.zakazchik.trim() }" />
           </label>
-          <label class="fld fld--wide"><span>Объект</span><input v-model="form.obekt" /></label>
-          <label class="fld"><span>Регион</span><input v-model="form.region" /></label>
-          <label class="fld"><span>Дата</span><input v-model="form.data" /></label>
+          <label class="fld fld--5"><span>Объект</span><input v-model="form.obekt" /></label>
+          <label class="fld fld--3"><span>Регион</span><input v-model="form.region" /></label>
         </div>
       </section>
 
@@ -47,16 +49,16 @@
       <section id="sec-3" class="ol-sec">
         <h2 class="ol-h">3 · Габариты</h2>
         <div class="ol-grid">
-          <label class="fld"><span>Объём, м³ <b class="req">*</b></span>
+          <label class="fld fld--3"><span>Объём, м³ <b class="req">*</b></span>
             <input v-model="form.volumeM3" class="num" :class="{ 'is-missing': !form.volumeM3 }" />
           </label>
-          <label class="fld"><span>DN корпуса, мм <b class="req">*</b></span>
+          <label class="fld fld--3"><span>DN корпуса, мм <b class="req">*</b></span>
             <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
           </label>
-          <label class="fld"><span>Расположение</span>
+          <label class="fld fld--3"><span>Расположение</span>
             <select v-model="form.placement"><option>горизонтальное</option><option>вертикальное</option></select>
           </label>
-          <label class="fld"><span>Установка</span>
+          <label class="fld fld--3"><span>Установка</span>
             <select v-model="form.installation">
               <option>наземная</option><option>подземная</option><option>в помещении</option>
             </select>
@@ -74,28 +76,30 @@
             <input v-model="form.pipeManual" type="checkbox" /><span>изменить вручную</span>
           </label>
           <div v-if="form.pipeManual" class="ol-manual">
-            <label class="fld"><span>Длина трубы, мм</span>
+            <label class="fld fld--3"><span>Длина трубы, мм</span>
               <input v-model="form.lengthManual" class="num" :placeholder="String(s.geo.value.pipeLengthMm ?? '')" />
             </label>
-            <label class="fld"><span>PN, МПа</span>
+            <label class="fld fld--3"><span>PN, МПа</span>
               <select v-model="form.pnManual"><option value="">расч.</option><option v-for="p in PN_LIST" :key="p">{{ p }}</option></select>
             </label>
-            <label class="fld"><span>SN, Па</span>
+            <label class="fld fld--3"><span>SN, Па</span>
               <select v-model="form.snManual"><option value="">расч.</option><option v-for="v in SN_LIST" :key="v">{{ v }}</option></select>
             </label>
-            <button class="ol-reset" @click="resetPipe">↺ вернуть расчётные</button>
+            <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
           </div>
         </div>
 
-        <div class="ol-toggles">
-          <ToggleYesNo v-model="form.hasShaft" label="Шахта обслуживания" />
-          <ToggleYesNo v-model="form.hasLadder" label="Лестница" />
-          <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" />
+        <!-- Признаки и зависимые от них размеры — одной сеткой: шахта и её
+             диаметр с высотой читаются вместе, как DN с признаками у КНС. -->
+        <div class="ol-grid ol-grid--mid">
+          <ToggleYesNo v-model="form.hasShaft" stacked class="fld--3" label="Шахта обслуживания" />
+          <label v-if="form.hasShaft" class="fld fld--3"><span>d шахты, мм</span><input v-model="form.shaftD" class="num" /></label>
+          <label v-if="form.hasShaft" class="fld fld--3"><span>h шахты, мм</span><input v-model="form.shaftH" class="num" /></label>
         </div>
-        <div v-if="form.hasShaft || form.insulation" class="ol-grid">
-          <label v-if="form.hasShaft" class="fld"><span>d шахты, мм</span><input v-model="form.shaftD" class="num" /></label>
-          <label v-if="form.hasShaft" class="fld"><span>h шахты, мм</span><input v-model="form.shaftH" class="num" /></label>
-          <label v-if="form.insulation" class="fld"><span>Глубина теплоизоляции, мм</span><input v-model="form.tiGlubina" class="num" /></label>
+        <div class="ol-grid">
+          <ToggleYesNo v-model="form.hasLadder" stacked class="fld--3" label="Лестница" />
+          <ToggleYesNo v-model="form.insulation" stacked class="fld--3" label="Теплоизоляция" />
+          <label v-if="form.insulation" class="fld fld--3"><span>Глубина ТИ, мм</span><input v-model="form.tiGlubina" class="num" /></label>
         </div>
       </section>
 
@@ -129,32 +133,41 @@
 
       <section id="sec-5" class="ol-sec">
         <h2 class="ol-h">5 · Насосное оборудование</h2>
-        <div class="ol-toggles">
-          <ToggleYesNo v-model="form.hasPumps" label="Насосное оборудование" />
+        <div class="ol-grid">
+          <ToggleYesNo v-model="form.hasPumps" stacked class="fld--3" label="Насосное оборудование" />
         </div>
-        <!-- Прогрессивное раскрытие: при «да» — гидравлический блок как у КНС -->
-        <div v-if="form.hasPumps" class="ol-grid">
-          <label class="fld"><span>Максимальный приток, л/с</span><input v-model="form.rashod" class="num" /></label>
-          <label class="fld"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
-          <label class="fld"><span>Рабочих <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
-          <label class="fld"><span>Резервных</span><input v-model="form.nRez" class="num" /></label>
-          <label class="fld fld--wide"><span>Марка насосов</span><input v-model="form.marka" /></label>
-        </div>
+        <!-- Прогрессивное раскрытие: при «да» — гидравлический блок как у КНС:
+             сверху рабочая точка, снизу сколько насосов её обслуживают. -->
+        <template v-if="form.hasPumps">
+          <div class="ol-grid">
+            <label class="fld fld--4"><span>Рабочий расход, л/с</span><input v-model="form.rashod" class="num" /></label>
+            <label class="fld fld--4"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
+          </div>
+          <div class="ol-grid">
+            <label class="fld fld--4"><span>Рабочих насосов <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
+            <label class="fld fld--4"><span>Резервных насосов</span><input v-model="form.nRez" class="num" /></label>
+          </div>
+          <div class="ol-grid">
+            <label class="fld fld--8"><span>Марка насосов</span><input v-model="form.marka" /></label>
+          </div>
+        </template>
         <p v-else class="ol-live-hint">Без насосов раздел «Напорный трубопровод» в расчёте останется пустым.</p>
       </section>
 
       <section id="sec-6" class="ol-sec">
         <h2 class="ol-h">6 · Доп. оборудование</h2>
+        <!-- Корзина и дробилка — независимые признаки, как в КНС: одним
+             селектом это выражалось значением «обе», которое читалось хуже
+             двух тумблеров. Хранится по-прежнему одним полем. -->
         <div class="ol-grid">
-          <label class="fld"><span>Дробилка / корзина</span>
-            <select v-model="form.grinder"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>
-          </label>
+          <ToggleYesNo v-model="hasBasket" stacked class="fld--3" label="Корзина" />
+          <ToggleYesNo v-model="hasGrinder" stacked class="fld--3" label="Дробилка" />
+          <ToggleYesNo v-model="form.hasValves" stacked class="fld--3" label="Запорная арматура" />
+          <ToggleYesNo v-model="form.ventilation" stacked class="fld--3" label="Вентиляция" />
         </div>
-        <div class="ol-toggles">
-          <ToggleYesNo v-model="form.hasValves" label="Запорная арматура" />
-          <ToggleYesNo v-model="form.shu" label="Шкаф управления" />
-          <ToggleYesNo v-model="form.datchikiUrov" label="Датчики уровня" />
-          <ToggleYesNo v-model="form.ventilation" label="Вентиляция" />
+        <div class="ol-grid">
+          <ToggleYesNo v-model="form.shu" stacked class="fld--3" label="Шкаф управления" />
+          <ToggleYesNo v-model="form.datchikiUrov" stacked class="fld--3" label="Датчики уровня" />
         </div>
       </section>
     </template>
@@ -222,7 +235,7 @@ import { useEmkSurvey } from '@/composables/useEmkKolSurvey'
 import { toast } from '@/composables/useToast'
 import { tryEvalExpr } from '@/engines/expr'
 import { makeDefaultEmkSurvey, type EmkSurveyForm } from '@/types/survey-emk-kol'
-import { pickCommon } from '@/types/survey'
+import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon } from '@/types/survey'
 import { estimatesApi } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
 import { EMK_SECTIONS } from '@/engines/template-emk-kol'
@@ -244,6 +257,16 @@ defineEmits<{ 'update:deviceType': [DeviceType] }>()
 
 const router = useRouter()
 const form = ref<EmkSurveyForm>({ ...makeDefaultEmkSurvey(), ...props.initial })
+
+// Корзина и дробилка — два тумблера над одним полем модели (см. grinderValue).
+const hasBasket = computed({
+  get: () => hasBasketIn(form.value.grinder),
+  set: (v: boolean) => { form.value.grinder = grinderValue(v, hasGrinder.value) },
+})
+const hasGrinder = computed({
+  get: () => hasGrinderIn(form.value.grinder),
+  set: (v: boolean) => { form.value.grinder = grinderValue(hasBasket.value, v) },
+})
 const s = useEmkSurvey(form)
 
 const isEdit = computed(() => Boolean(props.estimateId))
@@ -256,7 +279,6 @@ const backLabel = computed(() => (props.projectId ? '← Проект' : '← П
 const TANK_TYPES = ['Накопительная', 'Химстойкая', 'Аккумулирующая', 'Питьевая', 'С насосным оборудованием'] as const
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const
 const MATERIALS = ['ПЭ', 'ПВХ', 'ПНД', 'ПП', 'Асбестцемент', 'Корсис', 'стеклокомпозит'] as const
-const GRINDERS = ['корзина', 'дробилка', 'обе', 'нет'] as const
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
 const SN_LIST = ['1250', '2500', '5000', '10000'] as const
 /** Домен DN — из справочника весов, как и у КНС (30 значений). */

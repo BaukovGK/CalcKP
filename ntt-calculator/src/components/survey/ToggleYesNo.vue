@@ -1,5 +1,5 @@
 <template>
-  <div class="tg">
+  <div class="tg" :class="{ 'tg--stacked': stacked }">
     <span class="tg-l">{{ label }}</span>
     <div class="tg-seg">
       <button class="tg-b" :class="{ on: modelValue }" @click="emit('update:modelValue', true)">да</button>
@@ -11,12 +11,25 @@
 <script setup lang="ts">
 // Сегментированный переключатель «да/нет» — по прототипу ОЛ.
 // Прогрессивное раскрытие: «нет» сворачивает зависимые поля (решает родитель).
-defineProps<{ modelValue: boolean; label: string }>()
+defineProps<{
+  modelValue: boolean
+  label: string
+  /**
+   * Подпись сверху, «да/нет» под ней — вид ячейки сетки листа: тумблер встаёт
+   * рядом с полями и выравнивается по тем же вертикалям. Строчный вид
+   * оставлен для мест, где тумблер идёт сам по себе.
+   */
+  stacked?: boolean
+}>()
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
 </script>
 
 <style scoped>
 .tg { display: flex; align-items: center; gap: 8px; }
+/* Ячейка сетки: подпись сверху — как у обычного поля. Строчная раскладка в
+   ячейку на три колонки не влезает: подпись переносится на вторую строку
+   («Шкаф / управления»), и ряд разъезжается. */
+.tg--stacked { flex-direction: column; align-items: flex-start; gap: 3px; }
 .tg-l { font-size: 13.8px; color: var(--muted); }
 .tg-seg { display: flex; }
 .tg-b {

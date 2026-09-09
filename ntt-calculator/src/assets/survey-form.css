@@ -1,0 +1,107 @@
+/*
+ * Раскладка опросного листа — одна на все три изделия (КНС, ЕМК, КОЛ).
+ *
+ * Файл общий намеренно. Раньше эти же классы были описаны дважды: не-scoped
+ * блоком в SurveyShell (его читали ЕМК и КОЛ) и scoped-копией в SurveyKnsView,
+ * который живёт без каркаса. Копии разошлись — КНС перевели на сетку из
+ * двенадцати колонок, ЕМК и КОЛ остались на auto-fit, — а из общего блока в
+ * КНС незаметно протекали свойства, которых не было в копии. Один файл
+ * убирает и расхождение, и протечки: подключают его SurveyShell и
+ * SurveyKnsView, ветки ЕМК/КОЛ получают его через каркас.
+ *
+ * Стили не scoped: разметку пишут ветки листа, а не этот файл.
+ */
+
+.ol-sec { max-width: 820px; margin: 0 auto 26px; }
+.ol-h { font-size: 18px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px;
+  border-bottom: 2px solid var(--line); }
+
+/* ── Сетка листа ─────────────────────────────────────────────────────────
+ * Одна общая сетка на 12 колонок для ВСЕХ строк формы. Раньше каждый блок
+ * был самостоятельной auto-fit сеткой, и число колонок зависело от того,
+ * сколько полей в него положили: три поля давали трети, два — половины,
+ * одно растягивалось на всю ширину. Поля соседних строк не совпадали ни по
+ * одной вертикали — отсюда ощущение разброса.
+ *
+ * Теперь ширина задаётся полем: `fld--3` четверть, `fld--4` треть,
+ * `fld--6` половина, `fld--12` во всю строку. Границы полей выстраиваются
+ * по одним и тем же двенадцати колонкам сверху донизу.
+ */
+.ol-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px 12px; }
+.ol-grid + .ol-grid { margin-top: 10px; }
+
+/* Любой прямой ребёнок сетки по умолчанию занимает треть строки — включая
+   компоненты без класса fld — например CalcField. Блок ручных полей живёт по
+   тому же правилу: без него класс-less CalcField вставал в одну колонку из
+   двенадцати, и три поля арматуры разъезжались на две строки. */
+.ol-grid > *, .ol-manual > * { grid-column: span 4; }
+.fld { display: flex; flex-direction: column; gap: 3px; }
+.fld--3 { grid-column: span 3; }
+.fld--4 { grid-column: span 4; }
+.fld--5 { grid-column: span 5; }
+.fld--6 { grid-column: span 6; }
+.fld--8 { grid-column: span 8; }
+.fld--9 { grid-column: span 9; }
+.fld--12, .fld--wide { grid-column: 1 / -1; }
+/* На узком экране двенадцать колонок вырождаются в одну: поля уже цифры
+   нечитаемы, а горизонтальная прокрутка формы недопустима. */
+@media (max-width: 760px) {
+  .ol-grid { grid-template-columns: 1fr; }
+  .ol-grid > *, .ol-manual > * { grid-column: 1 / -1; }
+}
+/* Внутри карточки колонок физически меньше: карточка сама занимает половину
+   строки, и треть от неё — это уже сотня пикселей, куда не влезает подпись.
+   Поэтому поля в карточке идут половинами, складываясь в 2×2. */
+.ol-card .ol-grid > * { grid-column: span 6; }
+@media (max-width: 1200px) { .ol-card .ol-grid > * { grid-column: 1 / -1; } }
+/* Строка сетки после карточки или другого блока: соседние сетки разделяет
+   `.ol-grid + .ol-grid`, а после карточки разделителя нет. */
+.ol-grid--mid { margin-top: 12px; }
+
+.fld > span { font-size: 13.2px; color: var(--muted); }
+.req { color: var(--acc); }
+.fld input, .fld select {
+  background: var(--cellbg); border: 1px solid var(--line2); color: var(--text);
+  padding: 5px 9px; font-size: 15px; font-family: inherit;
+}
+.fld input.num { text-align: right; }
+.fld input.is-missing { border-color: var(--acc); background: var(--acc-bg); }
+
+/* ── Карточка (труба корпуса, патрубки) ── */
+/* Карточки патрубков — те же двенадцать колонок: по половине на карточку. */
+.ol-cards { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+.ol-cards > .ol-card { grid-column: span 6; margin-top: 0; }
+@media (max-width: 760px) { .ol-cards > .ol-card { grid-column: 1 / -1; } }
+.ol-card { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-top: 10px; }
+.ol-card-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 8px; }
+/* Подвал карточки: расчётные подсказки, которые длиннее поля. Отделены
+   линией — это пояснение к блоку, а не ещё одно поле ввода. */
+.ol-card-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line);
+  font-size: 12.6px; color: var(--faint); line-height: 1.5; display: grid; gap: 3px; }
+.f-mark { color: var(--faint); font-size: 10.8px; }
+.ol-grade { font-size: 16.8px; font-weight: 600; }
+.ol-grade--empty { color: var(--faint); font-weight: 400; }
+.ol-explain { font-size: 13.2px; color: var(--muted); margin-top: 3px; }
+
+/* ── Ручные поля под «изменить вручную» ── */
+/* Та же двенадцатиколоночная сетка, что и снаружи: раскрытие блока не должно
+   менять вертикали, по которым выровнена форма. Выравнивание по верху, а не
+   по низу: у поля с переносом подписи иначе подпись вставала строкой выше
+   соседних, и ряд разъезжался. */
+.ol-manual { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px 12px;
+  align-items: start; margin-top: 8px;
+  padding: 8px; background: var(--blue-bg); border-left: 3px solid var(--blue); }
+@media (max-width: 760px) { .ol-manual { grid-template-columns: 1fr; } }
+.ol-chk { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13.8px; color: var(--muted); }
+.ol-reset { background: transparent; border: none; color: var(--blue); font-size: 13.2px;
+  text-decoration: underline; justify-self: start; padding: 0; cursor: pointer; }
+
+/* Ряд тумблеров вне сетки — для мест, где переключатели идут сами по себе.
+   В строках формы вместо него `<ToggleYesNo stacked class="fld--3">`: тумблер
+   становится такой же ячейкой сетки, как поле. */
+.ol-toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+
+/* Поле с единицей измерения: ввод и селект вплотную, одной рамкой. */
+.ol-unit { display: flex; }
+.ol-unit input { flex: 1; min-width: 0; }
+.ol-unit-sel { border-left: none; }

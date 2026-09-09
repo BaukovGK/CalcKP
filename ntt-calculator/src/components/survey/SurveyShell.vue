@@ -51,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import '@/assets/survey-form.css'
 import { ref } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import ToastHost from '@/components/ui/ToastHost.vue'
@@ -128,42 +129,11 @@ defineExpose({ formEl })
 </style>
 
 <!--
-  Стили содержимого формы и live-панели — не scoped: их применяют дочерние
-  экраны (КНС/ЕМК/КОЛ) к своей разметке внутри слотов.
+  Стили содержимого live-панели, кнопок и модала — не scoped: их применяют
+  дочерние экраны (КНС/ЕМК/КОЛ) к своей разметке внутри слотов. Раскладка
+  самой формы переехала в assets/survey-form.css — общий файл на все ветки.
 -->
 <style>
-.ol-sec { max-width: 820px; margin: 0 auto 26px; }
-.ol-h { font-size: 18px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px;
-  border-bottom: 2px solid var(--line); }
-.ol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-
-.fld { display: flex; flex-direction: column; gap: 3px; }
-.fld--wide { grid-column: span 2; }
-.fld > span { font-size: 13.2px; color: var(--muted); }
-.req { color: var(--acc); }
-.fld input, .fld select {
-  background: var(--cellbg); border: 1px solid var(--line2); color: var(--text);
-  padding: 5px 9px; font-size: 15px; font-family: inherit;
-}
-.fld input.num { text-align: right; }
-.fld input.is-missing { border-color: var(--acc); background: var(--acc-bg); }
-
-.ol-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.ol-card { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-top: 10px; }
-.ol-card-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 8px; }
-.f-mark { color: var(--faint); font-size: 10.8px; }
-.ol-grade { font-size: 16.8px; font-weight: 600; }
-.ol-grade--empty { color: var(--faint); font-weight: 400; }
-.ol-explain { font-size: 13.2px; color: var(--muted); margin-top: 3px; }
-.ol-chk { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13.8px; color: var(--muted); }
-.ol-manual { display: flex; gap: 10px; align-items: flex-end; margin-top: 8px;
-  padding: 8px; background: var(--blue-bg); border-left: 3px solid var(--blue); }
-.ol-reset { background: transparent; border: none; color: var(--blue); font-size: 13.2px; text-decoration: underline; }
-.ol-toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
-.ol-unit { display: flex; }
-.ol-unit input { flex: 1; min-width: 0; }
-.ol-unit-sel { border-left: none; }
-
 /* Live-панель */
 .ol-live-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
 .ol-live-lbl { font-size: 12.6px; color: var(--muted); }

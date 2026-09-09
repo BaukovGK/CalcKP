@@ -74,8 +74,8 @@
             <label class="fld fld--3"><span>DN корпуса, мм</span>
               <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
             </label>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.underRoadway" label="Под проезжей частью" /></div>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.mvk" label="По ТТ МВК" /></div>
+            <ToggleYesNo v-model="form.underRoadway" label="Под проезжей частью" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.mvk" label="По ТТ МВК" stacked class="fld--3" />
           </div>
 
           <!-- Труба корпуса: PN/SN вычисляются, не задаются -->
@@ -115,9 +115,7 @@
                   <option value="целая">Целая труба</option>
                 </select>
               </label>
-              <div class="ol-tgc fld--3">
-                <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" />
-              </div>
+              <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" stacked class="fld--3" />
               <label v-if="form.insulation" class="fld fld--3"><span>Глубина ТИ, мм</span>
                 <input v-model="form.tiGlubina" class="num" :placeholder="String(TI_DEPTH_DEFAULT_MM)" />
               </label>
@@ -203,9 +201,9 @@
                сразу. Одним селектом это выражалось значением «обе», которое
                читалось хуже двух тумблеров. -->
           <div class="ol-grid ol-grid--mid">
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="hasBasket" label="Корзина" /></div>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="hasGrinder" label="Дробилка" /></div>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.vzryv" label="Взрывозащита" /></div>
+            <ToggleYesNo v-model="hasBasket" label="Корзина" stacked class="fld--3" />
+            <ToggleYesNo v-model="hasGrinder" label="Дробилка" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.vzryv" label="Взрывозащита" stacked class="fld--3" />
           </div>
           <div v-if="hasGrinder" class="ol-explain">
             Узел дробилки в расчёт пока не материализуется — строки добавьте
@@ -257,8 +255,8 @@
                включает. Муфта приваривается к трубопроводу, наружу торчит
                только ответная часть; её размер от DN линии не зависит. -->
           <div class="ol-grid ol-grid--mid">
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.valveOnInlet" label="Арматура на подводящем" /></div>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.emergency" label="Аварийный трубопровод" /></div>
+            <ToggleYesNo v-model="form.valveOnInlet" label="Арматура на подводящем" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.emergency" label="Аварийный трубопровод" stacked class="fld--3" />
             <label v-if="form.emergency" class="fld fld--3"><span>Быстросъёмная муфта</span>
               <select v-model="form.muftaGm">
                 <option v-for="gm in COUPLING_SIZES" :key="gm" :value="String(gm)">ГМ{{ gm }}</option>
@@ -320,10 +318,10 @@
                же вертикалям, а не свободным потоком, где «Расходомер» отрывался
                на вторую строку. Поля ШУ идут под своим тумблером. -->
           <div class="ol-grid">
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.shu" label="Шкаф управления" /></div>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.datchikiDavl" label="Датчики давления" /></div>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.datchikiUrov" label="Датчики уровня" /></div>
-            <div class="ol-tgc fld--3"><ToggleYesNo v-model="form.rashodomer" label="Расходомер" /></div>
+            <ToggleYesNo v-model="form.shu" label="Шкаф управления" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.datchikiDavl" label="Датчики давления" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.datchikiUrov" label="Датчики уровня" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.rashodomer" label="Расходомер" stacked class="fld--3" />
           </div>
           <div v-if="form.shu" class="ol-grid">
             <label class="fld fld--3"><span>Тип ШУ</span>
@@ -434,12 +432,21 @@ import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
 import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
 import type { DeviceType } from '@/api/estimates'
 import CalcField from '@/components/survey/CalcField.vue'
+import '@/assets/survey-form.css'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { usePumpSelection } from '@/composables/usePumpSelection'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
-import { makeDefaultKnsSurvey, pickCommon, type Grinder, type KnsSurveyForm, type PipeExecution } from '@/types/survey'
+import {
+  grinderValue,
+  hasBasketIn,
+  hasGrinderIn,
+  makeDefaultKnsSurvey,
+  pickCommon,
+  type KnsSurveyForm,
+  type PipeExecution,
+} from '@/types/survey'
 import { tryEvalExpr } from '@/engines/expr'
 import { COUPLING_SIZES } from '@/engines/pressure-pipe-kit'
 import { estimatesApi } from '@/api/estimates'
@@ -637,28 +644,14 @@ function onScroll() {
   activeSec.value = best
 }
 
-/**
- * Корзина и дробилка — два независимых тумблера над ОДНИМ полем модели.
- *
- * В опросном листе завода это одно поле с четырьмя значениями
- * («корзина» / «дробилка» / «обе» / «нет»), и таким оно сохраняется: менять
- * форму хранения ради вида экрана значило бы осиротить сохранённые расчёты.
- * Тумблеры — проекция: пара булевых однозначно ложится на четвёрку и обратно.
- */
-function grinderValue(basket: boolean, grinder: boolean): Grinder {
-  if (basket && grinder) return 'обе'
-  if (basket) return 'корзина'
-  if (grinder) return 'дробилка'
-  return 'нет'
-}
-
+// Корзина и дробилка — два тумблера над одним полем модели (см. grinderValue).
 const hasBasket = computed({
-  get: () => form.value.drobilka === 'корзина' || form.value.drobilka === 'обе',
+  get: () => hasBasketIn(form.value.drobilka),
   set: (v: boolean) => { form.value.drobilka = grinderValue(v, hasGrinder.value) },
 })
 
 const hasGrinder = computed({
-  get: () => form.value.drobilka === 'дробилка' || form.value.drobilka === 'обе',
+  get: () => hasGrinderIn(form.value.drobilka),
   set: (v: boolean) => { form.value.drobilka = grinderValue(hasBasket.value, v) },
 })
 
@@ -790,57 +783,7 @@ async function createEstimate() {
 
 /* Форма */
 .ol-form { flex: 1; overflow-y: auto; padding: 16px 20px; min-width: 0; }
-.ol-sec { max-width: 820px; margin: 0 auto 26px; }
-.ol-h { font-size: 18px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px;
-  border-bottom: 2px solid var(--line); }
-/* ── Сетка листа ─────────────────────────────────────────────────────────
- * Одна общая сетка на 12 колонок для ВСЕХ строк формы. Раньше каждый блок
- * был самостоятельной auto-fit сеткой, и число колонок зависело от того,
- * сколько полей в него положили: три поля давали трети, два — половины,
- * одно растягивалось на всю ширину. Поля соседних строк не совпадали ни по
- * одной вертикали — отсюда ощущение разброса.
- *
- * Теперь ширина задаётся полем: `fld--3` четверть, `fld--4` треть,
- * `fld--6` половина, `fld--12` во всю строку. Границы полей выстраиваются
- * по одним и тем же двенадцати колонкам сверху донизу.
- */
-.ol-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px 12px; }
-.ol-grid + .ol-grid { margin-top: 10px; }
 .ol-tail { height: 40vh; }
-
-/* Любой прямой ребёнок сетки по умолчанию занимает треть строки — включая
-   компоненты без класса fld — например CalcField. Блок ручных полей живёт по
-   тому же правилу: без него класс-less CalcField вставал в одну колонку из
-   двенадцати, и три поля арматуры разъезжались на две строки. */
-.ol-grid > *, .ol-manual > * { grid-column: span 4; }
-.fld { display: flex; flex-direction: column; gap: 3px; }
-.fld--3 { grid-column: span 3; }
-.fld--4 { grid-column: span 4; }
-.fld--5 { grid-column: span 5; }
-.fld--6 { grid-column: span 6; }
-.fld--8 { grid-column: span 8; }
-.fld--9 { grid-column: span 9; }
-.fld--12, .fld--wide { grid-column: 1 / -1; }
-/* На узком экране двенадцать колонок вырождаются в одну: поля уже цифры
-   нечитаемы, а горизонтальная прокрутка формы недопустима. */
-@media (max-width: 760px) {
-  .ol-grid { grid-template-columns: 1fr; }
-  .ol-grid > *, .ol-manual > * { grid-column: 1 / -1; }
-}
-/* Внутри карточки колонок физически меньше: карточка сама занимает половину
-   строки, и треть от неё — это уже сотня пикселей, куда не влезает подпись.
-   Поэтому поля в карточке идут половинами, складываясь в 2×2. */
-.ol-card .ol-grid > * { grid-column: span 6; }
-@media (max-width: 1200px) { .ol-card .ol-grid > * { grid-column: 1 / -1; } }
-
-.fld > span { font-size: 13.2px; color: var(--muted); }
-.req { color: var(--acc); }
-.fld input, .fld select {
-  background: var(--cellbg); border: 1px solid var(--line2); color: var(--text);
-  padding: 5px 9px; font-size: 15px; font-family: inherit;
-}
-.fld input.num { text-align: right; }
-.fld input.is-missing { border-color: var(--acc); background: var(--acc-bg); }
 
 /* Подсказка подбора под полем: марка насоса, расчётный диаметр напорного. */
 .ol-pick { font-size: 12px; color: var(--faint); line-height: 1.45; display: block; }
@@ -852,48 +795,6 @@ async function createEstimate() {
 }
 .ol-pick-btn:hover { border-bottom-style: solid; }
 
-/* Карточка (труба корпуса, патрубки) */
-/* Карточки патрубков — те же двенадцать колонок: по половине на карточку. */
-.ol-cards { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
-.ol-cards > .ol-card { grid-column: span 6; margin-top: 0; }
-@media (max-width: 760px) { .ol-cards > .ol-card { grid-column: 1 / -1; } }
-.ol-card { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-top: 10px; }
-.ol-card-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); margin-bottom: 8px; }
-.ol-grade { font-size: 16.8px; font-weight: 600; }
-.ol-grade--empty { color: var(--faint); font-weight: 400; }
-.ol-explain { font-size: 13.2px; color: var(--muted); margin-top: 3px; }
-/* Подвал карточки: расчётные подсказки, которые длиннее поля. Отделены
-   линией — это пояснение к блоку, а не ещё одно поле ввода. */
-.ol-card-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line);
-  font-size: 12.6px; color: var(--faint); line-height: 1.5; display: grid; gap: 3px; }
-/* Строка сетки после карточки или другого блока: соседние сетки разделяет
-   `.ol-grid + .ol-grid`, а после карточки разделителя нет. */
-.ol-grid--mid { margin-top: 12px; }
-.ol-chk { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13.8px; color: var(--muted); }
-/* Ручные поля — та же двенадцатиколоночная сетка, что и снаружи: раскрытие
-   блока не должно менять вертикали, по которым выровнена форма. */
-/* `align-items` объявлен явно, хотя `start` — не значение по умолчанию для
-   сетки, а замена чужому: в SurveyShell тот же класс описан не-scoped стилем
-   (его используют ЕМК и КОЛ) и оттуда протекает `flex-end` от старой строчной
-   раскладки. Выравнивание по низу разъезжало подписи: у поля с переносом
-   подпись вставала на строку выше соседей. */
-.ol-manual { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px 12px;
-  align-items: start; margin-top: 8px;
-  padding: 8px; background: var(--blue-bg); border-left: 3px solid var(--blue); }
-@media (max-width: 760px) { .ol-manual { grid-template-columns: 1fr; } }
-.ol-reset { background: transparent; border: none; color: var(--blue); font-size: 13.2px;
-  text-decoration: underline; justify-self: start; padding: 0; cursor: pointer; }
-
-/* Тумблер — такая же ячейка сетки, как поле: подпись сверху, «да/нет» под ней.
-   Прежде тумблеры шли отдельной строкой свободным потоком и вставали каждый
-   раз по-новому — от длины подписи; ряд с «Расходомером» и вовсе рвался
-   надвое. Строчная раскладка в ячейку на три колонки не влезает: подпись
-   переносится («Шкаф / управления»), поэтому именно колонка. */
-.ol-tgc :deep(.tg) { flex-direction: column; align-items: flex-start; gap: 3px; }
-
-.ol-unit { display: flex; }
-.ol-unit input { flex: 1; min-width: 0; }
-.ol-unit-sel { border-left: none; }
 
 /* Live-панель */
 .ol-live { width: 300px; flex: none; border-left: 2px solid var(--line); background: var(--panel);
@@ -902,7 +803,6 @@ async function createEstimate() {
 .ol-live-lbl { font-size: 12.6px; color: var(--muted); }
 .ol-live-npodz { font-size: 26.4px; font-weight: 700; }
 .ol-live-hint { font-size: 11.4px; color: var(--faint); line-height: 1.5; }
-.f-mark { color: var(--faint); font-size: 10.8px; }
 .ol-live-u { font-size: 15.6px; font-weight: 400; color: var(--muted); }
 .ol-live-ovr { font-size: 12px; color: var(--blue); margin-top: -8px; }
 .ol-live-vals { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 8px; }
