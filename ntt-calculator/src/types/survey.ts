@@ -173,7 +173,9 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     zakazchik: 'АО «ГК «ЕКС»',
     obekt: 'ГКБ №52, ул. Пехотная, 3',
     region: 'Москва',
-    data: '14.07.2026',
+    // Дата — сегодняшняя, как в ЕМК и КОЛ: в прототипе тут стояла дата кейса
+    // ОЛ3487, и каждый новый лист открывался задним числом.
+    data: new Date().toLocaleDateString('ru-RU'),
 
     dn: '3000',
     vozv: '300',
