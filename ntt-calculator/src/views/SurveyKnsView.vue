@@ -67,16 +67,11 @@
             :project-title="projectTitle"
             @update:model-value="$emit('update:deviceType', $event)"
           />
-        </section>
-
-        <!-- 3. Корпус -->
-        <section :id="'sec-3'" class="ol-sec">
-          <h2 class="ol-h">3 · Корпус</h2>
+        
           <div class="ol-grid">
             <label class="fld"><span>DN корпуса, мм</span>
               <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
             </label>
-            <label class="fld"><span>Возвышение над землёй, мм</span><input v-model="form.vozv" class="num" /></label>
           </div>
 
           <!-- Труба корпуса: PN/SN вычисляются, не задаются -->
@@ -100,6 +95,16 @@
               <label class="fld"><span>SN, Па</span>
                 <select v-model="form.snManual"><option value="">расчётное</option><option v-for="v in SN_LIST" :key="v">{{ v }}</option></select>
               </label>
+              <!-- Возвышение и глубина теплоизоляции живут здесь же: это
+                   такие же типовые величины, что PN и SN, и трогают их так же
+                   редко. Глубина показывается только при включённой
+                   теплоизоляции — иначе она ни на что не влияет. -->
+              <label class="fld"><span>Возвышение над землёй, мм</span>
+                <input v-model="form.vozv" class="num" :placeholder="String(ELEVATION_DEFAULT_MM)" />
+              </label>
+              <label v-if="form.insulation" class="fld"><span>Глубина теплоизоляции, мм</span>
+                <input v-model="form.tiGlubina" class="num" :placeholder="String(TI_DEPTH_DEFAULT_MM)" />
+              </label>
               <button class="ol-reset" @click="resetPipe">↺ вернуть расчётные</button>
             </div>
           </div>
@@ -109,32 +114,6 @@
             <ToggleYesNo v-model="form.mvk" label="По ТТ МВК" />
             <ToggleYesNo v-model="form.insulation" label="Теплоизоляция" />
           </div>
-          <!-- Глубина теплоизоляции почти всегда типовая, поэтому убрана под
-               «изменить вручную» — как PN и SN трубы: значение видно, но не
-               занимает поле ввода и не просит внимания на каждом заказе. -->
-          <div v-if="form.insulation" class="ol-card">
-            <div class="ol-card-h">
-              Глубина теплоизоляции
-              <span class="f-mark" title="Типовая глубина; меняется вручную">ƒ</span>
-            </div>
-            <div class="ol-grade">{{ fmtInt(TI_DEPTH_DEFAULT_MM) }} мм</div>
-            <div v-if="tiOverridden" class="ol-explain">
-              задано вручную: {{ form.tiGlubina }} мм
-            </div>
-
-            <label class="ol-chk">
-              <input v-model="form.tiManual" type="checkbox" />
-              <span>изменить вручную</span>
-            </label>
-
-            <div v-if="form.tiManual" class="ol-manual">
-              <label class="fld"><span>Глубина, мм</span>
-                <input v-model="form.tiGlubina" class="num" />
-              </label>
-              <button class="ol-reset" @click="resetTi">↺ вернуть типовую</button>
-            </div>
-          </div>
-
           <label class="fld"><span>Исполнение обечайки</span>
             <select v-model="form.ispolnenie">
               <option value="целая">Целая труба</option>
@@ -145,6 +124,69 @@
             В расчёт добавятся сегменты трубы (длины разносите вручную) и
             ламинирование стыков по Мс из справочника.
           </div>
+        
+        </section>
+
+        <!-- 3. Насосное оборудование -->
+        <section :id="'sec-3'" class="ol-sec">
+          <h2 class="ol-h">3 · Насосное оборудование</h2>
+          <div class="ol-grid">
+            <label class="fld"><span>Максимальный приток <b class="req">*</b></span>
+              <div class="ol-unit">
+                <input v-model="form.rashod" class="num" />
+                <select v-model="form.rashodUnit" class="ol-unit-sel">
+                  <option value="l/s">л/с</option>
+                  <option value="m3/h">м³/ч</option>
+                  <option value="m3/day">м³/сут</option>
+                </select>
+              </div>
+            </label>
+            <label class="fld"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
+            <label class="fld"><span>Рабочих <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
+            <label class="fld"><span>Резервных</span><input v-model="form.nRez" class="num" /></label>
+            <label class="fld"><span>Запасных</span><input v-model="form.nZap" class="num" /></label>
+            <label class="fld fld--wide"><span>Марка насосов</span>
+              <!-- Выбор из подобранных: по умолчанию оптимальный, но инженер
+                   может взять другой — в том числе отсечённый по запасу. -->
+              <select v-if="hasPumpChoices" :value="pumpChoice" @change="onPumpChoice">
+                <option value="">
+                  автоматически{{ p.pumpModelCalc.value ? ` — ${p.pumpModelCalc.value}` : '' }}
+                </option>
+                <optgroup v-if="p.choices.value.fitting.length" label="Подходят">
+                  <option v-for="c in p.choices.value.fitting" :key="c.name" :value="c.name">
+                    {{ p.optionLabel(c) }}
+                  </option>
+                </optgroup>
+                <optgroup
+                  v-if="p.choices.value.belowMargin.length"
+                  :label="`Напор дают, но запас меньше ${p.marginBand.value?.min ?? 0} м`"
+                >
+                  <option v-for="c in p.choices.value.belowMargin" :key="c.name" :value="c.name">
+                    {{ p.optionLabel(c) }}
+                  </option>
+                </optgroup>
+                <option value="__manual">ввести вручную…</option>
+              </select>
+              <input
+                v-if="!hasPumpChoices || manualPump"
+                v-model="form.marka"
+                :placeholder="p.pumpModelCalc.value ?? 'подберётся по притоку и напору'"
+              />
+              <span v-if="p.pumpExplain.value" class="ol-pick" :class="{ 'ol-pick--warn': !p.pumpModelCalc.value && p.ready.value && !p.loading.value }">
+                {{ p.pumpExplain.value }}
+                <button
+                  v-if="p.pumpModelCalc.value && p.pumpModelOverridden.value"
+                  type="button" class="ol-pick-btn" @click="p.resetToCalculated"
+                >вернуть подобранную</button>
+              </span>
+              <span v-if="p.alternativesExplain.value" class="ol-pick">{{ p.alternativesExplain.value }}</span>
+            </label>
+            <label class="fld"><span>Дробилка / корзина</span>
+              <select v-model="form.drobilka"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>
+            </label>
+          </div>
+          <div class="ol-toggles"><ToggleYesNo v-model="form.vzryv" label="Взрывозащита" /></div>
+        
         </section>
 
         <!-- 4. Патрубки -->
@@ -218,72 +260,12 @@
               :explain="s.ballsExplain.value"
             />
           </div>
+        
         </section>
 
-        <!-- 5. Насосное оборудование -->
+        <!-- 5. Автоматика -->
         <section :id="'sec-5'" class="ol-sec">
-          <h2 class="ol-h">5 · Насосное оборудование</h2>
-          <div class="ol-grid">
-            <label class="fld"><span>Максимальный приток <b class="req">*</b></span>
-              <div class="ol-unit">
-                <input v-model="form.rashod" class="num" />
-                <select v-model="form.rashodUnit" class="ol-unit-sel">
-                  <option value="l/s">л/с</option>
-                  <option value="m3/h">м³/ч</option>
-                  <option value="m3/day">м³/сут</option>
-                </select>
-              </div>
-            </label>
-            <label class="fld"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
-            <label class="fld"><span>Рабочих <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
-            <label class="fld"><span>Резервных</span><input v-model="form.nRez" class="num" /></label>
-            <label class="fld"><span>Запасных</span><input v-model="form.nZap" class="num" /></label>
-            <label class="fld fld--wide"><span>Марка насосов</span>
-              <!-- Выбор из подобранных: по умолчанию оптимальный, но инженер
-                   может взять другой — в том числе отсечённый по запасу. -->
-              <select v-if="hasPumpChoices" :value="pumpChoice" @change="onPumpChoice">
-                <option value="">
-                  автоматически{{ p.pumpModelCalc.value ? ` — ${p.pumpModelCalc.value}` : '' }}
-                </option>
-                <optgroup v-if="p.choices.value.fitting.length" label="Подходят">
-                  <option v-for="c in p.choices.value.fitting" :key="c.name" :value="c.name">
-                    {{ p.optionLabel(c) }}
-                  </option>
-                </optgroup>
-                <optgroup
-                  v-if="p.choices.value.belowMargin.length"
-                  :label="`Напор дают, но запас меньше ${p.marginBand.value?.min ?? 0} м`"
-                >
-                  <option v-for="c in p.choices.value.belowMargin" :key="c.name" :value="c.name">
-                    {{ p.optionLabel(c) }}
-                  </option>
-                </optgroup>
-                <option value="__manual">ввести вручную…</option>
-              </select>
-              <input
-                v-if="!hasPumpChoices || manualPump"
-                v-model="form.marka"
-                :placeholder="p.pumpModelCalc.value ?? 'подберётся по притоку и напору'"
-              />
-              <span v-if="p.pumpExplain.value" class="ol-pick" :class="{ 'ol-pick--warn': !p.pumpModelCalc.value && p.ready.value && !p.loading.value }">
-                {{ p.pumpExplain.value }}
-                <button
-                  v-if="p.pumpModelCalc.value && p.pumpModelOverridden.value"
-                  type="button" class="ol-pick-btn" @click="p.resetToCalculated"
-                >вернуть подобранную</button>
-              </span>
-              <span v-if="p.alternativesExplain.value" class="ol-pick">{{ p.alternativesExplain.value }}</span>
-            </label>
-            <label class="fld"><span>Дробилка / корзина</span>
-              <select v-model="form.drobilka"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>
-            </label>
-          </div>
-          <div class="ol-toggles"><ToggleYesNo v-model="form.vzryv" label="Взрывозащита" /></div>
-        </section>
-
-        <!-- 6. Автоматика -->
-        <section :id="'sec-6'" class="ol-sec">
-          <h2 class="ol-h">6 · Автоматика</h2>
+          <h2 class="ol-h">5 · Автоматика</h2>
           <div class="ol-toggles">
             <ToggleYesNo v-model="form.shu" label="Шкаф управления" />
             <ToggleYesNo v-model="form.datchikiDavl" label="Датчики давления" />
@@ -298,7 +280,13 @@
               <select v-model="form.shuPusk"><option>стандартный</option><option>плавный</option><option>ЧП</option></select>
             </label>
           </div>
+        
         </section>
+
+
+
+
+
 
         <div class="ol-tail" />
       </main>
@@ -474,10 +462,9 @@ const backLabel = computed(() => (props.projectId ? '← Проект' : '← П
 const SECTIONS = [
   { n: 1, title: 'Общие' },
   { n: 2, title: 'Тип изделия' },
-  { n: 3, title: 'Корпус' },
+  { n: 3, title: 'Насосное' },
   { n: 4, title: 'Патрубки' },
-  { n: 5, title: 'Насосное' },
-  { n: 6, title: 'Автоматика' },
+  { n: 5, title: 'Автоматика' },
 ]
 
 const NS_TYPES = ['Канализационная', 'Ливневая', 'Дренажная', 'Водопроводная'] as const
@@ -489,6 +476,9 @@ const SN_LIST = ['1250', '2500', '5000', '10000'] as const
 
 /** Типовая глубина теплоизоляции, мм — меняется вручную по флажку. */
 const TI_DEPTH_DEFAULT_MM = 2000
+
+/** Типовое возвышение корпуса над землёй, мм — там же, за флажком. */
+const ELEVATION_DEFAULT_MM = 300
 /**
  * Домен DN — ровно как в справочнике весов (30 значений, 162 строки GRP):
  * 300…500 с шагом 50, дальше 600…3000 с шагом 100. Промежуточных значений
@@ -556,14 +546,13 @@ function secDone(n: number): boolean {
     case 1:
       return has(f.zayavka) && has(f.zakazchik) && has(f.obekt)
     case 2:
-      return true // тип изделия выбран всегда: пустого значения у него нет
-    case 3:
+      // Тип выбран всегда; обязательным здесь остаётся DN корпуса.
       return has(f.dn)
+    case 3:
+      return has(f.rashod) && has(f.napor) && (tryEvalExpr(f.nRab) ?? 0) >= 1
     case 4:
       return has(f.podvLotok)
     case 5:
-      return has(f.rashod) && has(f.napor) && (tryEvalExpr(f.nRab) ?? 0) >= 1
-    case 6:
       return true // в автоматике обязательных полей нет
     default:
       return true
@@ -592,14 +581,8 @@ function resetPipe() {
   form.value.pipeManual = false
   form.value.pnManual = ''
   form.value.snManual = ''
-}
-
-/** Глубина теплоизоляции задана вручную и отличается от типовой. */
-const tiOverridden = computed(() => tryEvalExpr(form.value.tiGlubina) !== TI_DEPTH_DEFAULT_MM)
-
-function resetTi() {
-  form.value.tiManual = false
   form.value.tiGlubina = String(TI_DEPTH_DEFAULT_MM)
+  form.value.vozv = String(ELEVATION_DEFAULT_MM)
 }
 
 function acceptDepth() {
