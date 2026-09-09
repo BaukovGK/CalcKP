@@ -157,6 +157,13 @@
             <ToggleYesNo v-model="form.valveOnInlet" label="Арматура на подводящем" />
             <ToggleYesNo v-model="form.emergency" label="Аварийный трубопровод" />
           </div>
+          <!-- Труба аварийной линии идёт по DN напорного, а гайка — нет:
+               ею определяется, чем подключится машина. -->
+          <label v-if="form.emergency" class="fld"><span>Быстросъёмная гайка</span>
+            <select v-model="form.gaykaGm">
+              <option v-for="gm in HOSE_NUT_SIZES" :key="gm" :value="String(gm)">ГМ{{ gm }}</option>
+            </select>
+          </label>
 
           <!-- Арматура: вычисляется с override -->
           <div class="ol-grid">
@@ -352,6 +359,7 @@ import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { makeDefaultKnsSurvey, pickCommon, type KnsSurveyForm } from '@/types/survey'
 import { tryEvalExpr } from '@/engines/expr'
+import { HOSE_NUT_SIZES } from '@/engines/pressure-pipe-kit'
 import { estimatesApi } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
 import { KNS_SECTIONS } from '@/engines/template-kns'

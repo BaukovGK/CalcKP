@@ -32,6 +32,9 @@ import {
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import type { CostBucket } from './economics'
 import {
+  DEFAULT_HOSE_NUT_GM,
+  hoseNutItem,
+  HOSE_NUT_NOZZLES,
   PRESSURE_PIPE_EXTRAS,
   PRESSURE_PIPE_HOURS,
   PRESSURE_PIPE_KITS,
@@ -87,6 +90,14 @@ export interface KnsSurveyParams {
   valveOnInlet: boolean
   /** Аварийный трубопровод. */
   emergencyPipeline: boolean
+  /**
+   * Размер быстросъёмной (пожарной) гайки аварийной линии, ГМ.
+   *
+   * Сам аварийный трубопровод идёт тем же DN, что напорный, а гайка — нет:
+   * ею определяется, чем подключится машина. В прайсе ГМ50…ГМ150 с разбросом
+   * цены в восемь раз, поэтому размер задаётся в ОЛ, а не выводится.
+   */
+  emergencyHoseNutGm?: number
   /**
    * Расходомер на напорной линии (флаг ОЛ, блок автоматики).
    *
@@ -713,6 +724,8 @@ export function buildPressurePipe(
     outletDn: number
     outletCount: number
     emergencyPipeline?: boolean
+    /** Размер быстросъёмной гайки аварийной линии, ГМ (у ЕМК и КОЛ его нет). */
+    emergencyHoseNutGm?: number
     hasFlowMeter?: boolean
   },
 ): CalcComponent[] {
@@ -812,16 +825,33 @@ export function buildPressurePipe(
     // подстановкой DN — прайс держит ряд DN50…DN300, так что при типовом
     // напорном строка находит цену; при нетиповом останется «красной», и
     // инженер выберет позицию сам.
-    const emergencyRows = [PRESSURE_PIPE_EXTRAS.hoseNut, PRESSURE_PIPE_EXTRAS.threadedNozzle].map((k) =>
+    // Труба аварийной линии идёт тем же DN, что напорная, а вот размер
+    // быстросъёмной гайки от него не зависит — им определяется, чем
+    // подключится машина, и задаётся он в опросном листе.
+    const gm = s.emergencyHoseNutGm ?? DEFAULT_HOSE_NUT_GM
+    const nut = hoseNutItem(gm)
+    const nozzle = HOSE_NUT_NOZZLES[gm] ?? null
+
+    const emergencyRows = [
       makeRow(ctx, {
         kind: 'МАТЕРИАЛ',
-        category: k.category,
-        name: k.name,
-        unit: k.unit,
+        category: nut.category,
+        name: nut.name,
+        unit: nut.unit,
         qtyCalc: 1,
-        note: 'ƒ один комплект на станцию',
+        note: 'ƒ одна на станцию · размер из опросного листа',
       }),
-    )
+      makeRow(ctx, {
+        kind: 'МАТЕРИАЛ',
+        category: nozzle?.category ?? 'Прочие материалы',
+        name: nozzle?.name ?? `Патрубок резьбовой под гайку ГМ${gm}`,
+        unit: 'шт',
+        qtyCalc: 1,
+        note: nozzle
+          ? 'ƒ один на станцию, в пару к гайке'
+          : `Резьба под ГМ${gm} в прайсе не указана — выберите патрубок из каталога`,
+      }),
+    ]
 
     emergencyRows.push(
       makeRow(ctx, {

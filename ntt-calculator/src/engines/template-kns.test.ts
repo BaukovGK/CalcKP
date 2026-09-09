@@ -297,6 +297,26 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
     expect(rows2.find((r) => r.name === PRESSURE_PIPE_KITS[150]!.freeFlange.name)!.qtyCalc).toBe(2)
   })
 
+  // Труба аварийной линии идёт по DN напорного, а гайка — нет: её размер
+  // отдельное поле ОЛ, и в прайсе он стоит от 250 до 2000 ₽.
+  it('размер быстросъёмной гайки берётся из ОЛ, а не из DN напорного', () => {
+    const rows80 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true, emergencyHoseNutGm: 80 })
+      .sections.find((s) => s.code === '5')!
+      .components.find((c) => c.title === 'Аварийный трубопровод')!.rows
+    expect(rows80.find((r) => r.name === 'Гайка пожарная ГМ80')).toBeDefined()
+    // Резьбовой патрубок под ГМ80 в прайсе не назван — не выдумываем позицию.
+    const nozzle = rows80.find((r) => r.name.startsWith('Патрубок резьбовой'))!
+    expect(nozzle.note).toContain('выберите патрубок из каталога')
+  })
+
+  it('для ГМ150 патрубок известен и берётся из прайса', () => {
+    const rows150 = materializeKns(ctx, { ...OL3487, emergencyPipeline: true })
+      .sections.find((s) => s.code === '5')!
+      .components.find((c) => c.title === 'Аварийный трубопровод')!.rows
+    expect(rows150.find((r) => r.name === 'Гайка пожарная ГМ150')).toBeDefined()
+    expect(rows150.find((r) => r.name.startsWith('Патрубок резьбовой М150х6'))).toBeDefined()
+  })
+
   // DN, которого в эталоне нет, не должен молча давать пустой раздел.
   it('для диаметра без комплекта остаётся подсказка собрать нитку вручную', () => {
     const rows200 = materializeKns(ctx, { ...OL3487, outletDn: 200 })

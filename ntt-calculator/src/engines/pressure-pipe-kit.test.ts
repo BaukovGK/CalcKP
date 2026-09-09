@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest'
 // браузерный, а тянуть node:fs ради теста значит ослабить проверки всего src.
 // В сборку приложения файл не попадает: он виден только этому тесту.
 import prices from '../../../backend/prisma/seed-data/prices.json'
-import { PRESSURE_PIPE_EXTRAS, PRESSURE_PIPE_KITS, type KitItem } from './pressure-pipe-kit'
+import {
+  hoseNutItem,
+  HOSE_NUT_NOZZLES,
+  HOSE_NUT_SIZES,
+  PRESSURE_PIPE_EXTRAS,
+  PRESSURE_PIPE_KITS,
+  type KitItem,
+} from './pressure-pipe-kit'
 import { fastenerSetNames, boltFullName } from './template-kns'
 
 /**
@@ -42,6 +49,20 @@ describe('комплекты напорной нитки против прайс
   it('гайка аварийного трубопровода названа так, как в прайсе, а не в листе', () => {
     expect(PRESSURE_PIPE_EXTRAS.hoseNut.name).toBe('Гайка пожарная ГМ150')
     expect(KEYS.has('Прочие материалы|РОТ-ГАЙКА ГМ150|шт')).toBe(false)
+  })
+
+  // Размер гайки выбирается в ОЛ, поэтому каждый предлагаемый вариант обязан
+  // находиться в прайсе: иначе выбор молча даст «красную» строку.
+  it('все размеры гайки из списка ОЛ есть в прайсе', () => {
+    for (const gm of HOSE_NUT_SIZES) {
+      expect(KEYS.has(key(hoseNutItem(gm))), `нет в прайсе: ГМ${gm}`).toBe(true)
+    }
+  })
+
+  it('известные пары «гайка ↔ резьбовой патрубок» тоже есть в прайсе', () => {
+    for (const item of Object.values(HOSE_NUT_NOZZLES)) {
+      expect(KEYS.has(key(item)), `нет в прайсе: ${item.name}`).toBe(true)
+    }
   })
 })
 

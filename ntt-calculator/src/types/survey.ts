@@ -85,6 +85,14 @@ export interface KnsSurveyForm extends SurveyCommonForm {
   valveOnInlet: boolean
   /** Аварийный трубопровод. */
   emergency: boolean
+  /**
+   * Размер быстросъёмной (пожарной) гайки аварийной линии, ГМ.
+   *
+   * Труба аварийной линии идёт тем же DN, что напорная, а гайка — нет: ею
+   * определяется, чем подключится машина, и в прайсе она стоит от 250 до
+   * 2000 ₽ в зависимости от размера.
+   */
+  gaykaGm: string
   /** Override кол-ва арматуры: пусто — расчётное. */
   zadvManual: string
   kranManual: string
@@ -146,6 +154,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     napKol: '2',
     napLotok: '1800',
     valveOnInlet: true,
+    gaykaGm: '150',
     emergency: false,
     zadvManual: '',
     kranManual: '',
