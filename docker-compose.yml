@@ -64,6 +64,9 @@ services:
       BACKUP_BEFORE_MIGRATE: ${BACKUP_BEFORE_MIGRATE:-require}
       BACKUP_DIR: /backups
       BACKUP_KEEP: ${BACKUP_KEEP:-30}
+      # Демо-учётки остальных ролей. По умолчанию сид заводит только
+      # администратора — остальные пользователи создаются вручную.
+      SEED_DEMO_USERS: ${SEED_DEMO_USERS:-0}
     volumes:
       # Дампы лежат на хосте, а не в томе: их надо уметь забрать с машины,
       # а том исчезнет вместе с `docker compose down -v`.

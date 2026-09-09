@@ -119,6 +119,9 @@ Ok 'Prisma Client сгенерирован'
 if (-not $SkipSeed) {
     # Сид идемпотентен: upsert пользователей + createMany(skipDuplicates).
     # Внутри есть проверки — падает, если ставка ФОТ или веса труб не нашлись.
+    # SEED_DEMO_USERS=1: по умолчанию сид заводит только администратора
+    # (решение 2026-09-09), а smoke-проверке ниже нужен логин инженером.
+    $env:SEED_DEMO_USERS = '1'
     npx ts-node-dev --transpile-only prisma/seed.ts | Where-Object { $_ -notmatch '^\[INFO\]' } | ForEach-Object { Info $_ }
     if ($LASTEXITCODE -ne 0) { Pop-Location; Fail 'Сид упал' }
     Ok 'сид выполнен'

@@ -69,14 +69,35 @@ interface EngineeringSeed {
 // ─── Пользователи ────────────────────────────────────────────────────────────
 // Пароли демонстрационные и предназначены только для локальной разработки.
 
-const USERS: Array<{ email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'VIEWER'; password: string }> = [
-  { email: 'admin@ntt.local', name: 'Администратор', role: 'ADMIN', password: 'admin123' },
+type SeedUser = { email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'VIEWER'; password: string }
+
+/**
+ * Первый администратор. Заводится всегда: без него в свежую систему было бы
+ * не войти и некому создать остальных.
+ *
+ * Пароль надо сменить сразу после первого входа — `POST /api/auth/password`
+ * или раздел «Администрирование» в интерфейсе.
+ */
+const ADMIN: SeedUser = { email: 'admin@ntt.local', name: 'Администратор', role: 'ADMIN', password: 'admin123' }
+
+/**
+ * Демонстрационные учётки остальных ролей. Заводятся ТОЛЬКО при
+ * `SEED_DEMO_USERS=1` — по умолчанию их нет.
+ *
+ * Раньше они создавались при каждом старте, включая прод: пять учёток с
+ * общеизвестными паролями появлялись на свежей базе сами. Решение (2026-09-09):
+ * первый администратор — из сида, остальные пользователи заводятся вручную.
+ * Флаг оставлен для локальной разработки и `verify.ps1`, которым нужны роли.
+ */
+const DEMO_USERS: SeedUser[] = [
   { email: 'manager@ntt.local', name: 'Менеджер', role: 'MANAGER', password: 'manager123' },
   { email: 'engineer@ntt.local', name: 'Инженер', role: 'ENGINEER', password: 'engineer123' },
   { email: 'technolog@ntt.local', name: 'Технолог', role: 'TECHNOLOG', password: 'technolog123' },
   // Наблюдатель: просмотр расчётов без правки (вкладка «Расчёт» в Битрикс24).
   { email: 'viewer@ntt.local', name: 'Наблюдатель', role: 'VIEWER', password: 'viewer123' },
 ]
+
+const USERS: SeedUser[] = process.env.SEED_DEMO_USERS === '1' ? [ADMIN, ...DEMO_USERS] : [ADMIN]
 
 async function seedUsers() {
   for (const u of USERS) {
@@ -302,8 +323,12 @@ async function main() {
   await seedPumps()
   await verify()
 
-  console.log('\nГотово. Учётные записи (только для локальной разработки):')
+  console.log('\nГотово. Заведённые учётные записи:')
   USERS.forEach((u) => console.log(`  ${u.email.padEnd(20)} / ${u.password}  [${u.role}]`))
+  if (process.env.SEED_DEMO_USERS !== '1') {
+    console.log('  Смените пароль администратора сразу после первого входа.')
+    console.log('  Демо-учётки остальных ролей не заводятся; для разработки — SEED_DEMO_USERS=1.')
+  }
 }
 
 main()
