@@ -130,7 +130,10 @@
         <!-- 3. Насосное оборудование -->
         <section :id="'sec-3'" class="ol-sec">
           <h2 class="ol-h">3 · Насосное оборудование</h2>
-          <div class="ol-grid">
+          <!-- Две строки, а не одна сетка: сверху то, что задаёт рабочую точку
+               (расход и напор), снизу — сколько насосов её обслуживают. Раньше
+               «Рабочих» затекало в первую строку и читалось как часть напора. -->
+          <div class="ol-grid ol-grid--2">
             <label class="fld"><span>Максимальный приток <b class="req">*</b></span>
               <div class="ol-unit">
                 <input v-model="form.rashod" class="num" />
@@ -142,9 +145,17 @@
               </div>
             </label>
             <label class="fld"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
-            <label class="fld"><span>Рабочих <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
-            <label class="fld"><span>Резервных</span><input v-model="form.nRez" class="num" /></label>
-            <label class="fld"><span>Запасных</span><input v-model="form.nZap" class="num" /></label>
+          </div>
+
+          <div class="ol-grid ol-grid--3">
+            <label class="fld"><span>Рабочих насосов <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
+            <label class="fld"><span>Резервных насосов</span><input v-model="form.nRez" class="num" /></label>
+            <!-- «На склад» — формулировка опросного листа завода: эти насосы
+                 в станцию не ставятся и в обвязку не входят. -->
+            <label class="fld"><span>Запасных на склад</span><input v-model="form.nZap" class="num" /></label>
+          </div>
+
+          <div class="ol-grid">
             <label class="fld fld--wide"><span>Марка насосов</span>
               <!-- Выбор из подобранных: по умолчанию оптимальный, но инженер
                    может взять другой — в том числе отсечённый по запасу. -->
@@ -692,6 +703,14 @@ async function createEstimate() {
 .ol-h { font-size: 18px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px;
   border-bottom: 2px solid var(--line); }
 .ol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+/* Фиксированное число колонок там, где строка несёт смысл: поля не должны
+   перетекать между строками при изменении ширины окна. На узком экране
+   переносятся, иначе поле сжимается до нечитаемого. */
+.ol-grid--2 { grid-template-columns: repeat(2, minmax(200px, 1fr)); }
+.ol-grid--3 { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+@media (max-width: 900px) {
+  .ol-grid--2, .ol-grid--3 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+}
 .ol-tail { height: 40vh; }
 
 .fld { display: flex; flex-direction: column; gap: 3px; }
