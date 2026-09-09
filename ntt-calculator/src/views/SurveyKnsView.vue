@@ -125,7 +125,12 @@
                 <label class="fld"><span>Материал</span>
                   <select v-model="form.napMat"><option v-for="m in MATERIALS" :key="m">{{ m }}</option></select>
                 </label>
-                <label class="fld"><span>DN, мм</span><input v-model="form.napDn" class="num" /></label>
+                <label class="fld"><span>DN, мм</span>
+                  <input v-model="form.napDn" class="num" />
+                  <!-- Только подсказка: DN напорного входит в наименования строк
+                       расчёта, и молчаливая подмена увела бы за собой ручные цены. -->
+                  <span v-if="p.pipeExplain.value" class="ol-pick">{{ p.pipeExplain.value }}</span>
+                </label>
                 <label class="fld"><span>Кол-во</span><input v-model="form.napKol" class="num" /></label>
                 <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.napLotok" class="num" /></label>
               </div>
@@ -176,7 +181,20 @@
             <label class="fld"><span>Рабочих <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
             <label class="fld"><span>Резервных</span><input v-model="form.nRez" class="num" /></label>
             <label class="fld"><span>Запасных</span><input v-model="form.nZap" class="num" /></label>
-            <label class="fld fld--wide"><span>Марка насосов</span><input v-model="form.marka" /></label>
+            <label class="fld fld--wide"><span>Марка насосов</span>
+              <input v-model="form.marka" :placeholder="p.pumpModelCalc.value ?? 'подберётся по притоку и напору'" />
+              <span v-if="p.pumpExplain.value" class="ol-pick" :class="{ 'ol-pick--warn': !p.pumpModelCalc.value && p.ready.value && !p.loading.value }">
+                {{ p.pumpExplain.value }}
+                <button
+                  v-if="p.pumpModelCalc.value && p.pumpModelOverridden.value"
+                  type="button" class="ol-pick-btn" @click="acceptPumpModel"
+                >вернуть подобранную</button>
+                <button
+                  v-else-if="p.pumpModelCalc.value"
+                  type="button" class="ol-pick-btn" @click="acceptPumpModel"
+                >подставить</button>
+              </span>
+            </label>
             <label class="fld"><span>Дробилка / корзина</span>
               <select v-model="form.drobilka"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>
             </label>
@@ -291,6 +309,7 @@ import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
 import CalcField from '@/components/survey/CalcField.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
+import { usePumpSelection } from '@/composables/usePumpSelection'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { makeDefaultKnsSurvey, pickCommon, type KnsSurveyForm } from '@/types/survey'
@@ -321,6 +340,13 @@ const { theme, toggle } = useTheme()
 
 const form = ref<KnsSurveyForm>({ ...makeDefaultKnsSurvey(), ...(props.initial ?? {}) })
 const s = useKnsSurvey(form)
+/** Подбор насоса и диаметра напорного — считает сервер (`/api/pump-station`). */
+const p = usePumpSelection(form)
+
+/** Принять подобранную марку в поле: дальше она редактируется как ручная. */
+function acceptPumpModel() {
+  if (p.pumpModelCalc.value) form.value.marka = p.pumpModelCalc.value
+}
 
 const isEdit = computed(() => Boolean(props.estimateId))
 
@@ -474,6 +500,11 @@ function surveyPayload() {
       fullHeightMm: s.fullHeightMm.value,
       gates: s.gates.value,
       balls: s.balls.value,
+      // Марка насоса: подобранная сервером либо введённая вручную. Идёт в
+      // наименование строки насоса, а оттуда — в спецификацию КП.
+      pumpModel: p.pumpModel.value,
+      /** Диаметр напорного по гидравлике — справочно, DN берётся из поля ОЛ. */
+      dischargePipeDiameterMm: p.pipe.value?.diameterMm ?? null,
     },
     surveyRev: (props.surveyRev ?? 0) + 1,
   }
@@ -560,6 +591,16 @@ async function createEstimate() {
 }
 .fld input.num { text-align: right; }
 .fld input.is-missing { border-color: var(--acc); background: var(--acc-bg); }
+
+/* Подсказка подбора под полем: марка насоса, расчётный диаметр напорного. */
+.ol-pick { font-size: 10px; color: var(--faint); line-height: 1.45; display: block; }
+.ol-pick--warn { color: var(--amber); }
+.ol-pick-btn {
+  font: inherit; font-size: 10px; margin-left: 6px; padding: 0;
+  background: none; border: none; border-bottom: 1px dashed currentColor;
+  color: var(--acc); cursor: pointer;
+}
+.ol-pick-btn:hover { border-bottom-style: solid; }
 
 /* Карточка (труба корпуса, патрубки) */
 .ol-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

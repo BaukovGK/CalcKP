@@ -219,15 +219,18 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   /** Параметры ОЛ КНС из surveyData, сохранённые экраном опросного листа. */
   function surveyToParams(saved: Record<string, unknown>): KnsSurveyParams | null {
     const kns = saved.kns as Record<string, string | boolean> | undefined
-    const derived = saved.derived as Record<string, number | null> | undefined
-    if (!kns || !derived?.npodzMm) return null
+    const derived = saved.derived as Record<string, number | string | null> | undefined
+    if (!kns || typeof derived?.npodzMm !== 'number') return null
+    const dNum = (k: string): number | null => (typeof derived[k] === 'number' ? (derived[k] as number) : null)
 
     const n = (v: unknown) => Number(String(v ?? '').replace(',', '.')) || 0
     return {
       dn: n(kns.dn),
       depthMm: derived.npodzMm,
-      pnSurvey: derived.pn ?? 0.1,
-      sn: derived.sn ?? 10000,
+      pnSurvey: dNum('pn') ?? 0.1,
+      sn: dNum('sn') ?? 10000,
+      // Марка насоса: подобрана сервером либо введена вручную (ОЛ, блок 4).
+      pumpModel: typeof derived.pumpModel === 'string' ? derived.pumpModel : null,
       // Влияет только на обозначение жёсткости в марке трубы (8000/12000).
       mvk: Boolean(kns.mvk),
       inletDn: n(kns.podvDn),

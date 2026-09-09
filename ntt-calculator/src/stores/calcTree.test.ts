@@ -182,6 +182,31 @@ describe('стор calcTree: наценка, тираж и версия прай
     expect(body.totals.tirage).toBe(5)
   })
 
+  it('подобранная марка насоса доезжает из ОЛ до строки расчёта', async () => {
+    // Сквозная проверка проводки: derived.pumpModel → surveyToParams →
+    // materializeKns → наименование строки → спецификация КП. Раньше подбор
+    // жил на сервере и не был подключён ни к чему: в расчёт уходило
+    // «Насос (марка по подбору)».
+    const est = savedEstimate()
+    delete (est.surveyData as Record<string, unknown>).tree // нет дерева → материализация
+    Object.assign(est.surveyData, {
+      kns: {
+        dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
+        nRab: '2', nRez: '1', valveOnInlet: true, emergency: false,
+        insulation: false, tiGlubina: '0', mvk: false,
+      },
+      derived: { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: 'Vandjord VSL.80.37.4.5.0D' },
+    })
+    estimatesGet.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+
+    await store.load('e1')
+
+    const pump = store.rows.find((r) => r.category === 'Насосы, АТМ')
+    expect(pump?.name).toBe('Насос Vandjord VSL.80.37.4.5.0D')
+    expect(pump?.qtyCalc).toBe(3) // раб 2 + рез 1
+  })
+
   it('берёт версию прайса с сервера, а не константу 1', async () => {
     estimatesGet.mockResolvedValue(savedEstimate())
     priceVersion.mockResolvedValue({ version: 4, label: 'НН v4', createdAt: null })

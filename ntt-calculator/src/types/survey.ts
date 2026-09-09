@@ -147,7 +147,10 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     nRab: '2',
     nRez: '1',
     nZap: '0',
-    marka: 'VSL.100.55.4.5.0D',
+    // Пусто намеренно: поле — РУЧНОЕ ПЕРЕОПРЕДЕЛЕНИЕ подобранной марки
+    // (`composables/usePumpSelection.ts`). Любое значение по умолчанию
+    // навсегда маскировало бы подбор: он считался бы, но никогда не применялся.
+    marka: '',
     vzryv: false,
     drobilka: 'корзина',
 

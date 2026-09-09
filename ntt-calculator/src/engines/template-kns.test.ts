@@ -385,6 +385,28 @@ describe('раздел 7 «Оборудование» — авторасчёт �
     expect(computeRow(byName('Насос (марка по подбору)')).missingPrice).toBe(true)
     expect(byName('Насос (марка по подбору)').note).toContain('в прайсе насосов нет')
   })
+
+  // Марка приходит из подбора по притоку и напору (/api/pump-station/select-pump)
+  // либо вводится вручную. Без неё в КП уходила бы строка «Насос (марка по
+  // подбору)», по которой заказчику нечего согласовывать.
+  it('подобранная марка попадает в наименование строки насоса', () => {
+    const tree = materializeKns(ctx, { ...OL3487, pumpModel: 'Vandjord VSL.80.37.4.5.0D' })
+    const rows = flattenRows(tree)
+    const pump = rows.find((r) => r.category === 'Насосы, АТМ')!
+
+    expect(pump.name).toBe('Насос Vandjord VSL.80.37.4.5.0D')
+    expect(pump.qtyCalc).toBe(3)
+    // Цена всё равно договорная: позиций насосов в прайсе нет.
+    expect(computeRow(pump).missingPrice).toBe(true)
+    expect(pump.note).not.toContain('марка не подобрана')
+  })
+
+  it('без марки строка называется обобщённо и сама просит уточнения', () => {
+    const pump = flattenRows(materializeKns(ctx, OL3487)).find((r) => r.category === 'Насосы, АТМ')!
+
+    expect(pump.name).toBe('Насос (марка по подбору)')
+    expect(pump.note).toContain('марка не подобрана')
+  })
 })
 
 describe('флаги ОЛ управляют включением сборок (§9.1, Механика §7.2)', () => {
