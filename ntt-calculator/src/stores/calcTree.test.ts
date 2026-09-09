@@ -64,7 +64,9 @@ function savedEstimate(totals?: Record<string, unknown>) {
         deviceType: 'KNS',
         survey: {},
         priceListVersion: 1,
-        sections: [],
+        // Разделы тесты подставляют свои, поэтому тип широкий: иначе пустой
+        // литерал сузился бы до never[] и присваивание не прошло бы проверку.
+        sections: [] as unknown[],
       },
     },
   }
@@ -133,6 +135,51 @@ describe('стор calcTree: наценка, тираж и версия прай
 
     expect(store.markup).toBe(DEFAULT_MARKUP)
     expect(store.tirage).toBe(1)
+  })
+
+  it('сохраняет вычисленное количество строк, чтобы бэкенд не толковал выражения', async () => {
+    // qtyManual хранит выражение; парсер есть только на фронте. Без qtyResolved
+    // бэкенд читал его через Number(), получал NaN и решал, что количества нет:
+    // строка без цены переставала блокировать выпуск КП и пропадала из
+    // спецификации КП.
+    const est = savedEstimate()
+    est.surveyData.tree.sections = [
+      {
+        id: 's1',
+        code: '1',
+        title: 'Корпус',
+        enabled: true,
+        components: [
+          {
+            id: 'c1',
+            title: 'Обечайка',
+            enabled: true,
+            rows: [
+              { id: 'r1', kind: 'МАТЕРИАЛ', category: 'Металлопрокат', name: 'Полоса', unit: 'м',
+                qtyCalc: 4, qtyManual: '1,55*2+2,88*2', priceCatalog: 100, priceManual: null },
+              { id: 'r2', kind: 'МАТЕРИАЛ', category: 'Металлопрокат', name: 'Лист', unit: 'шт',
+                qtyCalc: 6, qtyManual: null, priceCatalog: 200, priceManual: null },
+            ],
+          },
+        ],
+      },
+    ]
+    estimatesGet.mockResolvedValue(est)
+    patchSurvey.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+
+    await store.load('e1')
+    store.tirage = 5 // тираж в дерево не попадает: он живёт в totals
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> }; totals: Record<string, unknown> }]
+    const rows = body.tree.sections[0]!.components[0]!.rows
+
+    expect(rows[0]!.qtyResolved).toBeCloseTo(8.86, 10) // 1,55*2 + 2,88*2
+    expect(rows[1]!.qtyResolved).toBe(6)
+    // Выражение сохраняется рядом с результатом — инженер должен видеть, что вводил.
+    expect(rows[0]!.qtyManual).toBe('1,55*2+2,88*2')
+    expect(body.totals.tirage).toBe(5)
   })
 
   it('берёт версию прайса с сервера, а не константу 1', async () => {

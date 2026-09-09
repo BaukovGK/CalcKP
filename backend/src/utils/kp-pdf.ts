@@ -79,6 +79,8 @@ function headerLines(doc: KpDocument): Content[] {
     ['Объект', doc.project],
     ['Адрес', doc.address],
     ['Изделие', doc.deviceTitle],
+    // Тираж печатается всегда: количества и цена относятся ко всему заказу.
+    ['Количество изделий', String(doc.tirage)],
     ['Редакция', `${doc.snapshotVersion} · прайс НН v${doc.priceListVersion}`],
   ]
   return lines

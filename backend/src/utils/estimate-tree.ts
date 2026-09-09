@@ -15,7 +15,22 @@ export interface TreeRow {
   unit?: string
   enabled?: boolean
   qtyCalc?: number | null
+  /**
+   * Ручное количество. Это ВЫРАЖЕНИЕ, а не число: инженер вводит «1,55*2+2,88*2»
+   * или «=980 000», как считал бы в Excel (Механика §5.1). Разбирает его парсер
+   * фронта (`engines/expr.ts`) — на бэкенде парсера нет и быть не должно, иначе
+   * появится вторая реализация одной грамматики.
+   */
   qtyManual?: string | number | null
+  /**
+   * Количество, УЖЕ вычисленное движком фронта, за одно изделие (без тиража).
+   * Пишется при сохранении (`stores/calcTree.ts`, save) — благодаря ему бэкенду
+   * не нужно толковать `qtyManual`.
+   *
+   * Отсутствует у снапшотов, снятых до появления поля: тогда количество строки
+   * с выражением считается НЕОПРЕДЕЛЁННЫМ, см. {@link resolveRowQty}.
+   */
+  qtyResolved?: number | null
   priceCatalog?: number | null
   priceManual?: number | null
   /** Устаревшая форма хранит количество и цену строками. */
@@ -69,6 +84,49 @@ const num = (v: unknown): number | null => {
   return null
 }
 
+/** Результат определения количества строки за ОДНО изделие (без тиража). */
+export interface RowQty {
+  /** Количество, если его удалось определить. */
+  qty: number | null
+  /**
+   * Количество задано, но бэкенд не может его вычислить: в `qtyManual` лежит
+   * выражение, а `qtyResolved` в снапшоте нет (снят до появления поля).
+   * Трактуется как «есть, но неизвестно», а не как «нет».
+   */
+  unresolved: boolean
+}
+
+/**
+ * Количество строки за одно изделие: ручное переопределение приоритетнее
+ * расчётного (Механика §5.1).
+ *
+ * Порядок источников:
+ *  1. `qtyResolved` — движок фронта уже посчитал, включая выражения;
+ *  2. `qtyManual`, если это простое число (или числовая строка);
+ *  3. `qtyCalc` — расчётное значение шаблона;
+ *  4. `qty` — устаревшая форма хранения.
+ *
+ * Если `qtyManual` задано выражением и `qtyResolved` нет — возвращается
+ * `unresolved`. Прежняя версия отдавала в этом случае `null`, то есть «нет
+ * количества»: строка без цены переставала блокировать выпуск КП и пропадала
+ * из спецификации. Молчаливое «нет» на месте «не знаю» — худший из исходов,
+ * потому что оба потребителя этого значения принимают на нём решение.
+ */
+export function resolveRowQty(row: TreeRow): RowQty {
+  if (typeof row.qtyResolved === 'number' && Number.isFinite(row.qtyResolved)) {
+    return { qty: row.qtyResolved, unresolved: false }
+  }
+
+  if (row.qtyManual != null && String(row.qtyManual).trim() !== '') {
+    const manual = num(row.qtyManual)
+    if (manual != null) return { qty: manual, unresolved: false }
+    return { qty: null, unresolved: true }
+  }
+
+  const calc = row.qtyCalc ?? num(row.qty)
+  return { qty: calc, unresolved: false }
+}
+
 /**
  * Строка «без цены»: нет ни каталожной, ни ручной цены (Механика §5.2).
  * Выключенные строки и строки с нулевым количеством не считаются проблемой —
@@ -80,8 +138,12 @@ export function isRowWithoutPrice(row: TreeRow): boolean {
   const price = row.priceManual ?? row.priceCatalog ?? num(row.price)
   if (price != null) return false
 
+  const { qty, unresolved } = resolveRowQty(row)
+  // Количество задано выражением, которое бэкенд не считает: строка может
+  // стоить денег, поэтому гейт срабатывает. Пропустить её — значит выпустить
+  // КП с заниженным итогом, а это ровно то, ради чего гейт и сделан.
+  if (unresolved) return true
   // Нулевое количество: строка ничего не стоит и не блокирует проверку.
-  const qty = row.qtyManual != null ? num(row.qtyManual) : (row.qtyCalc ?? num(row.qty))
   if (qty == null || qty === 0) return false
 
   return true
@@ -92,15 +154,11 @@ export function rowsWithoutPrice(surveyData: unknown): TreeRow[] {
   return extractRows(surveyData).filter(isRowWithoutPrice)
 }
 
-/** Количество строки: ручное переопределение приоритетнее расчётного. */
-export function rowQty(row: TreeRow): number | null {
-  return row.qtyManual != null ? num(row.qtyManual) : (row.qtyCalc ?? num(row.qty))
-}
-
 /** Позиция спецификации — строка расчёта, попавшая в документ заказчику. */
 export interface SpecRow {
   name: string
   unit: string
+  /** Количество на весь тираж — так же, как его показывает экран расчёта. */
   qty: number
 }
 
@@ -111,6 +169,26 @@ export interface SpecSection {
   rows: SpecRow[]
 }
 
+/** Спецификация целиком плюс то, что помешало собрать её точно. */
+export interface Specification {
+  sections: SpecSection[]
+  /** Тираж, применённый к количествам (Механика §9.1). */
+  tirage: number
+  /**
+   * Строки, количество которых определить не удалось. Пока список непуст,
+   * печатать документ нельзя: любое число в нём будет выдумано.
+   */
+  unresolved: Array<{ name: string; unit: string; section: string }>
+}
+
+/** Тираж из сохранённых итогов расчёта; по умолчанию одно изделие. */
+export function tirageOf(surveyData: unknown): number {
+  if (!isObj(surveyData)) return 1
+  const totals = isObj(surveyData.totals) ? surveyData.totals : null
+  const t = totals?.tirage
+  return typeof t === 'number' && Number.isInteger(t) && t >= 1 ? t : 1
+}
+
 /**
  * Спецификация изделия по разделам — состав для печатной формы КП.
  *
@@ -118,23 +196,35 @@ export interface SpecSection {
  * строки схлопываются до «наименование · ЕИ · количество». Цены сюда
  * намеренно не попадают — см. `utils/kp-document.ts`.
  *
- * Выключенные разделы, компоненты и строки, а также строки с нулевым или
- * неопределённым количеством отбрасываются: в итог они не входят, и в
- * документе заказчику им делать нечего.
+ * Выключенные разделы, компоненты и строки, а также строки с нулевым
+ * количеством отбрасываются: в итог они не входят, и в документе заказчику им
+ * делать нечего.
+ *
+ * КОЛИЧЕСТВА — НА ВЕСЬ ТИРАЖ. Экран расчёта показывает их так же (`engines/row.ts`,
+ * resolveQty умножает на тираж), и цена продажи в снапшоте — тоже за весь тираж.
+ * Спецификация за одно изделие рядом с ценой за N дала бы документ, в котором
+ * состав и сумма относятся к разным вещам.
+ *
+ * Строки, количество которых определить не удалось, НЕ отбрасываются молча:
+ * они попадают в `unresolved`, и печать по такой спецификации запрещается.
  *
  * Понимает только целевую форму (`tree.sections`): устаревшие `bundles[]`
  * не имеют разделов с номерами, а КП выпускается из снапшота, который
  * снимается уже с дерева.
  */
-export function extractSpecification(surveyData: unknown): SpecSection[] {
-  if (!isObj(surveyData)) return []
+export function extractSpecification(surveyData: unknown): Specification {
+  const tirage = tirageOf(surveyData)
+  if (!isObj(surveyData)) return { sections: [], tirage, unresolved: [] }
 
   const tree = isObj(surveyData.tree) ? surveyData.tree : null
   const sections = asArray(tree?.sections ?? surveyData.sections)
 
   const out: SpecSection[] = []
+  const unresolved: Specification['unresolved'] = []
+
   for (const s of sections) {
     if (!isObj(s) || s.enabled === false) continue
+    const sectionTitle = String(s.title ?? '').trim() || 'Без названия'
 
     const rows: SpecRow[] = []
     for (const c of asArray(s.components)) {
@@ -143,24 +233,25 @@ export function extractSpecification(surveyData: unknown): SpecSection[] {
         if (!isObj(r)) continue
         const row = r as TreeRow
         if (row.enabled === false) continue
-        const qty = rowQty(row)
+
+        const name = String(row.name ?? '').trim() || '(без наименования)'
+        const unit = String(row.unit ?? '').trim()
+
+        const { qty, unresolved: bad } = resolveRowQty(row)
+        if (bad) {
+          unresolved.push({ name, unit, section: sectionTitle })
+          continue
+        }
         if (qty == null || qty <= 0) continue
-        rows.push({
-          name: String(row.name ?? '').trim() || '(без наименования)',
-          unit: String(row.unit ?? '').trim(),
-          qty,
-        })
+
+        rows.push({ name, unit, qty: qty * tirage })
       }
     }
 
     // Раздел, из которого всё выключено, в документ не выводим.
     if (rows.length === 0) continue
-    out.push({
-      code: String(s.code ?? '').trim(),
-      title: String(s.title ?? '').trim() || 'Без названия',
-      rows,
-    })
+    out.push({ code: String(s.code ?? '').trim(), title: sectionTitle, rows })
   }
 
-  return out
+  return { sections: out, tirage, unresolved }
 }

@@ -61,6 +61,9 @@ function headerLines(doc: KpDocument): Array<[string, string]> {
     ['Объект', doc.project],
     ['Адрес', doc.address],
     ['Изделие', doc.deviceTitle],
+    // Тираж печатается всегда, даже при одном изделии: количества и цена в
+    // документе относятся ко всему заказу, и читатель должен знать, к какому.
+    ['Количество изделий', String(doc.tirage)],
     ['Редакция', `${doc.snapshotVersion} · прайс НН v${doc.priceListVersion}`],
   ]
   return lines.filter((l): l is [string, string] => Boolean(l[1]))

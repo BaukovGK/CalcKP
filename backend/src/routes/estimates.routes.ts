@@ -6,7 +6,7 @@ import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { rowsWithoutPrice } from '../utils/estimate-tree'
-import { buildKpDocument } from '../utils/kp-document'
+import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
 import type { Response, NextFunction } from 'express'
@@ -398,19 +398,38 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       return
     }
 
-    const doc = buildKpDocument({
-      estimateId: estimate.id,
-      estimateTitle: estimate.title,
-      deviceType: estimate.deviceType,
-      project: estimate.project,
-      snapshot: {
-        version: snapshot.version,
-        priceListVersion: snapshot.priceListVersion,
-        totalRub: snapshot.totalRub,
-        createdAt: snapshot.createdAt,
-        bundlesJson: snapshot.bundlesJson,
-      },
-    })
+    let doc
+    try {
+      doc = buildKpDocument({
+        estimateId: estimate.id,
+        estimateTitle: estimate.title,
+        deviceType: estimate.deviceType,
+        project: estimate.project,
+        snapshot: {
+          version: snapshot.version,
+          priceListVersion: snapshot.priceListVersion,
+          totalRub: snapshot.totalRub,
+          createdAt: snapshot.createdAt,
+          bundlesJson: snapshot.bundlesJson,
+        },
+      })
+    } catch (e) {
+      // Спецификацию не собрать точно — печатать нельзя (см. kp-document.ts).
+      // Лечится пересохранением расчёта: фронт проставит вычисленные
+      // количества, после чего нужен новый выпуск КП.
+      if (e instanceof KpSpecificationIncomplete) {
+        res.status(422).json({
+          message:
+            `Печать невозможна: ${e.rows.length} ${plural(e.rows.length)} задаёт количество выражением, ` +
+            'а в этой редакции не сохранён его результат. Откройте расчёт, сохраните и выпустите КП заново.',
+          code: 'KP_SPEC_INCOMPLETE',
+          rows: e.rows.slice(0, 20),
+          count: e.rows.length,
+        })
+        return
+      }
+      throw e
+    }
 
     const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)
     const filename = `${doc.number}.${format}`

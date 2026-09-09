@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type Rates } from '@/engines/economics'
 import { recalcFotSatellites, resolveFotK } from '@/engines/fot'
-import { computeRow } from '@/engines/row'
+import { computeRow, resolveQty } from '@/engines/row'
 import type { CalcComponent } from '@/engines/template-kns'
 import {
   flattenRows,
@@ -490,10 +490,41 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     return row.fotK ?? (parent ? resolveFotK(parent) : null)
   }
 
+  /**
+   * Копия дерева, в которой у каждой строки проставлено `qtyResolved` —
+   * количество за ОДНО изделие, уже вычисленное движком.
+   *
+   * Зачем: `qtyManual` хранит выражение («1,55*2+2,88*2»), разбирает его
+   * парсер `engines/expr.ts`, и на бэкенде такого парсера нет. Раньше бэкенд
+   * пытался прочитать выражение через Number(), получал NaN и считал, что
+   * количества нет: строка без цены переставала блокировать выпуск КП и
+   * пропадала из спецификации. Заводить вторую реализацию грамматики на
+   * сервере — значит гарантированно её рассинхронизировать, поэтому результат
+   * считает тот, у кого есть движок, и кладёт его в дерево.
+   *
+   * Тираж сюда НЕ входит: он живёт в totals, и умножает на него потребитель.
+   */
+  function treeForSave(): CalcTree {
+    const src = tree.value as CalcTree
+    return {
+      ...src,
+      sections: src.sections.map((s) => ({
+        ...s,
+        components: s.components.map((c) => ({
+          ...c,
+          rows: c.rows.map((r) => ({
+            ...r,
+            qtyResolved: resolveQty(r, { sectionEnabled: true, tirage: 1 }).qty,
+          })),
+        })),
+      })),
+    }
+  }
+
   async function save() {
     if (!estimate.value || !tree.value) return
     await estimatesApi.patchSurvey(estimate.value.id, {
-      tree: tree.value,
+      tree: treeForSave(),
       // Фиксируем, из какой ревизии ОЛ построено дерево, — чтобы load()
       // не рематериализовал его повторно.
       treeSurveyRev: treeSurveyRev.value,

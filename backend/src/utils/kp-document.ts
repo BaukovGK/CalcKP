@@ -27,7 +27,22 @@
  * @module utils/kp-document
  */
 
-import { extractSpecification, type SpecSection } from './estimate-tree'
+import { extractSpecification, type SpecSection, type Specification } from './estimate-tree'
+
+/**
+ * Спецификацию не удалось собрать точно: у части строк количество задано
+ * выражением, которое посчитал фронт, а в снапшоте результат не сохранён.
+ *
+ * Печатать в этом случае нельзя ни с каким числом: и «пропустить строку», и
+ * «подставить расчётное» дают заказчику документ, который расходится с
+ * расчётом. Маршрут превращает это в 422.
+ */
+export class KpSpecificationIncomplete extends Error {
+  constructor(readonly rows: Specification['unresolved']) {
+    super(`Количество не определено у строк: ${rows.length}`)
+    this.name = 'KpSpecificationIncomplete'
+  }
+}
 
 /**
  * Ставка НДС для справочной строки «в том числе», %.
@@ -54,7 +69,15 @@ export interface KpDocument {
   /** Версия снапшота — она же номер редакции КП. */
   snapshotVersion: number
   sections: SpecSection[]
-  /** Цена заказчику, ₽, с НДС — зафиксирована снапшотом. */
+  /**
+   * Количество изделий в заказе (тираж, Механика §9.1).
+   *
+   * Количества в спецификации и цена — оба на весь тираж. Печатать состав на
+   * одно изделие рядом с ценой за N нельзя: документ будет внутренне
+   * противоречив, а расхождение заметят уже после отправки заказчику.
+   */
+  tirage: number
+  /** Цена заказчику, ₽, с НДС — зафиксирована снапшотом. Это цена за весь тираж. */
   totalRub: number
   /** Справочно: НДС в составе цены, ₽. */
   vatRub: number
@@ -97,7 +120,10 @@ function round2(v: number): number {
  */
 export function buildKpDocument(input: KpDocumentInput): KpDocument {
   const { snapshot } = input
-  const sections = extractSpecification(snapshot.bundlesJson)
+  const spec = extractSpecification(snapshot.bundlesJson)
+  if (spec.unresolved.length > 0) throw new KpSpecificationIncomplete(spec.unresolved)
+
+  const sections = spec.sections
   const totalRub = Number.isFinite(snapshot.totalRub) && snapshot.totalRub > 0 ? snapshot.totalRub : 0
 
   return {
@@ -111,6 +137,7 @@ export function buildKpDocument(input: KpDocumentInput): KpDocument {
     priceListVersion: snapshot.priceListVersion,
     snapshotVersion: snapshot.version,
     sections,
+    tirage: spec.tirage,
     totalRub,
     vatRub: vatIncludedIn(totalRub),
     vatRatePct: VAT_RATE_PCT,
