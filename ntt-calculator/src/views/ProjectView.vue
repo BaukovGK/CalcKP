@@ -36,7 +36,9 @@
         <div class="tb-spacer"></div>
         <template v-if="canEdit">
           <button class="btn btn-g" @click="openEditProject">Редактировать</button>
-          <button class="btn" @click="addUnit">＋ Добавить единицу</button>
+          <!-- Главное действие проекта — акцентной кнопкой, как «Создать
+               проект» на дашборде: серой она терялась среди служебных. -->
+          <button class="btn btn-am" @click="addUnit">＋ Добавить единицу</button>
         </template>
         <span v-else class="pv-ro" title="Роль «Наблюдатель»: только просмотр">👁 просмотр</span>
       </div>
@@ -72,9 +74,9 @@
           </div>
 
           <!-- Estimates list -->
-          <div v-if="projects.current.estimates.length === 0" class="dash-state" style="height:auto;padding:32px 0;opacity:.5">
+          <div v-if="projects.current.estimates.length === 0" class="dash-state" style="height:auto;padding:32px 0">
             <div class="dash-state-txt">Единиц оборудования нет</div>
-            <button v-if="canEdit" class="btn" @click="addUnit">＋ Добавить первую единицу</button>
+            <button v-if="canEdit" class="btn btn-am" @click="addUnit">＋ Добавить первую единицу</button>
           </div>
 
           <div v-else class="pv-units-grid">
@@ -100,6 +102,14 @@
               </div>
               <div v-if="e.totalRub" class="pv-uc-total">{{ fmt(e.totalRub) }} ₽</div>
             </div>
+
+            <!-- «Добавить единицу» остаётся на виду и когда единицы уже есть:
+                 раньше кнопка жила только в пустом состоянии и после первой же
+                 единицы исчезала, а в шапке её замечали не сразу. Плитка стоит
+                 последней в сетке — там, где взгляд заканчивает список. -->
+            <button v-if="canEdit" class="pv-unit-add" @click="addUnit">
+              ＋ Добавить единицу
+            </button>
           </div>
 
         </template>
@@ -311,6 +321,16 @@ onMounted(() => projects.fetchOne(projectId))
   transition: border-color .15s, background .15s;
 }
 .pv-unit-card:hover { border-color: var(--accent); background: var(--bg3); }
+
+/* Плитка «добавить» — того же размера, что карточка единицы, но пунктиром и
+   акцентом: это действие, а не единица оборудования. */
+.pv-unit-add {
+  border: 1px dashed var(--accent); border-radius: 6px; background: transparent;
+  color: var(--accent); font: inherit; font-size: 13.2px; font-weight: 600;
+  padding: 10px 12px; min-height: 84px; cursor: pointer;
+  transition: background .15s;
+}
+.pv-unit-add:hover { background: var(--bg3); }
 
 .pv-uc-top  { display: flex; align-items: center; gap: 6px; }
 .pv-uc-type {
