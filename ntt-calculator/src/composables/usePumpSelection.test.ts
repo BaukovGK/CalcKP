@@ -23,7 +23,16 @@ vi.mock('@/api/pumpStation', () => ({
 const { usePumpSelection } = await import('./usePumpSelection')
 
 function result(name: string | null, flowPerPumpM3h = 45) {
-  return { name, pump: null, flowPerPumpM3h, warnings: [] }
+  return {
+    name,
+    pump: null,
+    duty: name ? { q: flowPerPumpM3h, h: 13.24, p2: 2.39, p1: 3.1, eff: 47.9 } : null,
+    headMarginM: name ? 0.34 : null,
+    flowPerPumpM3h,
+    requiredHeadM: 12.9,
+    alternatives: [],
+    warnings: [],
+  }
 }
 
 /** Прокрутить дебаунс и дождаться разрешения промисов запроса. */
@@ -91,6 +100,42 @@ describe('usePumpSelection', () => {
 
     form.value.marka = '   '
     expect(p.pumpModel.value).toBe('Vandjord VSL.80.37.4.5.0D')
+  })
+
+  it('показывает рабочую точку, а не только марку', async () => {
+    const p = usePumpSelection(makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2' }))
+    await settle()
+
+    // Инженеру нужны напор в точке, запас и мощность — по ним видно, годится ли
+    // насос и во что обойдётся его работа.
+    expect(p.pumpExplain.value).toContain('рабочая точка 13,24 м')
+    expect(p.pumpExplain.value).toContain('запас 0,34 м')
+    expect(p.pumpExplain.value).toContain('47,9%')
+    expect(p.pumpExplain.value).toContain('2,39 кВт')
+  })
+
+  it('перечисляет альтернативы по возрастанию мощности', async () => {
+    selectPump.mockResolvedValue({
+      ...result('Vandjord VSL.100.37.4.5.0D'),
+      alternatives: [
+        { name: 'Vandjord VSL.100.55.4.5.0D', pump: null, byCurve: true, headMarginM: 3.99, duty: { q: 45, h: 16.89, p2: 3.26, p1: 4.1, eff: 42.8 } },
+        { name: 'Vandjord VSL.100.75.4.5.0D', pump: null, byCurve: true, headMarginM: 6.62, duty: { q: 45, h: 19.52, p2: 4.13, p1: 5.2, eff: 40 } },
+      ],
+    })
+    const p = usePumpSelection(makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2' }))
+    await settle()
+
+    expect(p.alternativesExplain.value).toBe(
+      'ещё подходят: Vandjord VSL.100.55.4.5.0D (3,26 кВт), Vandjord VSL.100.75.4.5.0D (4,13 кВт)',
+    )
+  })
+
+  it('честно говорит, когда у модели нет паспортной кривой', async () => {
+    selectPump.mockResolvedValue({ ...result('Vandjord VSL.50.22.2.5.0D'), duty: null, headMarginM: null })
+    const p = usePumpSelection(makeForm({ rashod: '8', rashodUnit: 'l/s', napor: '13,66', nRab: '1' }))
+    await settle()
+
+    expect(p.pumpExplain.value).toContain('кривой у модели нет')
   })
 
   it('объясняет, почему подходящего насоса нет', async () => {

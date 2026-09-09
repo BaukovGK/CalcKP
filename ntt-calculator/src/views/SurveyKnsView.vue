@@ -194,6 +194,7 @@
                   type="button" class="ol-pick-btn" @click="acceptPumpModel"
                 >подставить</button>
               </span>
+              <span v-if="p.alternativesExplain.value" class="ol-pick">{{ p.alternativesExplain.value }}</span>
             </label>
             <label class="fld"><span>Дробилка / корзина</span>
               <select v-model="form.drobilka"><option v-for="g in GRINDERS" :key="g">{{ g }}</option></select>

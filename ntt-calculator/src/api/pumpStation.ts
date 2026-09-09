@@ -24,12 +24,43 @@ export interface PumpCatalogEntry {
   nozzleDiameterMm: number
 }
 
+/** Рабочая точка на паспортной кривой при требуемом расходе. */
+export interface DutyPoint {
+  /** Расход, м³/ч. */
+  q: number
+  /** Напор, который насос там реально выдаёт, м. */
+  h: number
+  /** Мощность на валу, кВт. */
+  p2: number
+  /** Потребляемая мощность, кВт. */
+  p1: number
+  /** КПД, %. */
+  eff: number
+}
+
+/** Подходящий насос вместе с его рабочей точкой. */
+export interface PumpCandidate {
+  name: string
+  pump: PumpCatalogEntry
+  duty: DutyPoint | null
+  headMarginM: number | null
+  /** Проверен по паспортной кривой (`true`) или по грубым диапазонам. */
+  byCurve: boolean
+}
+
 export interface PumpSelectionResult {
   /** Марка подобранного насоса; `null` — в каталоге подходящего нет. */
   name: string | null
   pump: PumpCatalogEntry | null
+  /** Рабочая точка выбранного насоса; `null` — у модели нет кривой. */
+  duty: DutyPoint | null
+  /** Запас по напору над требуемым, м. */
+  headMarginM: number | null
   /** Расход на ОДИН насос, м³/ч — именно он сравнивался с каталогом. */
   flowPerPumpM3h: number
+  requiredHeadM: number
+  /** Остальные подходящие модели, по возрастанию мощности. */
+  alternatives: PumpCandidate[]
   warnings: PumpWarning[]
 }
 

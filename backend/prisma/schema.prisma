@@ -245,14 +245,48 @@ model Pump {
   id Int @id @default(autoincrement())
   /// Марка/модель насоса — то, что возвращает функция подбора.
   name String @unique
+  /// Артикул производителя — есть у моделей из выгрузки VJ Select.
+  article String?
   /// Диапазон расхода (производительности), м³/ч.
   capacityMinM3h Float
   capacityMaxM3h Float
   /// Диапазон напора, м.
   headMinM Float
   headMaxM Float
+  /// Номинальная рабочая точка по паспорту, если известна.
+  qNomM3h Float?
+  hNomM   Float?
   /// Диаметр напорного патрубка насоса, мм — справочно (не участвует в подборе).
   nozzleDiameterMm Int
+
+  /// Паспортная характеристика Q–H. Есть у 56 моделей из 61: пять DN50/DN65
+  /// пришли из вторичных источников, кривых для них производитель не отдал.
+  /// Подбор без кривой возможен, но только грубый (см. utils/pump-selection.ts).
+  curve PumpCurvePoint[]
+}
+
+/// Точка паспортной характеристики насоса (лист выгрузки VJ Select).
+///
+/// Кривая невозрастающая по напору и упорядочена по расходу: на этом стоит
+/// интерполяция рабочей точки. `idx` хранит исходный порядок точек.
+model PumpCurvePoint {
+  id     Int  @id @default(autoincrement())
+  pumpId Int
+  pump   Pump @relation(fields: [pumpId], references: [id], onDelete: Cascade)
+
+  idx Int
+  /// Расход, м³/ч.
+  q Float
+  /// Напор, м.
+  h Float
+  /// Мощность на валу (P2) и потребляемая (P1), кВт.
+  p2 Float
+  p1 Float
+  /// КПД в точке, %.
+  eff Float
+
+  @@unique([pumpId, idx])
+  @@index([pumpId, q])
 }
 
 // ── Audit log ──────────────────────────────────────────────────────────────

@@ -121,9 +121,12 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
 
   const pumpModelOverridden = computed(() => form.value.marka.trim() !== '')
 
+  const nf = (v: number, digits = 1) => v.toLocaleString('ru-RU', { maximumFractionDigits: digits })
+
   /**
-   * Пояснение подбора — в стиле остальных подсказок листа:
-   * «расчётные: 45 м³/ч на насос · напор 12,7 м → Vandjord VSL.80.37.4.5.0D».
+   * Пояснение подбора — в стиле остальных подсказок листа. Показывает рабочую
+   * точку, а не только марку: инженеру нужно видеть, какой напор насос там
+   * реально даёт, с каким запасом и какой мощностью.
    */
   const pumpExplain = computed<string | null>(() => {
     if (!ready.value) return `нужно: ${missing.value.join(', ')}`
@@ -132,13 +135,30 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     const sel = selection.value
     if (!sel) return null
 
-    const perPump = sel.flowPerPumpM3h.toLocaleString('ru-RU', { maximumFractionDigits: 1 })
-    const head = (headM.value ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+    const perPump = nf(sel.flowPerPumpM3h)
+    const head = nf(headM.value ?? 0, 2)
     if (!sel.name) {
       // Причина отказа важнее самого отказа: по ней видно, что менять.
       return sel.warnings[0]?.message ?? `подходящего насоса нет: ${perPump} м³/ч на насос, напор ${head} м`
     }
-    return `расчётные: ${perPump} м³/ч на насос · напор ${head} м → ${sel.name}`
+
+    const base = `расчётные: ${perPump} м³/ч на насос · напор ${head} м → ${sel.name}`
+    if (!sel.duty) return `${base} · подобран по диапазонам, кривой у модели нет`
+    return (
+      `${base} · рабочая точка ${nf(sel.duty.h, 2)} м ` +
+      `(запас ${nf(sel.headMarginM ?? 0, 2)} м) · КПД ${nf(sel.duty.eff)}% · ${nf(sel.duty.p2, 2)} кВт`
+    )
+  })
+
+  /** Другие подходящие модели — короткой строкой, по возрастанию мощности. */
+  const alternativesExplain = computed<string | null>(() => {
+    const alts = selection.value?.alternatives ?? []
+    if (!alts.length) return null
+    const head = alts
+      .slice(0, 3)
+      .map((a) => (a.duty ? `${a.name} (${nf(a.duty.p2, 2)} кВт)` : a.name))
+      .join(', ')
+    return `ещё подходят: ${head}${alts.length > 3 ? ` и ещё ${alts.length - 3}` : ''}`
   })
 
   /** Подсказка по напорному трубопроводу: расчётный диаметр и скорость. */
@@ -166,6 +186,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     pumpModel,
     pumpModelOverridden,
     pumpExplain,
+    alternativesExplain,
     pipeExplain,
     warnings,
   }

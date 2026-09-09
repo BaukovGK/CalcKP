@@ -94,20 +94,28 @@ const pumpSelectionSchema = z.object({
   flowM3h: z.number().positive(),
   headM: z.number().positive(),
   workingPumps: z.number().int().positive().optional(),
+  /** Требуемый запас по напору над `headM`, м. */
+  minHeadMarginM: z.number().min(0).max(100).optional(),
 })
 
 /**
  * POST /api/pump-station/select-pump — подбор марки насоса по притоку,
  * напору и числу рабочих насосов (рабочей точке одного насоса).
  *
- * Каталог берётся из БД (`Pump`, см. `prisma/seed-data/pumps.json`), отбор —
- * чистая функция `selectPump` (см. `utils/pump-selection.ts`).
+ * Каталог берётся из БД (`Pump` + точки характеристики `PumpCurvePoint`),
+ * отбор — чистая функция `selectPump` (см. `utils/pump-selection.ts`): при
+ * требуемом расходе кривая насоса должна давать напор не меньше требуемого.
+ *
+ * Кривые обязательно грузятся вместе с каталогом: без них `selectPump`
+ * откатится на грубую рамку диапазонов и вернёт `APPROXIMATE_MATCH`.
  */
 pumpStationRouter.post('/select-pump', async (req, res, next) => {
   try {
-    const { flowM3h, headM, workingPumps } = pumpSelectionSchema.parse(req.body)
-    const pumps = await prisma.pump.findMany()
-    res.json(selectPump(flowM3h, headM, workingPumps, pumps))
+    const { flowM3h, headM, workingPumps, minHeadMarginM } = pumpSelectionSchema.parse(req.body)
+    const rows = await prisma.pump.findMany({
+      include: { curve: { orderBy: { idx: 'asc' }, select: { q: true, h: true, p2: true, p1: true, eff: true } } },
+    })
+    res.json(selectPump(flowM3h, headM, workingPumps, rows, minHeadMarginM))
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })

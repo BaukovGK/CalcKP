@@ -167,6 +167,17 @@ async function seedEngineering() {
 
 // ─── Каталог насосов (utils/pump-selection.ts) ────────────────────────────────
 
+/** Паспортная характеристика Q–H (выгрузка VJ Select). */
+interface PumpCurveSeed {
+  name: string
+  article: string
+  minQM3h: number
+  maxQM3h: number
+  qNomM3h: number
+  hNomM: number
+  points: Array<{ q: number; h: number; p2: number; p1: number; eff: number }>
+}
+
 async function seedPumps() {
   const pumps = load<PumpSeed[]>('pumps.json')
 
@@ -176,6 +187,50 @@ async function seedPumps() {
   if (count !== pumps.length) throw new Error(`насосы: в JSON ${pumps.length}, в БД ${count} — потеря при сиде`)
 
   console.log(`  каталог насосов: ${count} позиций`)
+  await seedPumpCurves()
+}
+
+/**
+ * Кривые Q–H. Есть у 56 моделей из 61: пять DN50/DN65 производитель не отдал,
+ * они остаются с грубой рамкой диапазонов (см. utils/pump-selection.ts).
+ *
+ * Идемпотентность: точки пересоздаются целиком у тех насосов, у которых их
+ * число не совпало с файлом. Дозаписывать по одной нельзя — кривая имеет смысл
+ * только как целое.
+ */
+async function seedPumpCurves() {
+  const curves = load<PumpCurveSeed[]>('pump-curves.json')
+  const byName = new Map(
+    (await prisma.pump.findMany({ select: { id: true, name: true } })).map((p) => [p.name, p.id]),
+  )
+
+  let seeded = 0
+  let points = 0
+  for (const c of curves) {
+    const pumpId = byName.get(c.name)
+    if (pumpId == null) throw new Error(`кривая для «${c.name}»: такого насоса нет в каталоге`)
+
+    await prisma.pump.update({
+      where: { id: pumpId },
+      data: { article: c.article, qNomM3h: c.qNomM3h, hNomM: c.hNomM },
+    })
+
+    const have = await prisma.pumpCurvePoint.count({ where: { pumpId } })
+    if (have !== c.points.length) {
+      await prisma.pumpCurvePoint.deleteMany({ where: { pumpId } })
+      await prisma.pumpCurvePoint.createMany({
+        data: c.points.map((p, idx) => ({ pumpId, idx, q: p.q, h: p.h, p2: p.p2, p1: p.p1, eff: p.eff })),
+      })
+    }
+    seeded++
+    points += c.points.length
+  }
+
+  const total = await prisma.pumpCurvePoint.count()
+  if (total !== points) throw new Error(`кривые насосов: в JSON ${points} точек, в БД ${total} — потеря при сиде`)
+
+  const withoutCurve = (await prisma.pump.count()) - seeded
+  console.log(`  кривые насосов: ${seeded} моделей, ${total} точек (без кривой — ${withoutCurve})`)
 }
 
 // ─── Проверки: сид обязан оставить БД пригодной для расчёта ──────────────────
