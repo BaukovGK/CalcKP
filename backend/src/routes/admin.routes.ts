@@ -61,15 +61,58 @@ const patchUserSchema = z.object({
   isActive: z.boolean().optional(),
 })
 
-// PATCH /api/admin/users/:id
+/**
+ * PATCH /api/admin/users/:id (ADMIN).
+ *
+ * Две защиты от необратимого состояния: смены и сброса пароля в системе нет,
+ * поэтому потерять доступ администратора — значит потерять управление совсем.
+ *  1. нельзя снять роль или деактивировать ПОСЛЕДНЕГО активного ADMIN;
+ *  2. нельзя понизить или деактивировать самого себя — даже если админов
+ *     несколько: это делается чужими руками и осознанно.
+ */
 adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Response, next: NextFunction) => {
   try {
+    const auth = req as AuthRequest
     const id   = String(req.params.id)
+    // Тип из самой схемы: role здесь — union литералов ролей, а не string,
+    // иначе Prisma не примет его как enum Role.
+    const patch = req.body as z.infer<typeof patchUserSchema>
+
+    // Без явной проверки обновление несуществующего id давало P2025 и 500.
+    const current = await prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true } })
+    if (!current) { res.status(404).json({ message: 'Пользователь не найден' }); return }
+
+    const losesAdmin =
+      current.role === 'ADMIN' &&
+      ((patch.role != null && patch.role !== 'ADMIN') || patch.isActive === false)
+
+    if (losesAdmin && id === auth.userId) {
+      res.status(422).json({
+        message: 'Нельзя снять права администратора с самого себя — попросите другого администратора',
+        code: 'SELF_DEMOTION',
+      })
+      return
+    }
+
+    if (losesAdmin && current.isActive) {
+      const activeAdmins = await prisma.user.count({ where: { role: 'ADMIN', isActive: true } })
+      if (activeAdmins <= 1) {
+        res.status(422).json({
+          message:
+            'Это последний активный администратор. Сменить или сбросить пароль в системе нельзя, ' +
+            'поэтому снятие прав сделало бы её неуправляемой. Сначала назначьте другого администратора.',
+          code: 'LAST_ADMIN',
+        })
+        return
+      }
+    }
+
     const user = await prisma.user.update({
       where: { id },
-      data:  req.body,
+      data:  patch,
       select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
     })
+    await audit(auth.userId, 'user.update', 'User', id, patch)
     res.json(user)
   } catch (e) { next(e) }
 })

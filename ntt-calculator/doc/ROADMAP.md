@@ -124,8 +124,13 @@
   `snByDepth()` в `survey-kns.ts`, — и они УЖЕ разошлись: бэк сравнивает
   «глубина патрубка + 2 м» с порогом 7 м и учитывает ТТ МВК, фронт сравнивает
   Нподз с порогом 7000 мм и учитывает «под проезжей частью» (ARCHITECTURE §4).
-- `components/dashboard/EstimateCard.vue` не импортируется ни одним экраном.
 
-Закрыто: `DeviceType` на фронте определён один раз (`types/device.ts`,
+Закрыто: мёртвый код удалён — `stores/estimates.ts`, `dashboard/EstimateCard.vue` и
+`ui/ContextMenu.vue` (182 строки) не импортировались ни одним экраном.
+`seed-data/lists.json` больше не «файл, который никто не читает»: по нему
+`engines/types.test.ts` сверяет категории и ЕИ с мастер-книгой — они входят в
+ключ поиска цены, и их дрейф ничем себя не проявляет.
+
+`DeviceType` на фронте определён один раз (`types/device.ts`,
 реэкспорты в api/estimates и template-kns; enum в schema.prisma — граница
 систем, не дубль).

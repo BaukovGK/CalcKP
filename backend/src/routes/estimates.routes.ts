@@ -5,6 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import { logger } from '../utils/logger'
 import { rowsWithoutPrice } from '../utils/estimate-tree'
 import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
@@ -168,25 +169,49 @@ function plural(n: number): string {
  * Версию берём внутри транзакции: параллельные запросы иначе получили бы
  * одинаковый MAX и упали на @@unique([estimateId, version]).
  */
-async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub: number) {
-  return prisma.$transaction(async (tx) => {
-    const last = await tx.estimateSnapshot.findFirst({
-      where: { estimateId },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    })
-    const priceList = await tx.priceListVersion.findFirst({ orderBy: { version: 'desc' } })
+/** Сколько раз повторить снятие снапшота при гонке за номер версии. */
+const SNAPSHOT_RETRIES = 3
 
-    return tx.estimateSnapshot.create({
-      data: {
-        estimateId,
-        version: (last?.version ?? 0) + 1,
-        priceListVersion: priceList?.version ?? 1,
-        totalRub,
-        bundlesJson: bundlesJson as never,
-      },
-    })
-  })
+/**
+ * Снять снапшот расчёта, присвоив ему следующий номер версии.
+ *
+ * Транзакция сама по себе гонку НЕ снимает: у PostgreSQL по умолчанию уровень
+ * READ COMMITTED, поэтому два параллельных выпуска КП прочитают один и тот же
+ * `MAX(version)`, оба возьмут `+1` и второй нарушит `@@unique([estimateId,
+ * version])` — наружу это уходило как 500 «Внутренняя ошибка сервера».
+ *
+ * Лечится повтором: уникальный индекс — тот самый арбитр, который решает спор,
+ * и проигравшему достаточно перечитать максимум. Повторов немного: конкуренция
+ * здесь — две вкладки одного инженера, а не нагрузка.
+ */
+async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub: number) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const last = await tx.estimateSnapshot.findFirst({
+          where: { estimateId },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        })
+        const priceList = await tx.priceListVersion.findFirst({ orderBy: { version: 'desc' } })
+
+        return tx.estimateSnapshot.create({
+          data: {
+            estimateId,
+            version: (last?.version ?? 0) + 1,
+            priceListVersion: priceList?.version ?? 1,
+            totalRub,
+            bundlesJson: bundlesJson as never,
+          },
+        })
+      })
+    } catch (e) {
+      // P2002 — нарушение уникального ограничения: номер версии успели занять.
+      const isRace = (e as { code?: string }).code === 'P2002'
+      if (!isRace || attempt >= SNAPSHOT_RETRIES) throw e
+      logger.warn('Гонка за номер версии снапшота, повтор', { estimateId, attempt })
+    }
+  }
 }
 
 // DELETE /api/estimates/:id

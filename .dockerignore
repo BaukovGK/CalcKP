@@ -1,0 +1,43 @@
+# Контекст сборки образа web — корень репозитория (docker-compose.yml, build.context: .),
+# потому что Dockerfile фронта лежит в ntt-calculator/, а COPY делается от корня.
+# Без этого файла демону уезжал весь репозиторий: .claude.zip на 151 МБ, оба
+# node_modules, .git и .env с секретами.
+#
+# Сборке нужен только каталог ntt-calculator/ — остальное исключено.
+
+# Секреты. В образ они попасть не должны ни при каких обстоятельствах.
+.env
+.env.*
+!.env.example
+
+# История и служебное
+.git
+.gitignore
+.gitattributes
+.github
+
+# Зависимости и сборка: npm ci ставит своё, а COPY ntt-calculator/ ./ иначе
+# кладёт хостовые node_modules и dist поверх установленных — с чужой
+# платформы и чужой версией.
+**/node_modules
+**/dist
+**/dist-ssr
+**/*.tsbuildinfo
+
+# Бэкенд собирается своим контекстом (./backend) — здесь он лишний
+backend
+
+# Документация и артефакты сессий
+doc
+design_handoff_ntt_calculator
+*.md
+.claude
+.claude.zip
+verify.ps1
+
+# Логи, кеши, редакторы
+**/*.log
+**/coverage
+**/.eslintcache
+.vscode
+.idea

@@ -424,6 +424,9 @@ async function main() {
   await write('prices.json', prices)
   await write('pipe-weights-grp.json', grp)
   await write('pipe-weights-pe.json', pe)
+  // lists.json сидом не грузится: это эталон для проверки констант движка
+  // (`ntt-calculator/src/engines/types.test.ts`) — категории и ЕИ входят в
+  // ключ поиска цены, и их расхождение с книгой ничем себя не проявляет.
   await write('lists.json', lists)
   await write('engineering.json', engineering)
 

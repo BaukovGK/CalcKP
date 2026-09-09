@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
+import { audit } from '../utils/audit'
 import type { Response, NextFunction } from 'express'
 
 export const projectsRouter = Router()
@@ -100,11 +101,40 @@ projectsRouter.patch('/:id', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), valida
   } catch (e) { next(e) }
 })
 
-// DELETE /api/projects/:id  (ADMIN only)
+/**
+ * DELETE /api/projects/:id (ADMIN).
+ *
+ * Расчёты вместе с проектом НЕ удаляются: внешний ключ объявлен
+ * `ON DELETE SET NULL`, поэтому они остались бы без проекта — а вместе с ним
+ * без заказчика, объекта и адреса, которые печатаются в КП. Поэтому проект с
+ * расчётами не удаляется вовсе: сначала разберитесь с расчётами.
+ */
 projectsRouter.delete('/:id', requireRole('ADMIN'), async (req, res: Response, next: NextFunction) => {
   try {
+    const auth = req as AuthRequest
     const id = String(req.params.id)
+
+    // Без явной проверки удаление несуществующего проекта давало P2025 и 500.
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { id: true, title: true, _count: { select: { estimates: true } } },
+    })
+    if (!project) { res.status(404).json({ message: 'Проект не найден' }); return }
+
+    if (project._count.estimates > 0) {
+      res.status(422).json({
+        message:
+          `В проекте ${project._count.estimates} расчёт(ов). Удаление проекта не удаляет их, ` +
+          'а оставляет без заказчика и объекта — эти данные печатаются в КП. ' +
+          'Сначала удалите или перенесите расчёты.',
+        code: 'PROJECT_HAS_ESTIMATES',
+        estimateCount: project._count.estimates,
+      })
+      return
+    }
+
     await prisma.project.delete({ where: { id } })
+    await audit(auth.userId, 'project.delete', 'Project', id, { title: project.title })
     res.status(204).send()
   } catch (e) { next(e) }
 })
