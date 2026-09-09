@@ -4,6 +4,7 @@ import { recalcFotSatellites } from './fot'
 import { computeRow } from './row'
 import type { NozzleNorm } from './formulas'
 import { computeDepth, PN_SURVEY_DEFAULT, snByDepth } from './survey-kns'
+import { PRESSURE_PIPE_EXTRAS, PRESSURE_PIPE_KITS } from './pressure-pipe-kit'
 import {
   __resetIds,
   flattenRows,
@@ -206,10 +207,68 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
     expect(izg.qtyCalc).toBeCloseTo(17.4, 6)
   })
 
-  // Состав ниток — 55–109 строк в реальных файлах (Реверс §4.2) и из ОЛ не
-  // выводится: схема отводов и тройников там не задаётся.
-  it('отводы и тройники НЕ выдумываются — их добавляет инженер', () => {
-    expect(rows.some((r) => /отвод|тройник/i.test(r.name))).toBe(false)
+  // Комплект нитки берётся из эталона по DN напорного (ОЛ3487 — DN150).
+  // Соотношения внутри него от заказа не зависят, поэтому считаются; якорные
+  // величины — метраж, фланцы, отводы, тройники — снимаются с компоновки.
+  it('нитка DN150 приходит комплектом из десяти позиций', () => {
+    const kit = PRESSURE_PIPE_KITS[150]!
+    for (const item of Object.values(kit)) {
+      expect(rows.find((r) => r.name === item.name), item.name).toBeDefined()
+    }
+  })
+
+  it('втулка, сварка и приварной фланец — по одному на нитку, труба ПЭ — 0,5 м', () => {
+    const kit = PRESSURE_PIPE_KITS[150]!
+    const by = (name: string) => rows.find((r) => r.name === name)!
+    expect(by(kit.peSleeve.name).qtyCalc).toBe(2) // ОЛ3487: две нитки
+    expect(by(kit.peWeld.name).qtyCalc).toBe(2)
+    expect(by(kit.weldFlange.name).qtyCalc).toBe(2)
+    expect(by(kit.pePipe.name).qtyCalc).toBe(1) // 0,5 м × 2
+  })
+
+  // Раньше отводов и тройников не было вовсе; теперь строки есть, но пустые —
+  // лист их тоже не выводит, а выдуманное число хуже пустой строки.
+  it('отводы, тройники, метраж и фланцы — пустые: их снимают с компоновки', () => {
+    const kit = PRESSURE_PIPE_KITS[150]!
+    for (const item of [kit.steelPipe, kit.freeFlange, kit.gasket, kit.backingRing, kit.elbow, kit.tee]) {
+      expect(rows.find((r) => r.name === item.name)!.qtyCalc, item.name).toBeNull()
+    }
+  })
+
+  it('обвязка датчика давления — по комплекту на нитку', () => {
+    const { threeWayValve, ballValve, unionPipe } = PRESSURE_PIPE_EXTRAS
+    for (const item of [threeWayValve, ballValve, unionPipe]) {
+      expect(rows.find((r) => r.name === item.name)!.qtyCalc, item.name).toBe(2)
+    }
+  })
+
+  it('трудоёмкость нитки — норматив эталона 28 и 24 чел.ч', () => {
+    expect(rows.find((r) => r.name === 'Изготовление напорного трубопровода')!.qtyCalc).toBe(28)
+    expect(rows.find((r) => r.name === 'Монтаж напорного трубопровода')!.qtyCalc).toBe(24)
+  })
+
+  // Аварийный трубопровод — флаг ОЛ; в ОЛ3487 он выключен.
+  it('аварийный трубопровод выключен флагом ОЛ, а не отсутствует', () => {
+    const emergency = materializeKns(ctx, OL3487)
+      .sections.find((s) => s.code === '5')!
+      .components.find((c) => c.title === 'Аварийный трубопровод')!
+    expect(emergency.enabled).toBe(false)
+
+    const on = materializeKns(ctx, { ...OL3487, emergencyPipeline: true })
+      .sections.find((s) => s.code === '5')!
+      .components.find((c) => c.title === 'Аварийный трубопровод')!
+    expect(on.enabled).toBe(true)
+    expect(on.rows.find((r) => r.name === 'Гайка пожарная ГМ150')!.qtyCalc).toBe(1)
+  })
+
+  // DN, которого в эталоне нет, не должен молча давать пустой раздел.
+  it('для диаметра без комплекта остаётся подсказка собрать нитку вручную', () => {
+    const rows200 = materializeKns(ctx, { ...OL3487, outletDn: 200 })
+      .sections.find((s) => s.code === '5')!
+      .components.flatMap((c) => c.rows)
+    const hint = rows200.find((r) => r.name.startsWith('Комплект нитки'))!
+    expect(hint.qtyCalc).toBeNull()
+    expect(hint.note).toContain('50, 65, 80, 150')
   })
 })
 

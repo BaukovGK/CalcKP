@@ -31,6 +31,12 @@ import {
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import type { CostBucket } from './economics'
 import {
+  PRESSURE_PIPE_EXTRAS,
+  PRESSURE_PIPE_HOURS,
+  PRESSURE_PIPE_KITS,
+  type KitItem,
+} from './pressure-pipe-kit'
+import {
   ballValveCount,
   floatSwitchCount,
   gateValveCount,
@@ -645,45 +651,172 @@ export function buildVent(ctx: MaterializeContext): CalcComponent[] {
 
 export function buildPressurePipe(
   ctx: MaterializeContext,
-  s: { depthMm: number; pumpsWorking: number; pumpsReserve: number; outletDn: number; outletCount: number },
+  s: {
+    depthMm: number
+    pumpsWorking: number
+    pumpsReserve: number
+    outletDn: number
+    outletCount: number
+    emergencyPipeline?: boolean
+  },
 ): CalcComponent[] {
   const guides = pumpGuidesM(s.depthMm / 1000, s.pumpsWorking, s.pumpsReserve)
+  const kit = PRESSURE_PIPE_KITS[s.outletDn] ?? null
+  const n = s.outletCount
+  const components: CalcComponent[] = []
 
-  return [
-    {
+  // C2 — комплект нитки. Соотношения внутри него заданы эталоном и от заказа
+  // не зависят; якорные величины (метраж стальной трубы, число свободных
+  // фланцев, отводов и тройников) снимаются с компоновки — лист их тоже не
+  // выводит, поэтому они рождаются пустыми, а не выдуманными.
+  //
+  // Прокладок «свободных фланцев + 2» и борт-шайб «столько же, сколько
+  // свободных фланцев» — оба следуют за ручным числом фланцев, поэтому тоже
+  // пустые до его ввода: считать их от нуля значило бы напечатать «2 шт»
+  // прокладок там, где их два десятка.
+  if (kit) {
+    const item = (
+      k: KitItem,
+      qtyCalc: number | null,
+      note: string,
+    ): Parameters<typeof makeRow>[1] => ({
+      kind: 'МАТЕРИАЛ',
+      category: k.category,
+      name: k.name,
+      unit: k.unit,
+      qtyCalc,
+      note,
+    })
+
+    components.push({
       id: nextId('c'),
       nodeCode: 'C2',
-      title: `Нитка напорного трубопровода DN${s.outletDn} ×${s.outletCount}`,
+      title: `Нитка напорного трубопровода DN${s.outletDn} ×${n}`,
       enabled: true,
       rows: [
-        // Состав ниток — САМАЯ вариативная часть между заказами (Реверс §4.2:
-        // 55–109 строк). Материализуем только то, что считается из ОЛ;
-        // отводы, тройники и фланцы инженер добавляет из каталога.
-        //
-        // «Направляющие насосов» в прайсе — это ТРУД (изготовление + монтаж),
-        // а не метраж материала: категория «Собственное производство», ЕИ
-        // «чел. ч». Длина направляющих (guides, м) идёт нормативом на труд.
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Изготовление направляющих насосов',
-          unit: 'чел. ч',
-          // Норматив: ~0,25 чел.ч на 1 м направляющих (совпадает с B5 «0,5 на
-          // башмак» удвоенно на изготовление+монтаж; уточняется вручную).
-          qtyCalc: guides * 0.25,
-          note: `ƒ L·(раб+рез)·2 = ${guides.toFixed(1)} м · 0,25 чел.ч/м · норматив, уточните`,
-        }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Монтаж направляющих насосов',
-          unit: 'чел. ч',
-          qtyCalc: guides * 0.25,
-          note: 'ƒ как изготовление',
-        }),
+        makeRow(ctx, item(kit.peSleeve, n, `ƒ по одной на нитку, ниток ${n}`)),
+        makeRow(ctx, item(kit.pePipe, 0.5 * n, `ƒ 0,5 м на втулку × ${n}`)),
+        makeRow(ctx, item(kit.peWeld, n, `ƒ по одному стыку на нитку, ниток ${n}`)),
+        makeRow(ctx, item(kit.steelPipe, null, 'Метраж по компоновке — введите вручную')),
+        makeRow(ctx, item(kit.weldFlange, n, `ƒ по одному на нитку, ниток ${n}`)),
+        makeRow(ctx, item(kit.freeFlange, null, 'Число по компоновке — введите вручную')),
+        makeRow(ctx, item(kit.gasket, null, 'ƒ свободных фланцев + 2 — введите после фланцев')),
+        makeRow(ctx, item(kit.backingRing, null, 'ƒ по свободному фланцу — введите после фланцев')),
+        makeRow(ctx, item(kit.elbow, null, 'Число по компоновке — введите вручную')),
+        makeRow(ctx, item(kit.tee, null, 'Число по компоновке — введите вручную')),
       ],
-    },
-  ]
+    })
+  }
+
+  // Обвязка датчика давления — по комплекту на нитку (лист, строки 369–371).
+  if (kit) {
+    const { threeWayValve, ballValve, unionPipe } = PRESSURE_PIPE_EXTRAS
+    components.push({
+      id: nextId('c'),
+      nodeCode: 'C2',
+      title: 'Обвязка датчика давления',
+      enabled: true,
+      rows: [threeWayValve, ballValve, unionPipe].map((k) =>
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: k.category,
+          name: k.name,
+          unit: k.unit,
+          qtyCalc: n,
+          note: `ƒ по одному на нитку, ниток ${n}`,
+        }),
+      ),
+    })
+  }
+
+  // Аварийный трубопровод — флаг ОЛ (лист, строки 361–362: `1 × ОЛ!J47`).
+  //
+  // `undefined` означает не «выключен», а «у изделия такого признака нет»:
+  // опросные листы ЕМК и колодца про аварийный трубопровод не спрашивают, и
+  // вечно выключенный блок был бы у них шумом. Поэтому у КНС компонент есть
+  // всегда (включённый или нет), а у остальных изделий его нет вовсе.
+  if (s.emergencyPipeline !== undefined) {
+    components.push({
+      id: nextId('c'),
+      nodeCode: 'C2',
+      title: 'Аварийный трубопровод',
+      enabled: s.emergencyPipeline,
+      rows: [PRESSURE_PIPE_EXTRAS.hoseNut, PRESSURE_PIPE_EXTRAS.threadedNozzle].map((k) =>
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: k.category,
+          name: k.name,
+          unit: k.unit,
+          qtyCalc: 1,
+          note: 'ƒ один комплект на станцию',
+        }),
+      ),
+    })
+  }
+
+  components.push({
+    id: nextId('c'),
+    nodeCode: 'C2',
+    title: 'Направляющие насосов и работы по нитке',
+    enabled: true,
+    rows: [
+      // «Направляющие насосов» в прайсе — это ТРУД (изготовление + монтаж),
+      // а не метраж материала: категория «Собственное производство», ЕИ
+      // «чел. ч». Длина направляющих (guides, м) идёт нормативом на труд.
+      makeRow(ctx, {
+        kind: 'ОПЕРАЦИЯ',
+        category: 'Собственное производство',
+        name: 'Изготовление направляющих насосов',
+        unit: 'чел. ч',
+        // Норматив: ~0,25 чел.ч на 1 м направляющих (совпадает с B5 «0,5 на
+        // башмак» удвоенно на изготовление+монтаж; уточняется вручную).
+        qtyCalc: guides * 0.25,
+        note: `ƒ L·(раб+рез)·2 = ${guides.toFixed(1)} м · 0,25 чел.ч/м · норматив, уточните`,
+      }),
+      makeRow(ctx, {
+        kind: 'ОПЕРАЦИЯ',
+        category: 'Собственное производство',
+        name: 'Монтаж направляющих насосов',
+        unit: 'чел. ч',
+        qtyCalc: guides * 0.25,
+        note: 'ƒ как изготовление',
+      }),
+      // Трудоёмкость самой нитки — норматив эталона, от диаметра и числа
+      // ниток не зависит (строки 374–375). Надбавка ×1,2 за коллекторную
+      // компоновку не применяется: признака «сложный» в опросном листе нет.
+      makeRow(ctx, {
+        kind: 'ОПЕРАЦИЯ',
+        category: 'Собственное производство',
+        name: 'Изготовление напорного трубопровода',
+        unit: 'чел. ч',
+        qtyCalc: PRESSURE_PIPE_HOURS.fabrication,
+        note: 'Норматив эталона; при коллекторной компоновке ×1,2 — уточните',
+      }),
+      makeRow(ctx, {
+        kind: 'ОПЕРАЦИЯ',
+        category: 'Собственное производство',
+        name: 'Монтаж напорного трубопровода',
+        unit: 'чел. ч',
+        qtyCalc: PRESSURE_PIPE_HOURS.installation,
+        note: 'Норматив эталона; при коллекторной компоновке ×1,2 — уточните',
+      }),
+    ],
+  })
+
+  if (!kit) {
+    components[components.length - 1]!.rows.push(
+      makeRow(ctx, {
+        kind: 'МАТЕРИАЛ',
+        category: 'Детали трубопровода сталь',
+        name: `Комплект нитки DN${s.outletDn}`,
+        unit: 'шт',
+        qtyCalc: null,
+        note: `Комплекта для DN${s.outletDn} в эталоне нет (есть 50, 65, 80, 150) — соберите нитку из каталога`,
+      }),
+    )
+  }
+
+  return components
 }
 
 /**
@@ -700,6 +833,27 @@ export function boltFullName(bolt: string): string {
   return `Болт М${m[1]}-6gх${m[2]}.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)`
 }
 
+/**
+ * Спутники болта: плоская шайба, гроверная и гайка того же типоразмера.
+ *
+ * В эталоне (раздел 6, строки 383–398) они выписаны для М20, М16, М12 и М6, но
+ * наименования у всех строятся по одному шаблону НН, и справочник знает
+ * размеры от М6 до М42 — поэтому имя собирается, а не берётся из таблицы на
+ * четыре размера: фланцы дают и М24, и М27.
+ *
+ * @param bolt обозначение из норм патрубка, напр. «М20х90»
+ */
+export function fastenerSetNames(bolt: string): { washer: string; lockWasher: string; nut: string } | null {
+  const m = /^М(\d+)х\d+$/.exec(bolt)
+  if (!m) return null
+  const d = m[1]
+  return {
+    washer: `Шайба 2.М${d}.12Х18Н10Т ГОСТ 11371-78 (DIN125)`,
+    lockWasher: `Шайба М${d} 12Х18Н10Т ГОСТ 6402-70 (DIN 127)`,
+    nut: `Гайка М${d}-6Н.5.12Х18Н10Т ГОСТ 5915-70 (DIN 934)`,
+  }
+}
+
 // ─── Раздел 6: Крепёж (C3) ──────────────────────────────────────────────────
 
 export function buildFasteners(ctx: MaterializeContext, s: { outletDn: number; outletCount: number }): CalcComponent[] {
@@ -707,6 +861,7 @@ export function buildFasteners(ctx: MaterializeContext, s: { outletDn: number; o
   const norm = ctx.nozzleNormOf?.(s.outletDn) ?? null
   const joints = s.outletCount
   const bolts = norm?.boltCount != null ? norm.boltCount * joints : null
+  const set = norm?.bolt ? fastenerSetNames(norm.bolt) : null
 
   return [
     {
@@ -729,6 +884,37 @@ export function buildFasteners(ctx: MaterializeContext, s: { outletDn: number; o
               ? `Норма крепежа для DN${s.outletDn} в матрице «Для расчетов» не найдена — введите вручную`
               : `ƒ ${norm!.boltCount} отв. × ${joints} соединений = ${bolts} шт (${norm!.bolt})`,
         }),
+        // Спутники болта. Соотношения заданы эталоном (раздел 6) и от заказа
+        // не зависят: две плоские шайбы, одна гроверная и одна гайка на болт.
+        // Раньше их не было вовсе — комплект собирался из каталога по памяти.
+        ...(set
+          ? [
+              makeRow(ctx, {
+                kind: 'МАТЕРИАЛ',
+                category: 'Метизы',
+                name: set.washer,
+                unit: 'шт',
+                qtyCalc: bolts == null ? null : bolts * 2,
+                note: 'ƒ 2 шайбы на болт',
+              }),
+              makeRow(ctx, {
+                kind: 'МАТЕРИАЛ',
+                category: 'Метизы',
+                name: set.lockWasher,
+                unit: 'шт',
+                qtyCalc: bolts,
+                note: 'ƒ 1 гроверная шайба на болт',
+              }),
+              makeRow(ctx, {
+                kind: 'МАТЕРИАЛ',
+                category: 'Метизы',
+                name: set.nut,
+                unit: 'шт',
+                qtyCalc: bolts,
+                note: 'ƒ 1 гайка на болт',
+              }),
+            ]
+          : []),
       ],
     },
   ]

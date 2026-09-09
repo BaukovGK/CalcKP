@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { computeRow } from './row'
 import type { NozzleNorm } from './formulas'
 import { __resetIds, flattenRows, type MaterializeContext } from './template-kns'
+import { PRESSURE_PIPE_KITS } from './pressure-pipe-kit'
 import {
   EMK_SECTIONS,
   KOL_SECTIONS,
@@ -352,5 +353,25 @@ describe('общие узлы переиспользуются всеми тре
         expect(rows.some((r) => r.kind === 'ФОТ' && r.parentId === op.id), `нет спутника у «${op.name}»`).toBe(true)
       }
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Общие узлы КНС, переиспользуемые ёмкостью и колодцем
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('комплекты напорной нитки и крепежа у ЕМК', () => {
+  const rows = flattenRows(materializeEmk(ctx, { ...EMK, hasPumps: true, outletDn: 80, outletCount: 1 }))
+
+  it('нитка приходит комплектом того диаметра, что задан в ОЛ', () => {
+    const kit = PRESSURE_PIPE_KITS[80]!
+    expect(rows.find((r) => r.name === kit.peSleeve.name)!.qtyCalc).toBe(1)
+    expect(rows.find((r) => r.name === kit.tee.name)!.qtyCalc).toBeNull()
+  })
+
+  // У ёмкости и колодца в опросном листе нет признака аварийного
+  // трубопровода, поэтому вечно выключенного блока быть не должно.
+  it('блока аварийного трубопровода у ЕМК нет вовсе', () => {
+    expect(rows.some((r) => r.name === 'Гайка пожарная ГМ150')).toBe(false)
   })
 })
