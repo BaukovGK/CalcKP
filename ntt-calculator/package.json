@@ -14,7 +14,10 @@
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
-    "format": "oxfmt src/"
+    "format": "oxfmt src/",
+    "check:lint": "run-s check:lint:*",
+    "check:lint:oxlint": "oxlint .",
+    "check:lint:eslint": "eslint ."
   },
   "dependencies": {
     "axios": "^1.13.6",

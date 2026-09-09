@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PUMPS, HEAD_MARGIN_TIGHT_M, selectPump, type PumpCatalogEntry } from './pump-selection'
+import { DEFAULT_PUMPS, HEAD_MARGIN_MIN_M, HEAD_MARGIN_MAX_M, selectPump, type PumpCatalogEntry } from './pump-selection'
 import type { CurvePoint } from './pump-curve'
 
 /**
@@ -141,72 +141,125 @@ describe('что чинит переход с прямоугольной рам�
     expect(r.warnings.map((w) => w.code)).not.toContain('NO_CAPACITY_MATCH')
   })
 
-  it('ДУДС24и/ДУДС31и: 318,84 м³/ч; 13,29 м → VSL.200.190, точка сходится с проектом', () => {
+  it('ДУДС24и/ДУДС31и: кривая VSL.200.190 проходит ровно через точку проекта', () => {
+    // 318,84 м³/ч; 13,29 м — рабочая точка из проектного тома. Кривая
+    // воспроизводит её до сотых, то есть данные и интерполяция сходятся.
     const r = selectPump(318.84, 13.29, 1, CATALOG)
+    const projectPump = [...r.candidates, ...r.belowMargin].find((c) => c.name === 'Vandjord VSL.200.190.4.5.1D')!
 
-    expect(r.name).toBe('Vandjord VSL.200.190.4.5.1D')
-    expect(r.duty!.h).toBeCloseTo(13.29, 2)
+    expect(projectPump.duty!.h).toBeCloseTo(13.29, 2)
+    // Но запас нулевой — по заводскому правилу такой насос не предлагается.
+    expect(projectPump.headMarginM).toBeCloseTo(0, 2)
+    expect(r.belowMargin).toContain(projectPump)
+    expect(r.name).not.toBe('Vandjord VSL.200.190.4.5.1D')
   })
 })
 
-describe('порядок предпочтения — наименьший достаточный', () => {
-  it('выбранный насос не мощнее любой из альтернатив', () => {
-    const r = selectPump(90.468, 12.9, 2, CATALOG)
+describe('порядок предпочтения', () => {
+  const r = () => selectPump(90.468, 12.9, 2, CATALOG)
 
-    expect(r.alternatives.length).toBeGreaterThan(0)
-    for (const alt of r.alternatives) {
-      if (alt.duty) expect(alt.duty.p2, alt.name).toBeGreaterThanOrEqual(r.duty!.p2)
-    }
+  it('первым идёт выбранный, candidates включает его целиком', () => {
+    const res = r()
+
+    expect(res.candidates[0]!.name).toBe(res.name)
+    expect(res.alternatives).toEqual(res.candidates.slice(1))
   })
 
-  it('альтернативы упорядочены по возрастанию мощности', () => {
-    const r = selectPump(90.468, 12.9, 2, CATALOG)
-    const powers = r.alternatives.filter((a) => a.duty).map((a) => a.duty!.p2)
+  it('попавшие в окно запаса идут впереди избыточных по напору', () => {
+    const inBand = r().candidates.map((c) => c.withinPreferredBand)
+
+    expect(inBand.indexOf(false)).toBe(inBand.lastIndexOf(true) + 1)
+  })
+
+  it('внутри группы — по возрастанию мощности на валу', () => {
+    const over = r().candidates.filter((c) => !c.withinPreferredBand && c.duty)
+    const powers = over.map((c) => c.duty!.p2)
 
     expect(powers).toEqual([...powers].sort((a, b) => a - b))
   })
 
-  it('все альтернативы тоже закрывают требуемый напор', () => {
-    const r = selectPump(90.468, 12.9, 2, CATALOG)
-
-    for (const alt of r.alternatives) {
-      if (alt.duty) expect(alt.duty.h, alt.name).toBeGreaterThanOrEqual(12.9)
+  it('все предложенные закрывают требуемый напор с минимальным запасом', () => {
+    for (const c of r().candidates) {
+      if (c.duty) expect(c.duty.h, c.name).toBeGreaterThanOrEqual(12.9 + HEAD_MARGIN_MIN_M)
     }
   })
 
   it('модели без кривой уходят в конец: их рабочая точка неизвестна', () => {
-    const r = selectPump(29.48, 13.66, 1, CATALOG)
-    const byCurve = [r, ...r.alternatives].map((c) => ('byCurve' in c ? c.byCurve : true))
+    const byCurve = selectPump(29.48, 13.66, 1, CATALOG).candidates.map((c) => c.byCurve)
 
     expect(byCurve.indexOf(false)).toBe(byCurve.lastIndexOf(true) + 1)
   })
 })
 
-describe('запас по напору', () => {
-  it('по умолчанию достаточно дотянуть до требуемого напора', () => {
+describe('окно запаса по напору 0,5…2,0 м', () => {
+  // Запас страхует не рост притока (он уже в требуемом напоре), а то, что
+  // реальный насос может не выдать паспортные значения.
+  it('по умолчанию действует заводское окно', () => {
     const r = selectPump(90.468, 12.9, 2, CATALOG)
-    expect(r.headMarginM).toBeGreaterThanOrEqual(0)
+
+    expect(r.headMarginBandM).toEqual({ min: HEAD_MARGIN_MIN_M, max: HEAD_MARGIN_MAX_M })
+    expect(r.headMarginM!).toBeGreaterThanOrEqual(HEAD_MARGIN_MIN_M)
   })
 
-  it('требование запаса отсекает модели, стоящие впритык', () => {
-    const tight = selectPump(90.468, 12.9, 2, CATALOG)
-    const withMargin = selectPump(90.468, 12.9, 2, CATALOG, 3)
+  it('нижняя граница — жёсткая: точка впритык в подбор не идёт', () => {
+    const r = selectPump(90.468, 12.9, 2, CATALOG)
+    const tight = r.belowMargin.map((c) => c.name)
 
-    expect(tight.headMarginM!).toBeLessThan(3)
-    expect(withMargin.headMarginM!).toBeGreaterThanOrEqual(3)
-    expect(withMargin.name).not.toBe(tight.name)
+    // VSL.100.37 даёт 13,24 м при требуемых 12,9 — всего 0,34 м запаса.
+    expect(tight).toContain('Vandjord VSL.100.37.4.5.0D')
+    expect(r.candidates.map((c) => c.name)).not.toContain('Vandjord VSL.100.37.4.5.0D')
   })
 
-  it('запас 3 м на ОЛ3487 даёт VSL.100.55 — тот же насос, что в проекте', () => {
-    const r = selectPump(90.468, 12.9, 2, CATALOG, 3)
+  it('отсечённые по запасу возвращаются отдельным списком, а не молча пропадают', () => {
+    const r = selectPump(90.468, 12.9, 2, CATALOG)
+
+    expect(r.belowMargin.length).toBeGreaterThan(0)
+    for (const c of r.belowMargin) {
+      expect(c.duty!.h, c.name).toBeGreaterThanOrEqual(12.9)
+      expect(c.headMarginM!, c.name).toBeLessThan(HEAD_MARGIN_MIN_M)
+    }
+    expect(r.warnings.map((w) => w.code)).toContain('REJECTED_BY_MARGIN')
+  })
+
+  it('отсечённые упорядочены по убыванию запаса — ближайший к окну первым', () => {
+    const margins = selectPump(90.468, 12.9, 2, CATALOG).belowMargin.map((c) => c.headMarginM!)
+
+    expect(margins).toEqual([...margins].sort((a, b) => b - a))
+  })
+
+  it('верхняя граница — предпочтение, а не отсечка: избыточные остаются в выборе', () => {
+    const r = selectPump(90.468, 12.9, 2, CATALOG)
+    const over = r.candidates.filter((c) => !c.withinPreferredBand)
+
+    expect(over.length).toBeGreaterThan(0)
+    // Проектный насос ОЛ3487 избыточен по запасу (3,99 м), но доступен.
+    expect(over.map((c) => c.name)).toContain('Vandjord VSL.100.55.4.5.0D')
+  })
+
+  it('когда в окно не попал никто — берётся ближайший избыточный с предупреждением', () => {
+    // Узкий каталог: единственный кандидат имеет запас заведомо больше окна.
+    const one = [pick('Vandjord VSL.100.55.4.5.0D')]
+    const r = selectPump(45.234, 12.9, 1, one)
+
     expect(r.name).toBe('Vandjord VSL.100.55.4.5.0D')
+    expect(r.candidates[0]!.withinPreferredBand).toBe(false)
+    expect(r.warnings.map((w) => w.code)).toContain('MARGIN_ABOVE_BAND')
   })
 
-  it('предупреждает, когда рабочая точка у самого края характеристики', () => {
-    const r = selectPump(318.84, 13.29, 1, CATALOG)
+  it('окно настраивается: без минимума проходит и точка впритык', () => {
+    const r = selectPump(318.84, 13.29, 1, CATALOG, { minHeadMarginM: 0 })
 
-    expect(r.headMarginM!).toBeLessThan(HEAD_MARGIN_TIGHT_M)
-    expect(r.warnings.map((w) => w.code)).toContain('TIGHT_HEAD_MARGIN')
+    expect(r.name).toBe('Vandjord VSL.200.190.4.5.1D')
+    expect(r.belowMargin).toEqual([])
+  })
+
+  it('если напор дают, но запаса не набирает никто — это отдельный случай', () => {
+    const one = [pick('Vandjord VSL.200.190.4.5.1D')]
+    const r = selectPump(318.84, 13.29, 1, one)
+
+    expect(r.name).toBeNull()
+    expect(r.belowMargin.map((c) => c.name)).toEqual(['Vandjord VSL.200.190.4.5.1D'])
+    expect(r.warnings.map((w) => w.code)).toContain('ONLY_BELOW_MARGIN')
   })
 })
 

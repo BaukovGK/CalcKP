@@ -32,6 +32,9 @@ jobs:
           cache-dependency-path: ntt-calculator/package-lock.json
       - run: npm ci
       - run: npm run type-check
+      # Проверяющий вариант линта: обычный `npm run lint` идёт с --fix и в CI
+      # молча «чинил» бы код вместо того, чтобы падать.
+      - run: npm run check:lint
       - run: npm test
 
   backend:

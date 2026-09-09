@@ -182,17 +182,38 @@
             <label class="fld"><span>Резервных</span><input v-model="form.nRez" class="num" /></label>
             <label class="fld"><span>Запасных</span><input v-model="form.nZap" class="num" /></label>
             <label class="fld fld--wide"><span>Марка насосов</span>
-              <input v-model="form.marka" :placeholder="p.pumpModelCalc.value ?? 'подберётся по притоку и напору'" />
+              <!-- Выбор из подобранных: по умолчанию оптимальный, но инженер
+                   может взять другой — в том числе отсечённый по запасу. -->
+              <select v-if="hasPumpChoices" :value="pumpChoice" @change="onPumpChoice">
+                <option value="">
+                  автоматически{{ p.pumpModelCalc.value ? ` — ${p.pumpModelCalc.value}` : '' }}
+                </option>
+                <optgroup v-if="p.choices.value.fitting.length" label="Подходят">
+                  <option v-for="c in p.choices.value.fitting" :key="c.name" :value="c.name">
+                    {{ p.optionLabel(c) }}
+                  </option>
+                </optgroup>
+                <optgroup
+                  v-if="p.choices.value.belowMargin.length"
+                  :label="`Напор дают, но запас меньше ${p.marginBand.value?.min ?? 0} м`"
+                >
+                  <option v-for="c in p.choices.value.belowMargin" :key="c.name" :value="c.name">
+                    {{ p.optionLabel(c) }}
+                  </option>
+                </optgroup>
+                <option value="__manual">ввести вручную…</option>
+              </select>
+              <input
+                v-if="!hasPumpChoices || manualPump"
+                v-model="form.marka"
+                :placeholder="p.pumpModelCalc.value ?? 'подберётся по притоку и напору'"
+              />
               <span v-if="p.pumpExplain.value" class="ol-pick" :class="{ 'ol-pick--warn': !p.pumpModelCalc.value && p.ready.value && !p.loading.value }">
                 {{ p.pumpExplain.value }}
                 <button
                   v-if="p.pumpModelCalc.value && p.pumpModelOverridden.value"
-                  type="button" class="ol-pick-btn" @click="acceptPumpModel"
+                  type="button" class="ol-pick-btn" @click="p.resetToCalculated"
                 >вернуть подобранную</button>
-                <button
-                  v-else-if="p.pumpModelCalc.value"
-                  type="button" class="ol-pick-btn" @click="acceptPumpModel"
-                >подставить</button>
               </span>
               <span v-if="p.alternativesExplain.value" class="ol-pick">{{ p.alternativesExplain.value }}</span>
             </label>
@@ -339,14 +360,40 @@ const props = defineProps<{
 const router = useRouter()
 const { theme, toggle } = useTheme()
 
-const form = ref<KnsSurveyForm>({ ...makeDefaultKnsSurvey(), ...(props.initial ?? {}) })
+const form = ref<KnsSurveyForm>({ ...makeDefaultKnsSurvey(), ...props.initial })
 const s = useKnsSurvey(form)
 /** Подбор насоса и диаметра напорного — считает сервер (`/api/pump-station`). */
 const p = usePumpSelection(form)
 
-/** Принять подобранную марку в поле: дальше она редактируется как ручная. */
-function acceptPumpModel() {
-  if (p.pumpModelCalc.value) form.value.marka = p.pumpModelCalc.value
+/** Есть ли из чего выбирать: пока подбор не пришёл, показываем обычное поле. */
+const hasPumpChoices = computed(
+  () => p.choices.value.fitting.length > 0 || p.choices.value.belowMargin.length > 0,
+)
+
+/** Инженер выбрал «ввести вручную» — открываем текстовое поле. */
+const manualPump = ref(false)
+
+/**
+ * Что показывать выбранным в списке: пустая марка — «автоматически», совпадение
+ * с одной из моделей — её саму, произвольный текст — режим ручного ввода.
+ */
+const pumpChoice = computed(() => {
+  const marka = form.value.marka.trim()
+  if (marka === '') return manualPump.value ? '__manual' : ''
+  const known = [...p.choices.value.fitting, ...p.choices.value.belowMargin]
+  return known.some((c) => c.name === marka) ? marka : '__manual'
+})
+
+function onPumpChoice(e: Event) {
+  const v = (e.target as HTMLSelectElement).value
+  if (v === '__manual') {
+    manualPump.value = true
+    return
+  }
+  manualPump.value = false
+  // Пустое значение — вернуться к подобранной автоматически.
+  if (v === '') p.resetToCalculated()
+  else p.choose(v)
 }
 
 const isEdit = computed(() => Boolean(props.estimateId))

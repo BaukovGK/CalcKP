@@ -46,6 +46,8 @@ export interface PumpCandidate {
   headMarginM: number | null
   /** Проверен по паспортной кривой (`true`) или по грубым диапазонам. */
   byCurve: boolean
+  /** Запас по напору попал в желаемое окно; `false` — насос избыточен. */
+  withinPreferredBand: boolean
 }
 
 export interface PumpSelectionResult {
@@ -59,8 +61,17 @@ export interface PumpSelectionResult {
   /** Расход на ОДИН насос, м³/ч — именно он сравнивался с каталогом. */
   flowPerPumpM3h: number
   requiredHeadM: number
-  /** Остальные подходящие модели, по возрастанию мощности. */
+  /** Окно запаса по напору, применённое при отборе, м. */
+  headMarginBandM: { min: number; max: number }
+  /** Все подходящие модели в порядке предпочтения, включая выбранную первой. */
+  candidates: PumpCandidate[]
+  /** {@link candidates} без первой — для краткой строки «ещё подходят». */
   alternatives: PumpCandidate[]
+  /**
+   * Дотягивают до напора, но не набирают минимального запаса. По умолчанию не
+   * предлагаются; инженер может выбрать такую модель осознанно.
+   */
+  belowMargin: PumpCandidate[]
   warnings: PumpWarning[]
 }
 

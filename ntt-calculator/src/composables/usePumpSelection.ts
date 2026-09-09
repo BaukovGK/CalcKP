@@ -1,7 +1,7 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { toLps } from '@/engines/survey-kns'
 import { tryEvalExpr } from '@/engines/expr'
-import { pumpStationApi, type PipeDiameterResult, type PumpSelectionResult } from '@/api/pumpStation'
+import { pumpStationApi, type PipeDiameterResult, type PumpCandidate, type PumpSelectionResult } from '@/api/pumpStation'
 import type { KnsSurveyForm } from '@/types/survey'
 
 /**
@@ -161,6 +161,39 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     return `ещё подходят: ${head}${alts.length > 3 ? ` и ещё ${alts.length - 3}` : ''}`
   })
 
+  /** Подпись модели в списке выбора: по ней видно, чем модели различаются. */
+  function optionLabel(c: PumpCandidate): string {
+    if (!c.duty) return `${c.name} — без паспортной кривой`
+    return (
+      `${c.name} — ${nf(c.duty.p2, 2)} кВт · КПД ${nf(c.duty.eff)}% · ` +
+      `напор ${nf(c.duty.h, 2)} м (запас ${nf(c.headMarginM ?? 0, 2)} м)`
+    )
+  }
+
+  /**
+   * Модели, доступные для выбора: сначала прошедшие отбор, затем отсечённые по
+   * минимальному запасу. Вторые показываются отдельной группой намеренно — их
+   * ставят в реальных проектах, и прятать это неправильно, но и предлагать по
+   * умолчанию нельзя: на объекте такой насос до расчётной точки может не дойти.
+   */
+  const choices = computed(() => ({
+    fitting: selection.value?.candidates ?? [],
+    belowMargin: selection.value?.belowMargin ?? [],
+  }))
+
+  /** Окно запаса, применённое сервером, — для подписи группы. */
+  const marginBand = computed(() => selection.value?.headMarginBandM ?? null)
+
+  /** Выбрать модель вручную: пишет её в поле «Марка насосов». */
+  function choose(name: string) {
+    form.value.marka = name
+  }
+
+  /** Вернуться к подобранной автоматически. */
+  function resetToCalculated() {
+    form.value.marka = ''
+  }
+
   /** Подсказка по напорному трубопроводу: расчётный диаметр и скорость. */
   const pipeExplain = computed<string | null>(() => {
     const p = pipe.value
@@ -187,6 +220,11 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     pumpModelOverridden,
     pumpExplain,
     alternativesExplain,
+    optionLabel,
+    choices,
+    marginBand,
+    choose,
+    resetToCalculated,
     pipeExplain,
     warnings,
   }

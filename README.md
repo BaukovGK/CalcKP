@@ -120,23 +120,11 @@ docker compose down -v            # + удалить том с базой
 **Релиз:** `git push` в `master` (доступ по HTTPS + токен). Каждый push
 запускает CI, а при зелёных тестах — авто-деплой на сервер.
 
-**CI** (на каждый push и pull request): typecheck фронта + 281 тест; на бэке —
+**CI** (на каждый push и pull request): typecheck фронта, линт (`npm run
+check:lint` — проверяющий вариант без `--fix`) и 298 тестов; на бэке —
 `prisma migrate deploy` и сид против сервисного Postgres, затем сборка
-(`npm run build`) и `npm test`. Ловит расхождение схемы и миграций до деплоя.
-Линт в CI не запускается: скрипт `lint` (oxlint + eslint) есть только во фронте
-(`ntt-calculator/package.json:14`) и гоняется вручную.
-
-**Известный дефект: бэковая job краснеет, деплой не запускается.** В
-`ci-cd.yml` шаг `npm run build` (`:74`) стоит **перед** `npm test` (`:76`) —
-ровно тот порядок, от которого предостерегает раздел «Тесты» ниже. `tsc`
-кладёт в `dist/` CommonJS-копии тестов; vitest-конфига у бэка нет, а в
-vitest 4 умолчание `configDefaults.exclude` — только `**/node_modules/**` и
-`**/.git/**`, то есть `dist/` больше не исключается. Прогон даёт
-`Test Files 5 failed | 5 passed (10)` при `Tests 93 passed`: сами тесты
-зелёные, но job красная, а `deploy` (`needs: [frontend, backend]`,
-`ci-cd.yml:80`) не стартует никогда. Лечится перестановкой шагов местами
-(`npm test` до `npm run build`) либо `include: ['src/**/*.test.ts']` в
-vitest-конфиге бэка.
+(`npm run build`) и 128 тестов. Ловит расхождение схемы и миграций до деплоя.
+Линта у бэкенда нет.
 
 **Деплой** (автоматически при push в `master` после зелёного CI): GitHub
 заходит на сервер по SSH и выполняет `git reset --hard origin/master` +
@@ -191,14 +179,14 @@ npm run db:seed                      # → в базу
 ## Тесты
 
 ```powershell
-cd ntt-calculator; npm test     # 281 тест в 12 файлах
-cd backend;        npm test     # 93 теста в 5 файлах
+cd ntt-calculator; npm test     # 298 тестов в 13 файлах
+cd backend;        npm test     # 128 тестов в 6 файлах
 ```
 
-Бэковый набор гоняйте **до** `npm run build` либо удалив `backend/dist`: `tsc`
-компилирует `*.test.ts` вместе с остальным `src/**` (`backend/tsconfig.json`),
-и vitest подхватывает из `dist/` их CommonJS-копии, которые падают на импорте
-`vitest`. `verify.ps1` гоняет только фронтовый набор.
+Порядок прогона относительно `npm run build` значения не имеет: тесты
+исключены из сборки (`exclude` в `backend/tsconfig.json`), а
+`backend/vitest.config.ts` сужает `include` до `src/**`. `verify.ps1` гоняет
+только фронтовый набор.
 
 Ядро фронтового набора — контрольные числа реального расчёта ОЛ3487 (задача §2):
 

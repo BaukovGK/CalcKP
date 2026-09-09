@@ -18,10 +18,21 @@
  * не сводится к формуле (унификация парка, запас под будущий приток, наличие
  * на складе), поэтому решение остаётся за инженером, а функция даёт цифры.
  *
- * ЗАПАС ПО НАПОРУ. По умолчанию достаточно, чтобы кривая давала напор не
- * меньше требуемого. Реальные проекты берут запас: в эталонном ОЛ3487 при
- * запасе 0 подошёл бы `VSL.100.37` (0,34 м над требуемым), а в проекте стоит
- * `VSL.100.55` (3,99 м). Требуемый минимум задаётся `minHeadMarginM`.
+ * ЗАПАС ПО НАПОРУ — ОКНО 0,5…2,0 м (требование завода). Это НЕ проектный
+ * резерв: он уже заложен в требуемый напор, который приходит из опросного
+ * листа. Окно закрывает другое — паспортная кривая есть обещание
+ * производителя, а реальный насос может его не выдержать: износ рабочего
+ * колеса, допуски изготовления, отличие фактических условий от стендовых.
+ * Поэтому рабочую точку не ставят вплотную к кривой.
+ *
+ * Границы работают по-разному:
+ *  - {@link HEAD_MARGIN_MIN_M} — ЖЁСТКАЯ отсечка. Насос, у которого кривая
+ *    едва дотягивает до требуемого напора, в подбор не попадает: на объекте
+ *    он до этой точки может и не дойти;
+ *  - {@link HEAD_MARGIN_MAX_M} — граница ПРЕДПОЧТЕНИЯ. Запас сверх неё уже
+ *    ничего не страхует и означает просто более крупную машину. Такие модели
+ *    остаются кандидатами (иначе выбор мог бы оказаться пустым), но уступают
+ *    попавшим в окно и помечаются `withinPreferredBand: false`.
  *
  * ПОЧЕМУ НЕ ПРЯМОУГОЛЬНИК. Раньше отбор шёл по рамке `Qmin…Qmax × 0…Hmax`, и
  * она систематически врала в обе стороны: принимала насос, который на своей
@@ -60,8 +71,30 @@
 
 import { interpolateCurve, type CurvePoint, type DutyPoint } from './pump-curve'
 
-/** Ниже этого запаса по напору рабочая точка считается «впритык», м. */
-export const HEAD_MARGIN_TIGHT_M = 0.5
+/**
+ * Минимальный запас по напору над требуемым, м (требование завода).
+ *
+ * Жёсткая отсечка. Страхует не рост притока (тот учтён в самом требуемом
+ * напоре), а несовпадение реального насоса с паспортом: износ колеса, допуски
+ * изготовления, отличие условий от стендовых.
+ */
+export const HEAD_MARGIN_MIN_M = 0.5
+
+/**
+ * Верхняя граница желаемого запаса, м (требование завода).
+ * Не отсечка, а предпочтение: запас сверх неё уже ничего не страхует и
+ * означает просто более крупную машину. Если в окно не попал никто — лучше
+ * предложить избыточную, чем ничего.
+ */
+export const HEAD_MARGIN_MAX_M = 2.0
+
+/** Настройка отбора; значения по умолчанию — заводское окно запаса. */
+export interface PumpSelectionOptions {
+  /** Жёсткий минимум запаса по напору, м. */
+  minHeadMarginM?: number
+  /** Верхняя граница предпочтительного запаса, м. */
+  maxHeadMarginM?: number
+}
 
 export interface PumpCatalogEntry {
   /** Марка/модель насоса. */
@@ -171,6 +204,12 @@ export interface PumpCandidate {
   headMarginM: number | null
   /** Подобран по кривой (`true`) или по грубой рамке диапазонов (`false`). */
   byCurve: boolean
+  /**
+   * Запас попал в желаемое окно. `false` — насос избыточен по напору:
+   * он работает, но крупнее необходимого, а запас сверх окна уже ничего
+   * не страхует.
+   */
+  withinPreferredBand: boolean
 }
 
 export interface PumpSelectionResult {
@@ -186,11 +225,26 @@ export interface PumpSelectionResult {
   flowPerPumpM3h: number
   /** Требуемый напор, м — повторён для наглядности рабочей точки. */
   requiredHeadM: number
+  /** Окно запаса по напору, применённое при отборе, м. */
+  headMarginBandM: { min: number; max: number }
   /**
-   * Остальные подходящие модели, по убыванию КПД в рабочей точке.
-   * Первым элементом {@link name} НЕ дублируется.
+   * Все подходящие модели в порядке предпочтения, ВКЛЮЧАЯ выбранную первым
+   * элементом. Именно этот список показывается инженеру для выбора вручную.
+   */
+  candidates: PumpCandidate[]
+  /**
+   * Остальные подходящие модели — {@link candidates} без первой.
+   * Оставлено для краткого показа «ещё подходят: …».
    */
   alternatives: PumpCandidate[]
+  /**
+   * Модели, которые до требуемого напора дотягивают, но не набирают
+   * минимального запаса. По умолчанию не предлагаются — на объекте такой насос
+   * до расчётной точки может и не дойти. Отдаются отдельным списком осознанно:
+   * реальные проекты такие насосы ставят (ДУДС24и — ровно на кривой), и
+   * инженер должен видеть, что именно отсечено и почему.
+   */
+  belowMargin: PumpCandidate[]
   warnings: PumpSelectionWarning[]
 }
 
@@ -210,16 +264,17 @@ export interface PumpSelectionResult {
  * @param workingPumps Количество рабочих насосов (не считая резервных), шт.
  *   По умолчанию 1 (весь приток — на один насос, как было до этого параметра).
  * @param pumps Каталог насосов (по умолчанию {@link DEFAULT_PUMPS}).
- * @param minHeadMarginM Требуемый запас по напору над `headM`, м. По умолчанию
- *   0 — достаточно, чтобы кривая дотягивала до требуемого напора.
+ * @param options Окно запаса по напору; по умолчанию заводское 0,5…2,0 м.
  */
 export function selectPump(
   flowM3h: number,
   headM: number,
   workingPumps = 1,
   pumps: readonly PumpCatalogEntry[] = DEFAULT_PUMPS,
-  minHeadMarginM = 0,
+  options: PumpSelectionOptions = {},
 ): PumpSelectionResult {
+  const minHeadMarginM = options.minHeadMarginM ?? HEAD_MARGIN_MIN_M
+  const maxHeadMarginM = options.maxHeadMarginM ?? HEAD_MARGIN_MAX_M
   if (!(flowM3h > 0)) {
     throw new Error('flowM3h (общий приток, м³/ч) обязателен и должен быть > 0.')
   }
@@ -233,9 +288,11 @@ export function selectPump(
   const warnings: PumpSelectionWarning[] = []
   const flowPerPumpM3h = flowM3h / workingPumps
   const fmt = (v: number) => Number(v.toFixed(2)).toLocaleString('ru-RU')
+  const headMarginBandM = { min: minHeadMarginM, max: maxHeadMarginM }
   const empty = (): PumpSelectionResult => ({
     name: null, pump: null, duty: null, headMarginM: null,
-    flowPerPumpM3h, requiredHeadM: headM, alternatives: [], warnings,
+    flowPerPumpM3h, requiredHeadM: headM, headMarginBandM,
+    candidates: [], alternatives: [], belowMargin: [], warnings,
   })
 
   // Рабочее окно по расходу — общий фильтр: и с кривой, и без неё модель
@@ -252,6 +309,9 @@ export function selectPump(
   }
 
   const candidates: PumpCandidate[] = []
+  /** Дотягивают до напора, но не набирают минимального запаса. */
+  const belowMargin: PumpCandidate[] = []
+  /** Не дают требуемого напора вовсе. */
   const tooLow: Array<{ name: string; h: number }> = []
   let withoutCurve = 0
 
@@ -261,22 +321,55 @@ export function selectPump(
       // Расход внутри рабочего окна, но вне точек кривой — данных нет,
       // выдумывать напор экстраполяцией нельзя.
       if (!duty) continue
-      if (duty.h < headM + minHeadMarginM) {
+      const headMarginM = duty.h - headM
+      if (duty.h < headM) {
         tooLow.push({ name: pump.name, h: duty.h })
         continue
       }
-      candidates.push({ name: pump.name, pump, duty, headMarginM: duty.h - headM, byCurve: true })
+      if (headMarginM < minHeadMarginM) {
+        belowMargin.push({
+          name: pump.name, pump, duty, headMarginM,
+          byCurve: true, withinPreferredBand: false,
+        })
+        continue
+      }
+      candidates.push({
+        name: pump.name,
+        pump,
+        duty,
+        headMarginM,
+        byCurve: true,
+        withinPreferredBand: headMarginM <= maxHeadMarginM,
+      })
       continue
     }
 
     // Кривой нет — остаётся прежняя грубая рамка.
     withoutCurve++
     if (headM >= pump.headMinM && headM <= pump.headMaxM) {
-      candidates.push({ name: pump.name, pump, duty: null, headMarginM: null, byCurve: false })
+      candidates.push({
+        name: pump.name, pump, duty: null, headMarginM: null,
+        byCurve: false, withinPreferredBand: false,
+      })
     }
   }
 
+  belowMargin.sort((a, b) => (b.headMarginM ?? 0) - (a.headMarginM ?? 0))
+
   if (candidates.length === 0) {
+    // Кто-то дотягивает до напора, но всем не хватает запаса — это другой
+    // случай, чем «никто не тянет», и лечится он иначе.
+    if (belowMargin.length > 0) {
+      const near = belowMargin[0]!
+      warnings.push({
+        code: 'ONLY_BELOW_MARGIN',
+        message:
+          `Требуемый напор ${fmt(headM)} м модели дают, но ни одна не набирает минимального запаса ` +
+          `${fmt(minHeadMarginM)} м: ближайшая — ${near.name} (${fmt(near.duty!.h)} м, запас ` +
+          `${fmt(near.headMarginM!)} м). Выберите её осознанно либо пересмотрите напор.`,
+      })
+      return { ...empty(), belowMargin }
+    }
     warnings.push({
       code: 'NO_HEAD_MATCH',
       message: tooLow.length
@@ -292,11 +385,13 @@ export function selectPump(
     return empty()
   }
 
-  // Наименьший достаточный: сначала по мощности на валу в рабочей точке,
-  // при равной — по КПД. Модели без кривой уходят в конец: их рабочая точка
-  // неизвестна, и ставить их впереди проверенных по кривой нельзя.
+  // Порядок предпочтения:
+  //  1. проверенные по кривой — впереди тех, у кого кривой нет;
+  //  2. попавшие в желаемое окно запаса — впереди избыточных по напору;
+  //  3. наименьший достаточный: меньше мощность на валу, при равной — больше КПД.
   candidates.sort((a, b) => {
     if (a.byCurve !== b.byCurve) return a.byCurve ? -1 : 1
+    if (a.withinPreferredBand !== b.withinPreferredBand) return a.withinPreferredBand ? -1 : 1
     if (a.duty && b.duty) {
       if (Math.abs(a.duty.p2 - b.duty.p2) > 1e-6) return a.duty.p2 - b.duty.p2
       return b.duty.eff - a.duty.eff
@@ -320,12 +415,22 @@ export function selectPump(
       message: `${withoutCurve} модель(ей) с подходящим расходом проверены только по диапазонам: паспортной кривой для них нет.`,
     })
   }
-  if (best.duty && best.headMarginM != null && best.headMarginM < HEAD_MARGIN_TIGHT_M) {
+  if (best.byCurve && !best.withinPreferredBand && best.headMarginM != null) {
     warnings.push({
-      code: 'TIGHT_HEAD_MARGIN',
+      code: 'MARGIN_ABOVE_BAND',
       message:
-        `Запас по напору всего ${fmt(best.headMarginM)} м (кривая даёт ${fmt(best.duty.h)} м при требуемых ${fmt(headM)} м) — ` +
-        'рабочая точка у самого края характеристики.',
+        `Запас по напору ${fmt(best.headMarginM)} м выше желаемых ${fmt(maxHeadMarginM)} м: в окно ` +
+        `${fmt(minHeadMarginM)}…${fmt(maxHeadMarginM)} м не попала ни одна модель, взята ближайшая. ` +
+        'Насос избыточен по напору.',
+    })
+  }
+  if (belowMargin.length > 0) {
+    const near = belowMargin[0]!
+    warnings.push({
+      code: 'REJECTED_BY_MARGIN',
+      message:
+        `${belowMargin.length} модель(ей) отсечено по минимальному запасу ${fmt(minHeadMarginM)} м — ` +
+        `ближайшая ${near.name} (запас ${fmt(near.headMarginM!)} м). Они доступны для выбора вручную.`,
     })
   }
 
@@ -336,7 +441,10 @@ export function selectPump(
     headMarginM: best.headMarginM,
     flowPerPumpM3h,
     requiredHeadM: headM,
+    headMarginBandM,
+    candidates,
     alternatives: candidates.slice(1),
+    belowMargin,
     warnings,
   }
 }

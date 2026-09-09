@@ -222,7 +222,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
-const form = ref<EmkSurveyForm>({ ...makeDefaultEmkSurvey(), ...(props.initial ?? {}) })
+const form = ref<EmkSurveyForm>({ ...makeDefaultEmkSurvey(), ...props.initial })
 const s = useEmkSurvey(form)
 
 const isEdit = computed(() => Boolean(props.estimateId))

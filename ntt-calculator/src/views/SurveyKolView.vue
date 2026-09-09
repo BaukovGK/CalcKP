@@ -216,7 +216,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
-const form = ref<KolSurveyForm>({ ...makeDefaultKolSurvey(), ...(props.initial ?? {}) })
+const form = ref<KolSurveyForm>({ ...makeDefaultKolSurvey(), ...props.initial })
 const s = useKolSurvey(form)
 
 const isEdit = computed(() => Boolean(props.estimateId))

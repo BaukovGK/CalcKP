@@ -72,8 +72,12 @@ async function onSubmit() {
   try {
     await auth.login(form.email, form.password)
     router.push('/')
-  } catch (e: any) {
-    error.value = e.message || 'Не удалось выполнить вход'
+  } catch (e) {
+    // Сюда приходит и ошибка сети, и ответ бэкенда — сообщение берём из того,
+    // что действительно есть, а не приводим к any.
+    const fromServer = (e as { response?: { data?: { message?: string } } }).response?.data?.message
+    error.value = fromServer ?? (e instanceof Error ? e.message : '') ?? ''
+    if (!error.value) error.value = 'Не удалось выполнить вход'
   } finally {
     loading.value = false
   }

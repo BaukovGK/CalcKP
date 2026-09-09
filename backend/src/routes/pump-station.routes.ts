@@ -94,8 +94,12 @@ const pumpSelectionSchema = z.object({
   flowM3h: z.number().positive(),
   headM: z.number().positive(),
   workingPumps: z.number().int().positive().optional(),
-  /** Требуемый запас по напору над `headM`, м. */
+  /**
+   * Окно запаса по напору, м. По умолчанию заводское 0,5…2,0: страхует не рост
+   * притока (он уже в `headM`), а несовпадение реального насоса с паспортом.
+   */
   minHeadMarginM: z.number().min(0).max(100).optional(),
+  maxHeadMarginM: z.number().min(0).max(100).optional(),
 })
 
 /**
@@ -111,11 +115,11 @@ const pumpSelectionSchema = z.object({
  */
 pumpStationRouter.post('/select-pump', async (req, res, next) => {
   try {
-    const { flowM3h, headM, workingPumps, minHeadMarginM } = pumpSelectionSchema.parse(req.body)
+    const { flowM3h, headM, workingPumps, minHeadMarginM, maxHeadMarginM } = pumpSelectionSchema.parse(req.body)
     const rows = await prisma.pump.findMany({
       include: { curve: { orderBy: { idx: 'asc' }, select: { q: true, h: true, p2: true, p1: true, eff: true } } },
     })
-    res.json(selectPump(flowM3h, headM, workingPumps, rows, minHeadMarginM))
+    res.json(selectPump(flowM3h, headM, workingPumps, rows, { minHeadMarginM, maxHeadMarginM }))
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })

@@ -30,7 +30,10 @@ function result(name: string | null, flowPerPumpM3h = 45) {
     headMarginM: name ? 0.34 : null,
     flowPerPumpM3h,
     requiredHeadM: 12.9,
+    headMarginBandM: { min: 0.5, max: 2 },
+    candidates: [],
     alternatives: [],
+    belowMargin: [],
     warnings: [],
   }
 }
@@ -136,6 +139,62 @@ describe('usePumpSelection', () => {
     await settle()
 
     expect(p.pumpExplain.value).toContain('кривой у модели нет')
+  })
+
+  it('отдаёт список для выбора: подходящие и отсечённые по запасу отдельно', async () => {
+    const fitting = [
+      { name: 'Vandjord VSL.150.75.4.5.0D', pump: null, byCurve: true, withinPreferredBand: true, headMarginM: 0.63, duty: { q: 45, h: 13.53, p2: 4.04, p1: 5.1, eff: 30.5 } },
+      { name: 'Vandjord VSL.100.55.4.5.0D', pump: null, byCurve: true, withinPreferredBand: false, headMarginM: 3.99, duty: { q: 45, h: 16.89, p2: 3.26, p1: 4.1, eff: 42.8 } },
+    ]
+    const belowMargin = [
+      { name: 'Vandjord VSL.100.37.4.5.0D', pump: null, byCurve: true, withinPreferredBand: false, headMarginM: 0.34, duty: { q: 45, h: 13.24, p2: 2.39, p1: 3.1, eff: 47.9 } },
+    ]
+    selectPump.mockResolvedValue({
+      ...result('Vandjord VSL.150.75.4.5.0D'),
+      headMarginBandM: { min: 0.5, max: 2 },
+      candidates: fitting,
+      alternatives: fitting.slice(1),
+      belowMargin,
+    })
+    const form = makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2' })
+    const p = usePumpSelection(form)
+    await settle()
+
+    expect(p.choices.value.fitting.map((c) => c.name)).toEqual([
+      'Vandjord VSL.150.75.4.5.0D',
+      'Vandjord VSL.100.55.4.5.0D',
+    ])
+    // Отсечённые по запасу не прячутся: их ставят в реальных проектах.
+    expect(p.choices.value.belowMargin.map((c) => c.name)).toEqual(['Vandjord VSL.100.37.4.5.0D'])
+    expect(p.marginBand.value).toEqual({ min: 0.5, max: 2 })
+  })
+
+  it('подпись модели в списке показывает, чем модели различаются', async () => {
+    const p = usePumpSelection(makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2' }))
+    await settle()
+
+    const label = p.optionLabel({
+      name: 'Vandjord VSL.100.55.4.5.0D', pump: null as never, byCurve: true,
+      withinPreferredBand: false, headMarginM: 3.99,
+      duty: { q: 45, h: 16.89, p2: 3.26, p1: 4.1, eff: 42.8 },
+    })
+
+    expect(label).toBe('Vandjord VSL.100.55.4.5.0D — 3,26 кВт · КПД 42,8% · напор 16,89 м (запас 3,99 м)')
+  })
+
+  it('выбор модели вручную и возврат к подобранной', async () => {
+    const form = makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2' })
+    const p = usePumpSelection(form)
+    await settle()
+
+    p.choose('Vandjord VSL.100.55.4.5.0D')
+    expect(form.value.marka).toBe('Vandjord VSL.100.55.4.5.0D')
+    expect(p.pumpModel.value).toBe('Vandjord VSL.100.55.4.5.0D')
+    expect(p.pumpModelOverridden.value).toBe(true)
+
+    p.resetToCalculated()
+    expect(form.value.marka).toBe('')
+    expect(p.pumpModel.value).toBe(p.pumpModelCalc.value)
   })
 
   it('объясняет, почему подходящего насоса нет', async () => {
