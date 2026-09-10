@@ -322,6 +322,12 @@ defineEmits<{ 'update:deviceType': [DeviceType] }>()
 
 const router = useRouter()
 const form = ref<EmkSurveyForm>({ ...makeDefaultEmkSurvey(), ...props.initial })
+// Разбор числовых полей. Объявлен до useSurveySync намеренно: watch
+// вычисляет нагрузку (surveyPayload → num) сразу при создании, и объявленная
+// ниже константа давала ReferenceError. Ошибка глоталась, а watch запоминал
+// только поля «Общих» — правки DN, объёма и тумблеров не сохранялись, пока
+// не тронешь заказчика или заявку.
+const num = (v: string) => tryEvalExpr(v)
 
 // Корзина и дробилка — два тумблера над одним полем модели (см. grinderValue).
 const hasBasket = computed({
@@ -404,8 +410,6 @@ const pipeCostHint = computed(() => {
 const fmtInt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
 const fmt = (n: number | null, d = 2) =>
   n == null ? '—' : n.toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d })
-
-const num = (v: string) => tryEvalExpr(v)
 
 const steps = computed(() => [
   { n: 1, title: 'Общие', done: form.value.zakazchik.trim() !== '' },
