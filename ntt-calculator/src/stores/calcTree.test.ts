@@ -464,3 +464,55 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(body.form).toBeUndefined()
   })
 })
+
+describe('стор calcTree: цена трубы шахты ёмкости', () => {
+  /** Параметры ОЛ ёмкости в той форме, в которой их шлёт SurveyEmkView. */
+  const emk = (over: Record<string, unknown> = {}) => ({
+    dn: 2000, volumeM3: 50, placement: 'вертикальное', installation: 'подземная',
+    tankType: 'Накопительная', pnSurvey: 0.1, hasShaft: true, shaftDiameterMm: 1200,
+    inletDn: 150, inletCount: 1, outletDn: 150, outletCount: 1,
+    hasPumps: false, pumpsWorking: 0, pumpsReserve: 0, hasBasket: false,
+    insulationEnabled: false, insulationDepthMm: 0, pipePriceRub: null, servicePipePriceRub: null,
+    ...over,
+  })
+
+  function emkEstimate() {
+    const est = savedEstimate()
+    est.deviceType = 'EMK'
+    delete (est.surveyData as Record<string, unknown>).tree
+    Object.assign(est.surveyData, { surveyRev: 1, treeSurveyRev: 0, form: { servicePipePrice: '' }, emk: emk() })
+    return est
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  it('цена из поля ОЛ ложится на трубу шахты, а правка в расчёте возвращается в поле', async () => {
+    const est = emkEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return Promise.resolve(JSON.parse(JSON.stringify(est)))
+    })
+    const store = useCalcTreeStore()
+
+    await store.applySurvey('e1', {
+      form: { servicePipePrice: '21000' }, emk: emk({ servicePipePriceRub: 21_000 }), surveyRev: 2,
+    })
+    const shaft = store.rows.find((r) => r.priceBinding === 'servicePipePrice')!
+    expect(shaft.name).toContain('1200')
+    expect(shaft.priceManual).toBe(21_000)
+
+    store.setPriceManual(shaft.id, 23_500)
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[patchSurvey.mock.calls.length - 1] as [string, { form: Record<string, unknown>; emk: Record<string, unknown> }]
+    expect(body.form.servicePipePrice).toBe('23500')
+    expect(body.emk.servicePipePriceRub).toBe(23_500)
+    // Цена трубы корпуса не тронута: у неё своё поле.
+    expect(body.form.pipePrice).toBeUndefined()
+  })
+})

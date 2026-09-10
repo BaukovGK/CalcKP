@@ -111,6 +111,11 @@
           <label v-if="form.hasNeck" class="fld fld--3"><span>h горловины, мм <b class="req">*</b></span>
             <input v-model="form.neckH" class="num" />
           </label>
+          <!-- Цена трубы горловины — своя, не корпуса: диаметр другой. -->
+          <label v-if="form.hasNeck" class="fld fld--3"><span>Цена трубы, ₽/м.п.</span>
+            <input v-model="form.servicePipePrice" class="num" placeholder="договорная" :class="{ 'is-missing': !form.servicePipePrice }"
+              title="Без цены строка трубы горловины в расчёте «красная» и КП не выпустить" />
+          </label>
         </div>
         <div class="ol-grid">
           <ToggleYesNo v-model="form.hasLadder" stacked class="fld--3" label="Лестница" />
@@ -473,6 +478,7 @@ function surveyPayload() {
       hasNeck: form.value.hasNeck,
       neckHeightMm: num(form.value.neckH) ?? 0,
       neckDiameterMm: num(form.value.neckD) ?? 0,
+      servicePipePriceRub: num(form.value.servicePipePrice),
       inletDn: num(form.value.podvDn) ?? 0,
       inletCount: num(form.value.podvKol) ?? 0,
       outletDn: num(form.value.otvDn) ?? 0,

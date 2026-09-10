@@ -119,6 +119,12 @@
           <label v-if="form.hasShaft" class="fld fld--3"><span>h шахты, мм</span>
             <input v-model="form.shaftH" class="num" :placeholder="String(s.geo.value.shaftHeightMm)" />
           </label>
+          <!-- Цена трубы шахты — своя, не корпуса: диаметр другой. Связана с
+               ценой строки трубы шахты в расчёте, как цена трубы корпуса. -->
+          <label v-if="form.hasShaft" class="fld fld--3"><span>Цена трубы, ₽/м.п.</span>
+            <input v-model="form.servicePipePrice" class="num" placeholder="договорная" :class="{ 'is-missing': !form.servicePipePrice }"
+              title="Без цены строка трубы шахты в расчёте «красная» и КП не выпустить" />
+          </label>
         </div>
         <div class="ol-grid">
           <ToggleYesNo v-model="form.hasLadder" stacked class="fld--3" label="Лестница" />
@@ -494,6 +500,7 @@ function surveyPayload() {
       hasShaft: form.value.hasShaft,
       shaftDiameterMm: num(form.value.shaftD),
       shaftHeightMm: num(form.value.shaftH),
+      servicePipePriceRub: num(form.value.servicePipePrice),
       inletDn: num(form.value.podvDn) ?? 0,
       inletCount: num(form.value.podvKol) ?? 0,
       outletDn: num(form.value.otvDn) ?? 0,

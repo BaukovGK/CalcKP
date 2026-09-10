@@ -70,6 +70,11 @@ export interface EmkSurveyForm extends SurveyCommonForm {
   tiGlubina: string
   /** Цена трубы корпуса, ₽/м.п. — связана с ценой строки трубы в расчёте. */
   pipePrice: string
+  /**
+   * Цена трубы шахты (ЕМК) или горловины (КОЛ), ₽/м.п. — своя: диаметр у
+   * них свой. Связана с ценой строки этой трубы в расчёте.
+   */
+  servicePipePrice: string
 }
 
 export function makeDefaultEmkSurvey(): EmkSurveyForm {
@@ -121,6 +126,7 @@ export function makeDefaultEmkSurvey(): EmkSurveyForm {
     insulation: false,
     tiGlubina: '',
     pipePrice: '',
+    servicePipePrice: '',
   }
 }
 
@@ -167,6 +173,11 @@ export interface KolSurveyForm extends SurveyCommonForm {
   tiGlubina: string
   /** Цена трубы корпуса, ₽/м.п. — связана с ценой строки трубы в расчёте. */
   pipePrice: string
+  /**
+   * Цена трубы шахты (ЕМК) или горловины (КОЛ), ₽/м.п. — своя: диаметр у
+   * них свой. Связана с ценой строки этой трубы в расчёте.
+   */
+  servicePipePrice: string
 }
 
 export function makeDefaultKolSurvey(): KolSurveyForm {
@@ -212,6 +223,7 @@ export function makeDefaultKolSurvey(): KolSurveyForm {
     insulation: false,
     tiGlubina: '',
     pipePrice: '',
+    servicePipePrice: '',
   }
 }
 

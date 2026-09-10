@@ -248,6 +248,16 @@ describe('материализация ЕМК', () => {
     expect(shaftPipe!.priceCatalog).toBeNull()
   })
 
+  it('цена трубы шахты — своё поле ОЛ, связанное со строкой', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, pipePriceRub: 48_000, servicePipePriceRub: 21_000 }))
+    const shaftPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1200-'))!
+    const corpusPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000-'))!
+    expect(shaftPipe.priceBinding).toBe('servicePipePrice')
+    expect(shaftPipe.priceManual).toBe(21_000)
+    // Цена корпуса на трубу шахты не переезжает: диаметры разные.
+    expect(corpusPipe.priceManual).toBe(48_000)
+  })
+
   it('DN шахты из ОЛ попадает в наименование трубы', () => {
     const rows = flattenRows(materializeEmk(ctx, { ...EMK, shaftDiameterMm: 1500, shaftHeightMm: 3000 }))
     const shaftPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1500-'))
@@ -338,6 +348,13 @@ describe('КОЛ: геометрия с горловиной', () => {
 })
 
 describe('материализация КОЛ', () => {
+  it('цена трубы горловины — своё поле ОЛ, связанное со строкой', () => {
+    const rows = flattenRows(materializeKol(ctx, { ...KOL, servicePipePriceRub: 15_500 }))
+    const neckPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1000-'))!
+    expect(neckPipe.priceBinding).toBe('servicePipePrice')
+    expect(neckPipe.priceManual).toBe(15_500)
+  })
+
   it('дробилка колодца — в корпусе и по флагу ОЛ (лист, строки 67–75)', () => {
     const on = materializeKol(ctx, { ...KOL, hasGrinder: true, inletTrayDepthMm: 2000 })
     const grinder = on.sections.find((s) => s.code === '1')!.components.find((c) => c.title.startsWith('Дробилка'))!

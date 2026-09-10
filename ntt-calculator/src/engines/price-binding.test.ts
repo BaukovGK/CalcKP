@@ -43,6 +43,33 @@ describe('boundPricesFromTree', () => {
     expect(boundPricesFromTree(tree)).toEqual({ pipePrice: '21313', pumpPrice: '12312' })
   })
 
+  it('цена трубы шахты или горловины — своё поле, не цена корпуса', () => {
+    const shaft = (extra: Record<string, unknown> = {}) => ({ ...pipeRow(9_800), name: 'Труба СК/НПС-К 1200-0,1-5000', ...extra })
+    const marked = {
+      sections: [{
+        code: '1',
+        components: [
+          { nodeCode: 'A1', rows: [pipeRow(21_313, { priceBinding: 'pipePrice' })] },
+          { nodeCode: 'A8', rows: [shaft({ priceBinding: 'servicePipePrice' })] },
+        ],
+      }],
+    }
+    expect(boundPricesFromTree(marked)).toEqual({ pipePrice: '21313', servicePipePrice: '9800' })
+
+    // Дерево до появления связи: трубу шахты узнаём по узлу A8, и труба
+    // корпуса остаётся первой строкой раздела.
+    const legacy = {
+      sections: [{
+        code: '1',
+        components: [
+          { nodeCode: 'A1', rows: [pipeRow(21_313)] },
+          { nodeCode: 'A8', rows: [shaft()] },
+        ],
+      }],
+    }
+    expect(boundPricesFromTree(legacy)).toEqual({ pipePrice: '21313', servicePipePrice: '9800' })
+  })
+
   it('пустые цены в поля не переносит', () => {
     const tree = { sections: [{ code: '1', components: [{ rows: [pipeRow(null)] }] }] }
     expect(boundPricesFromTree(tree)).toEqual({})

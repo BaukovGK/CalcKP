@@ -122,6 +122,8 @@ export interface EmkSurveyParams {
 
   /** Цена трубы корпуса, ₽/м.п. — поле ОЛ, связано с ценой строки трубы. */
   pipePriceRub?: number | null
+  /** Цена трубы шахты, ₽/м.п. — своя: у шахты свой диаметр. */
+  servicePipePriceRub?: number | null
 
   tirage?: number
 }
@@ -156,6 +158,8 @@ export interface KolSurveyParams {
 
   /** Цена трубы корпуса, ₽/м.п. — поле ОЛ, связано с ценой строки трубы. */
   pipePriceRub?: number | null
+  /** Цена трубы горловины, ₽/м.п. — своя: у горловины свой диаметр. */
+  servicePipePriceRub?: number | null
 
   tirage?: number
 }
@@ -373,7 +377,7 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
       rows: [
         // Шахта — та же стеклопластиковая труба, что и корпус, но своего
         // диаметра: в расчёт идёт отрезок длиной в высоту шахты. Марка взята
-        // от корпуса — PN и SN шахты завод не называл (Вопросы_заводу §7).
+        // от корпуса — PN и SN шахты завод не называл (Вопросы_заводу §6г).
         {
           ...makeRow(ctx, {
             kind: 'МАТЕРИАЛ',
@@ -384,8 +388,11 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
             bucket: 'Труба, муфта',
             note: `Ø${geo.shaftDiameterMm} × h${geo.shaftHeightMm} мм = ${(geo.shaftHeightMm / 1000).toLocaleString('ru-RU')} пм · марка по корпусу`,
           }),
-          // Цена трубы договорная — как у корпуса (Механика §5.2).
+          // Цена трубы договорная — как у корпуса (Механика §5.2), но своя:
+          // у шахты другой диаметр. Её дают полем ОЛ «Цена трубы» у шахты.
           priceCatalog: null,
+          priceBinding: 'servicePipePrice',
+          priceManual: boundPrice(s.servicePipePriceRub),
         },
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
@@ -510,7 +517,7 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
       rows: [
         // Горловина — отрезок стеклопластиковой трубы своего диаметра, как и
         // шахта ёмкости. Марка по корпусу: PN и SN горловины завод не называл
-        // (Вопросы_заводу §7).
+        // (Вопросы_заводу §6г).
         {
           ...makeRow(ctx, {
             kind: 'МАТЕРИАЛ',
@@ -521,7 +528,10 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
             bucket: 'Труба, муфта',
             note: `Ø${s.neckDiameterMm} × h${s.neckHeightMm} мм = ${(s.neckHeightMm / 1000).toLocaleString('ru-RU')} пм · марка по корпусу`,
           }),
+          // Цена договорная и своя — поле ОЛ «Цена трубы» у горловины.
           priceCatalog: null,
+          priceBinding: 'servicePipePrice',
+          priceManual: boundPrice(s.servicePipePriceRub),
         },
         ...operationWithFot(ctx, {
           category: 'Собственное производство',

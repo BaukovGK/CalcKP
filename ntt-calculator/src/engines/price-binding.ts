@@ -1,8 +1,8 @@
 /**
  * Связь цен строк расчёта с полями опросного листа (EngineRow.priceBinding).
  *
- * Цена трубы корпуса (₽/м.п.) и цена насоса (₽/шт) вводятся в ОЛ и живут в
- * расчёте ручной ценой своих строк. Модуль знает, какое поле ОЛ стоит за какой
+ * Цена трубы корпуса (₽/м.п.), цена насоса (₽/шт) и цена трубы шахты или
+ * горловины (₽/м.п.) вводятся в ОЛ и живут в расчёте ручной ценой своих строк. Модуль знает, какое поле ОЛ стоит за какой
  * связью и как найти связанные строки в сохранённом дереве, — в том числе в
  * деревьях, построенных до появления связи.
  */
@@ -13,10 +13,14 @@ import type { PriceBinding } from './types'
  * Поля ОЛ по связям: имя в форме, где цена лежит строкой ввода, и в
  * параметрах материализации ЕМК/КОЛ, где она числом.
  */
-export const PRICE_BINDING_FIELDS: Record<PriceBinding, { formField: 'pipePrice' | 'pumpPrice'; paramsField: string }> = {
+export const PRICE_BINDING_FIELDS: Record<PriceBinding, { formField: BoundFormField; paramsField: string }> = {
   pipePrice: { formField: 'pipePrice', paramsField: 'pipePriceRub' },
   pumpPrice: { formField: 'pumpPrice', paramsField: 'pumpPriceRub' },
+  servicePipePrice: { formField: 'servicePipePrice', paramsField: 'servicePipePriceRub' },
 }
+
+/** Поля формы ОЛ, в которых живут связанные цены. */
+export type BoundFormField = 'pipePrice' | 'pumpPrice' | 'servicePipePrice'
 
 /** Строка сохранённого дерева — в том объёме, который здесь нужен. */
 interface SavedRow {
@@ -29,7 +33,7 @@ interface SavedRow {
 }
 
 interface SavedTree {
-  sections?: Array<{ code?: string; components?: Array<{ rows?: SavedRow[] }> }>
+  sections?: Array<{ code?: string; components?: Array<{ nodeCode?: string; rows?: SavedRow[] }> }>
 }
 
 /**
@@ -38,7 +42,8 @@ interface SavedTree {
  *
  * Приметы старых деревьев: труба корпуса — первая строка ЕИ «м» корзины
  * «Труба, муфта» в разделе 1 (материализуется раньше сегментов и шахты);
- * насос — строка категории «Насосы, АТМ».
+ * труба шахты или горловины — такая же строка узла A8; насос — строка
+ * категории «Насосы, АТМ».
  */
 function findBound(tree: SavedTree, binding: PriceBinding): SavedRow | null {
   const sections = tree.sections ?? []
@@ -47,12 +52,13 @@ function findBound(tree: SavedTree, binding: PriceBinding): SavedRow | null {
   const marked = rows.find((r) => r.priceBinding === binding)
   if (marked) return marked
 
+  const isPipe = (r: SavedRow) => r.bucket === 'Труба, муфта' && r.unit === 'м'
+  const korpus = sections.find((s) => s.code === '1')?.components ?? []
   if (binding === 'pipePrice') {
-    const first = sections.find((s) => s.code === '1')
-    const pipe = (first?.components ?? [])
-      .flatMap((c) => c.rows ?? [])
-      .find((r) => r.bucket === 'Труба, муфта' && r.unit === 'м')
-    return pipe ?? null
+    return korpus.flatMap((c) => c.rows ?? []).find(isPipe) ?? null
+  }
+  if (binding === 'servicePipePrice') {
+    return korpus.filter((c) => c.nodeCode === 'A8').flatMap((c) => c.rows ?? []).find(isPipe) ?? null
   }
   return rows.find((r) => r.category === 'Насосы, АТМ') ?? null
 }
@@ -66,9 +72,9 @@ function findBound(tree: SavedTree, binding: PriceBinding): SavedRow | null {
  *
  * @returns значения полей формы строкой; поля без цены в дереве не возвращаются
  */
-export function boundPricesFromTree(tree: unknown): Partial<Record<'pipePrice' | 'pumpPrice', string>> {
+export function boundPricesFromTree(tree: unknown): Partial<Record<BoundFormField, string>> {
   if (!tree || typeof tree !== 'object') return {}
-  const out: Partial<Record<'pipePrice' | 'pumpPrice', string>> = {}
+  const out: Partial<Record<BoundFormField, string>> = {}
   for (const binding of Object.keys(PRICE_BINDING_FIELDS) as PriceBinding[]) {
     const price = findBound(tree as SavedTree, binding)?.priceManual
     if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
