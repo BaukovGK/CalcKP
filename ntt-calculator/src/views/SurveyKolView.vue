@@ -139,6 +139,11 @@
 
       <section id="sec-5" class="ol-sec">
         <h2 class="ol-h">5 · Патрубки</h2>
+          <!-- Ряд DN патрубков — подсказки при вводе; вне ряда поле заменит
+               значение ближайшим (onDnChange). -->
+          <datalist id="nozzle-dn">
+            <option v-for="d in NOZZLE_DN_SERIES" :key="d" :value="d" />
+          </datalist>
         <div class="ol-cards">
           <div class="ol-card">
             <div class="ol-card-h">Подводящий</div>
@@ -146,7 +151,7 @@
               <label class="fld"><span>Материал</span>
                 <select v-model="form.podvMat"><option v-for="m in MATERIALS" :key="m">{{ m }}</option></select>
               </label>
-              <label class="fld"><span>DN, мм</span><input v-model="form.podvDn" class="num" /></label>
+              <label class="fld"><span>DN, мм</span><input v-model.lazy="form.podvDn" class="num" list="nozzle-dn" @change="onDnChange('podvDn', $event)" /></label>
               <label class="fld"><span>Кол-во</span><input v-model="form.podvKol" class="num" /></label>
               <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.podvLotok" class="num" /></label>
             </div>
@@ -157,7 +162,7 @@
               <label class="fld"><span>Материал</span>
                 <select v-model="form.otvMat"><option v-for="m in MATERIALS" :key="m">{{ m }}</option></select>
               </label>
-              <label class="fld"><span>DN, мм</span><input v-model="form.otvDn" class="num" /></label>
+              <label class="fld"><span>DN, мм</span><input v-model.lazy="form.otvDn" class="num" list="nozzle-dn" @change="onDnChange('otvDn', $event)" /></label>
               <label class="fld"><span>Кол-во</span><input v-model="form.otvKol" class="num" /></label>
               <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.otvLotok" class="num" /></label>
             </div>
@@ -255,6 +260,7 @@ import { toast } from '@/composables/useToast'
 import { useSurveySync } from '@/composables/useSurveySync'
 import { useCalcTreeStore } from '@/stores/calcTree'
 import { tryEvalExpr } from '@/engines/expr'
+import { acceptDn, NOZZLE_DN_SERIES } from '@/engines/dn-series'
 import { makeDefaultKolSurvey, resinGrade, type KolSurveyForm } from '@/types/survey-emk-kol'
 import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon } from '@/types/survey'
 import { estimatesApi } from '@/api/estimates'
@@ -411,6 +417,26 @@ function onScroll() {
     if (node && node.getBoundingClientRect().top - top <= 24) best = sec.n
   }
   activeSec.value = best
+}
+
+
+/** Поля DN патрубков этого листа. */
+type DnKey = 'podvDn' | 'otvDn'
+
+/**
+ * DN патрубка — только из ряда мастер-книги (engines/dn-series.ts): введённое
+ * вне ряда при уходе с поля заменяется ближайшим, и об этом говорится.
+ * Модель поля обновляется по change (v-model.lazy), поэтому промежуточное
+ * «2850» до замены не успевает уйти в расчёт.
+ */
+function onDnChange(key: DnKey, e: Event) {
+  const raw = (e.target as HTMLInputElement).value
+  const accepted = acceptDn(raw)
+  if (!accepted) return
+  if (accepted.text !== raw.trim()) form.value[key] = accepted.text
+  if (accepted.from != null) {
+    toast(`DN ${accepted.from.toLocaleString('ru-RU')} нет в ряду патрубков — принят ${accepted.text}`)
+  }
 }
 
 function resetPipe() {
