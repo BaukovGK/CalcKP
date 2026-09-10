@@ -12,6 +12,36 @@ import { snByDepth } from './survey-kns'
 export type Placement = 'горизонтальное' | 'вертикальное'
 export type Installation = 'наземная' | 'подземная' | 'в помещении'
 
+/**
+ * Днища горизонтальной ёмкости — два, по одному на каждом конце трубы.
+ *
+ * - `эллиптические` — формованные днища (эталон: «старый способ»): масса
+ *   каждого — из матрицы «Формовка эллиптических днищ» листа «Для
+ *   расчетов», к трубе крепятся ламинированием по Мс (Dу трубы, минимальное
+ *   PN);
+ * - `цилиндрические` — концы из той же трубы с косыми и центральным стыками
+ *   (эталон: «новый способ», строки 13 и 25 листа «Калькулятор ЕМК»): трубы
+ *   больше на 1,5 м, ламинация стыков — `(Мс/0,707 + Мс/2)·2`.
+ */
+export type EmkBottomType = 'эллиптические' | 'цилиндрические'
+
+/**
+ * Прибавка трубы на цилиндрические днища, мм: эталон `I13 = (L + 1,5)·линий`
+ * при «новом способе». В листе константа, от DN не зависит.
+ */
+export const CYLINDRICAL_BOTTOMS_PIPE_MM = 1500
+
+/**
+ * Строка матриц листа «Для расчетов» по длине, мм — «До 3 м», «До 3,5» …
+ * «До 7 м», «До 12». Правило шапки «Калькулятора ЕМК» (H4):
+ * `IF(L<3000; 3000; IF(L>7000; 12000; CEILING(L; 500)))`.
+ */
+export function matrixLengthBucketMm(lengthMm: number): number {
+  if (lengthMm < 3000) return 3000
+  if (lengthMm > 7000) return 12000
+  return Math.ceil(lengthMm / 500) * 500
+}
+
 /** Тип ёмкости (§5.6 ТЗ). «Химстойкая» меняет материал корпуса. */
 export type TankType =
   | 'Накопительная'
@@ -95,6 +125,12 @@ export interface EmkGeometryInput {
   dn: number
   placement: Placement
   installation: Installation
+  /**
+   * Длина трубы, введённая в ОЛ вручную, мм; пусто — из объёма. Раньше ОЛ
+   * показывал её, а расчёт считал по объёму: труба в листе и в расчёте
+   * расходились.
+   */
+  pipeLengthMm?: number | null
   hasShaft: boolean
   /** Диаметр шахты из ОЛ; пусто — типовой DN 1200. */
   shaftDiameterMm?: number | null
@@ -121,7 +157,8 @@ export function computeEmkGeometry(input: EmkGeometryInput): EmkGeometry {
   const { volumeM3, dn, placement, installation, hasShaft } = input
 
   const horizontal = placement === 'горизонтальное'
-  const pipeLengthMm = tankPipeLengthMm(volumeM3, dn)
+  const manual = input.pipeLengthMm
+  const pipeLengthMm = typeof manual === 'number' && manual > 0 ? manual : tankPipeLengthMm(volumeM3, dn)
   const overallLengthMm = pipeLengthMm == null ? null : pipeLengthMm + (horizontal ? ELLIPTIC_EXTRA_MM : 0)
   const shaft = serviceShaft(installation, hasShaft, {
     diameterMm: input.shaftDiameterMm,

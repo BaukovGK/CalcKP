@@ -7,7 +7,7 @@
  * «прототип диктует внешний вид, данные из ТЗ» (План §4.1-ter).
  */
 
-import type { Installation, Placement, TankType } from '@/engines/survey-emk-kol'
+import type { EmkBottomType, Installation, Placement, TankType } from '@/engines/survey-emk-kol'
 import type { PipeMaterial, SurveyCommonForm } from './survey'
 
 /** Тип колодца (ТЗ §5.6: «тип колодца, в т.ч. гаситель»). */
@@ -30,6 +30,12 @@ export interface EmkSurveyForm extends SurveyCommonForm {
   dn: string
   placement: Placement
   installation: Installation
+  /**
+   * Днища горизонтальной ёмкости — два, по одному на каждом конце трубы:
+   * эллиптические (формованные) или цилиндрические (из той же трубы).
+   * У вертикальной не показывается: там плоское дно и перекрытие.
+   */
+  bottomType: EmkBottomType
   /** Ручной override длины трубы: пусто — расчётная из объёма. */
   lengthManual: string
   pnManual: string
@@ -92,6 +98,7 @@ export function makeDefaultEmkSurvey(): EmkSurveyForm {
     dn: '2000',
     placement: 'вертикальное',
     installation: 'подземная',
+    bottomType: 'эллиптические',
     lengthManual: '',
     pnManual: '',
     snManual: '',

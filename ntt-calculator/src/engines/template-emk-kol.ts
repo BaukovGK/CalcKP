@@ -49,8 +49,11 @@ import {
 import {
   computeEmkGeometry,
   computeKolGeometry,
+  CYLINDRICAL_BOTTOMS_PIPE_MM,
+  matrixLengthBucketMm,
   neckCoverMassKg,
   tankMaterial,
+  type EmkBottomType,
   type Installation,
   type Placement,
   type TankType,
@@ -91,6 +94,15 @@ export interface EmkSurveyParams {
   installation: Installation
   tankType: TankType
   pnSurvey: number
+  /**
+   * SN из ОЛ — расчётная по габаритам либо заданная вручную. Пусто — у
+   * расчётов, собранных до появления поля: тогда по габаритам.
+   */
+  sn?: number | null
+  /** Длина трубы, введённая в ОЛ вручную, мм; пусто — из объёма. */
+  pipeLengthMm?: number | null
+  /** Днища горизонтальной ёмкости; пусто — эллиптические. */
+  bottomType?: EmkBottomType
 
   hasShaft: boolean
   /**
@@ -134,6 +146,8 @@ export interface KolSurveyParams {
   workingDepthMm: number
   elevationMm: number
   pnSurvey: number
+  /** SN из ОЛ — расчётная по глубине либо заданная вручную; пусто — по глубине. */
+  sn?: number | null
 
   hasNeck: boolean
   neckHeightMm: number
@@ -257,8 +271,12 @@ function buildInsulation(
 function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
   const geo = computeEmkGeometry(s)
   const lengthMm = geo.pipeLengthMm ?? 0
-  const lengthM = lengthMm / 1000
-  const sn = geo.sn ?? 2500
+  const horizontal = s.placement === 'горизонтальное'
+  const bottomType: EmkBottomType = s.bottomType ?? 'эллиптические'
+  // Цилиндрические днища — из той же трубы: её больше на 1,5 м (эталон I13).
+  const extraMm = horizontal && bottomType === 'цилиндрические' ? CYLINDRICAL_BOTTOMS_PIPE_MM : 0
+  const lengthM = (lengthMm + extraMm) / 1000
+  const sn = s.sn ?? geo.sn ?? 2500
 
   const pnPipe = pnForWeightLookup(s.pnSurvey, s.dn, sn)
   const kgPerM = ctx.pipeWeightOf(s.dn, pnPipe, sn)
@@ -283,9 +301,9 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
             qtyCalc: lengthM,
             bucket: 'Труба, муфта',
             note:
-              kgPerM == null
-                ? `Вес трубы не найден (DN ${s.dn}; PN ${pnPipe}; SN ${sn}) · длина = CEILING(4V/(π·D²)) = ${lengthMm} мм`
-                : `${kgPerM} кг/пм · длина из объёма ${s.volumeM3} м³ = ${lengthMm} мм`,
+              (kgPerM == null ? `Вес трубы не найден (DN ${s.dn}; PN ${pnPipe}; SN ${sn})` : `${kgPerM} кг/пм`) +
+              (s.pipeLengthMm ? ` · длина из ОЛ ${lengthMm} мм` : ` · длина из объёма ${s.volumeM3} м³ = ${lengthMm} мм`) +
+              (extraMm ? ` + ${(extraMm / 1000).toLocaleString('ru-RU')} м на цилиндрические днища из той же трубы` : ''),
           }),
           // Цена трубы договорная — как у КНС (Механика §5.2): её дают полем
           // ОЛ «Цена трубы, ₽/м.п.», связанным с этой строкой.
@@ -304,38 +322,60 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
     },
   ]
 
-  // A2/A3 — днище: у горизонтальной ёмкости эллиптические, у вертикальной плоское.
-  if (s.placement === 'горизонтальное') {
+  // A2/A3 — днища. У горизонтальной ёмкости их два, по одному на каждом
+  // конце трубы: эллиптические либо цилиндрические (из той же трубы) — по
+  // переключателю ОЛ. У вертикальной — плоское.
+  //
+  // Мс — масса формованных слоёв на стыке по Dу трубы при минимальном PN
+  // (jointLayerMassOf): днища крепятся к трубе ламинированием по ней.
+  const noJoint = `Мс для Dу ${s.dn} нет в справочнике — введите вручную`
+  if (horizontal && bottomType === 'эллиптические') {
+    const bucket = matrixLengthBucketMm(lengthMm)
+    const cell = ctx.ellipticBottomOf?.(s.dn, lengthMm) ?? null
     components.push({
       id: nextId('c'),
       nodeCode: 'A3',
       title: 'Днища эллиптические ×2',
       enabled: true,
       rows: [
-        // Масса эллиптических днищ — из матрицы «Для расчетов» (f(Dн, L));
-        // сюда она не выведена, поэтому количество вводится вручную, а не
-        // выдумывается.
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Механическая формовка эллиптических днищ',
           unit: 'кг',
-          qtyCalc: null,
+          qtyCalc: cell ? 2 * cell.massKg : null,
           fotK: FOT_K_MECH,
-          note: `Масса — из матрицы «Для расчетов» f(Dн ${s.dn}, L ${lengthMm}) · объём 2 днищ ${geo.ellipticVolumeM3?.toFixed(2)} м³ · введите вручную`,
+          note: cell
+            ? `ƒ 2 днища × ${cell.massKg} кг — матрица «Формовка эллиптических днищ»: DN ${s.dn}, L до ${(bucket / 1000).toLocaleString('ru-RU')} м` +
+              (cell.thicknessMm != null ? `, толщина ${cell.thicknessMm} мм` : '')
+            : `DN ${s.dn} нет в матрице «Формовка эллиптических днищ» — массу 2 днищ введите вручную`,
         }),
-        // Вопреки прежнему комментарию, ламинация стыков от массы днищ НЕ
-        // зависит: эталон считает её от Мс — массы формованных слоёв на стыке
-        // из справочника f(Dу). Строка 25 листа «Калькулятор ЕМК».
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ламинирование эллиптического днища к корпусу',
+          unit: 'кг',
+          qtyCalc: jointMass == null ? null : 2 * jointMass,
+          fotK: FOT_K_LAMIN,
+          note: jointMass == null ? noJoint : `ƒ 2 стыка × Мс ${jointMass} кг (Dу ${s.dn}, минимальное PN)`,
+        }),
+      ],
+    })
+  } else if (horizontal) {
+    components.push({
+      id: nextId('c'),
+      nodeCode: 'A3',
+      title: 'Днища цилиндрические ×2',
+      enabled: true,
+      rows: [
+        // Концы из той же трубы: косые и центральный стыки на каждом. Сама
+        // труба на днища — +1,5 м в строке обечайки (эталон I13), здесь —
+        // только ламинация стыков. Строка 25 листа «Калькулятор ЕМК».
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ламинация днища (косые и центральный стыки)',
           unit: 'кг',
           qtyCalc: jointMass == null ? null : bottomJointLaminationKg(jointMass),
           fotK: FOT_K_LAMIN,
-          note:
-            jointMass == null
-              ? `Мс для Dу ${s.dn} нет в справочнике — введите вручную`
-              : `ƒ (Мс/0,707 + Мс/2)·2, Мс ${jointMass} кг`,
+          note: jointMass == null ? noJoint : `ƒ (Мс/0,707 + Мс/2)·2, Мс ${jointMass} кг (Dу ${s.dn}, минимальное PN)`,
         }),
       ],
     })
@@ -439,7 +479,7 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
 function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcComponent[] {
   const geo = computeKolGeometry(s)
   const lengthM = geo.totalDepthMm / 1000
-  const sn = geo.sn ?? 2500
+  const sn = s.sn ?? geo.sn ?? 2500
 
   const pnPipe = pnForWeightLookup(s.pnSurvey, s.dn, sn)
   const kgPerM = ctx.pipeWeightOf(s.dn, pnPipe, sn)

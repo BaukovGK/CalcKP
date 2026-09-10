@@ -73,6 +73,28 @@ describe.each(VIEWS)('ОЛ $label: автосохранение', ({ view, key, 
     expect(all.filter((m) => /initialization|ReferenceError|Unhandled error/i.test(m))).toEqual([])
   })
 
+  it('ручной SN уходит в расчёт — тот, что показан в листе', async () => {
+    const wrapper = mount(view as Component, {
+      props: {
+        estimateId: 'e1',
+        surveyRev: 1,
+        totalRub: 1_000_000,
+        savedSurvey: null,
+        initial: { zakazchik: 'Заказчик', obekt: 'Объект', pipeManual: true, snManual: '10000' },
+        deviceType,
+        deviceTypes: [{ value: deviceType, label: deviceType }],
+        canChangeType: false,
+      },
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    const label = wrapper.findAll('label.fld').find((l) => l.text().startsWith(dnLabel))!
+    await label.find('select').setValue('2500')
+    await vi.advanceTimersByTimeAsync(SYNC_DELAY_MS + 10)
+
+    const [, payload] = applySurvey.mock.calls[0] as [string, Record<string, Record<string, unknown>>]
+    expect(payload[key]!.sn).toBe(10000)
+  })
+
   it('правка DN сохраняется, не трогая «Общих»', async () => {
     const wrapper = mountView()
     const label = wrapper.findAll('label.fld').find((l) => l.text().startsWith(dnLabel))!
@@ -84,5 +106,65 @@ describe.each(VIEWS)('ОЛ $label: автосохранение', ({ view, key, 
     const [id, payload] = applySurvey.mock.calls[0] as [string, Record<string, Record<string, unknown>>]
     expect(id).toBe('e1')
     expect(payload[key]!.dn).toBe(2500)
+  })
+})
+
+describe('ОЛ ЕМК: днища', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    applySurvey.mockReset()
+    applySurvey.mockResolvedValue(1_000_000)
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function mountEmk(initial: Record<string, unknown>) {
+    return mount(SurveyEmkView as Component, {
+      props: {
+        estimateId: 'e1',
+        surveyRev: 1,
+        totalRub: 1_000_000,
+        savedSurvey: null,
+        initial: { zakazchik: 'Заказчик', obekt: 'Объект', ...initial },
+        deviceType: 'EMK',
+        deviceTypes: [{ value: 'EMK', label: 'EMK' }],
+        canChangeType: false,
+      },
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+  }
+
+  const toggle = (w: ReturnType<typeof mountEmk>) => w.findAll('.tg').find((t) => t.text().startsWith('Днища'))
+
+  it('тумблер есть только у горизонтальной — у вертикальной дно плоское', () => {
+    expect(toggle(mountEmk({ placement: 'вертикальное' }))).toBeUndefined()
+    expect(toggle(mountEmk({ placement: 'горизонтальное' }))).toBeDefined()
+  })
+
+  it('выбор днищ уходит в расчёт', async () => {
+    const wrapper = mountEmk({ placement: 'горизонтальное' })
+    const cyl = toggle(wrapper)!.findAll('button').find((b) => b.text() === 'цилиндрические')!
+    await cyl.trigger('click')
+    await vi.advanceTimersByTimeAsync(SYNC_DELAY_MS + 10)
+
+    const [, payload] = applySurvey.mock.calls[0] as [string, Record<string, Record<string, unknown>>]
+    expect(payload.emk!.bottomType).toBe('цилиндрические')
+  })
+
+  // Ручная длина — пока отмечено «изменить вручную»: снятая галочка
+  // возвращает расчётную, а не считает по спрятанному полю.
+  it('ручная длина трубы уходит в расчёт, пока отмечено «изменить вручную»', async () => {
+    const wrapper = mountEmk({ placement: 'горизонтальное', pipeManual: true, lengthManual: '5000' })
+    const label = wrapper.findAll('label.fld').find((l) => l.text().startsWith('DN корпуса'))!
+    await label.find('select').setValue('2500')
+    await vi.advanceTimersByTimeAsync(SYNC_DELAY_MS + 10)
+    const [, first] = applySurvey.mock.calls[0] as [string, Record<string, Record<string, unknown>>]
+    expect(first.emk!.pipeLengthMm).toBe(5000)
+
+    await wrapper.find('.ol-chk input').setValue(false)
+    await vi.advanceTimersByTimeAsync(SYNC_DELAY_MS + 10)
+    const [, second] = applySurvey.mock.calls[1] as [string, Record<string, Record<string, unknown>>]
+    expect(second.emk!.pipeLengthMm).toBeNull()
   })
 })

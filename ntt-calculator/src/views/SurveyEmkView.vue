@@ -71,6 +71,20 @@
               <option>наземная</option><option>подземная</option><option>в помещении</option>
             </select>
           </label>
+          <!-- Днища — у горизонтальной ёмкости: два, по концам трубы. У
+               вертикальной их нет — там плоское дно и перекрытие (эталон
+               D25/D27 листа «Калькулятор ЕМК»). -->
+          <template v-if="form.placement === 'горизонтальное'">
+            <ToggleYesNo
+              v-model="ellipticBottoms"
+              stacked
+              class="fld--6"
+              label="Днища — 2 шт., по концам трубы"
+              on-label="эллиптические"
+              off-label="цилиндрические"
+            />
+            <div class="ol-pick ol-pick--bottom fld--6">{{ bottomsHint }}</div>
+          </template>
         </div>
 
         <!-- Труба: длина считается из объёма, PN/SN — производные -->
@@ -340,6 +354,17 @@ const hasGrinder = computed({
 })
 const s = useEmkSurvey(form)
 
+/** Тумблер днищ: левая половина — эллиптические, правая — цилиндрические. */
+const ellipticBottoms = computed({
+  get: () => form.value.bottomType !== 'цилиндрические',
+  set: (v: boolean) => { form.value.bottomType = v ? 'эллиптические' : 'цилиндрические' },
+})
+const bottomsHint = computed(() =>
+  ellipticBottoms.value
+    ? 'Формованные: масса — из матрицы «Формовка эллиптических днищ» по DN и длине. К трубе — ламинирование по Мс (DN трубы, минимальное PN).'
+    : 'Из той же трубы: +1,5 м трубы на оба днища, ламинация косых и центрального стыков по Мс (DN трубы, минимальное PN).',
+)
+
 const isEdit = computed(() => Boolean(props.estimateId))
 
 const backTarget = computed(() =>
@@ -401,10 +426,11 @@ const pipePriceValue = computed(() => tryEvalExpr(form.value.pipePrice))
 const pipeCostHint = computed(() => {
   const price = pipePriceValue.value
   if (price == null) return 'без цены строка трубы в расчёте «красная» и КП не выпустить'
-  const lengthMm = s.lengthMm.value
+  const lengthMm = s.pipeTotalMm.value
   if (lengthMm == null || lengthMm <= 0) return 'длина трубы станет известна после габаритов'
   const lengthM = lengthMm / 1000
-  return `× ${lengthM.toLocaleString('ru-RU')} м = ${fmtInt(price * lengthM)} ₽ на корпус`
+  const what = s.bottomsFromPipe.value ? 'на корпус и днища' : 'на корпус'
+  return `× ${lengthM.toLocaleString('ru-RU')} м = ${fmtInt(price * lengthM)} ₽ ${what}`
 })
 
 const fmtInt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
@@ -424,8 +450,23 @@ const liveValues = computed(() => {
   const g = s.geo.value
   return [
     { k: 'Объём', v: `${form.value.volumeM3} м³`, f: 'ƒ вход опросного листа' },
-    { k: 'Длина трубы', v: s.lengthMm.value != null ? `${fmtInt(s.lengthMm.value)} мм` : '—', f: 'ƒ CEILING(4V/(π·(D/1000)²)·1000; 100)' },
-    { k: 'Днища', v: g.ellipticVolumeM3 != null ? `эллипт. ${fmt(g.ellipticVolumeM3)} м³` : 'плоское', f: 'ƒ объём 2 днищ = π·(DN/1000)³/15 (горизонтальная)' },
+    {
+      k: 'Длина трубы',
+      v: s.lengthMm.value != null ? `${fmtInt(s.lengthMm.value)} мм` : '—',
+      f: s.lengthOverridden.value ? 'ручной ввод' : 'ƒ CEILING(4V/(π·(D/1000)²)·1000; 100)',
+    },
+    {
+      k: 'Днища',
+      v:
+        form.value.placement !== 'горизонтальное'
+          ? 'плоское'
+          : s.bottomsFromPipe.value
+            ? 'цилиндр. ×2, +1,5 м трубы'
+            : `эллипт. ×2 · ${fmt(g.ellipticVolumeM3)} м³`,
+      f: s.bottomsFromPipe.value
+        ? 'ƒ из той же трубы: (L + 1,5 м), ламинация (Мс/0,707 + Мс/2)·2'
+        : 'ƒ объём 2 днищ = π·(DN/1000)³/15; масса — матрица f(DN, L)',
+    },
     { k: 'Возвышение', v: `${g.elevationMm} мм`, f: 'ƒ подземная — 300 мм, иначе 0' },
     { k: 'Шахта', v: g.shaftDiameterMm ? `Ø${g.shaftDiameterMm} h${g.shaftHeightMm}` : 'нет', f: 'ƒ по флагу ОЛ' },
   ]
@@ -433,6 +474,15 @@ const liveValues = computed(() => {
 
 const blocks = computed(() => [
   { t: 'Корпус ёмкости', on: true },
+  {
+    t:
+      form.value.placement !== 'горизонтальное'
+        ? 'Днище плоское'
+        : s.bottomsFromPipe.value
+          ? 'Днища цилиндрические ×2'
+          : 'Днища эллиптические ×2',
+    on: true,
+  },
   { t: 'Шахта обслуживания', on: form.value.hasShaft },
   { t: 'Теплоизоляция', on: form.value.insulation },
   { t: 'Корзина', on: form.value.grinder === 'корзина' || form.value.grinder === 'обе' },
@@ -500,7 +550,12 @@ function surveyPayload() {
       placement: form.value.placement,
       installation: form.value.installation,
       tankType: form.value.tankType,
+      bottomType: form.value.bottomType,
       pnSurvey: s.pn.value,
+      // Труба — та, что в листе: ручные длина и SN раньше сюда не доходили,
+      // и расчёт считал другую трубу, чем показывал ОЛ.
+      sn: s.sn.value,
+      pipeLengthMm: s.manualLengthMm.value,
       hasShaft: form.value.hasShaft,
       shaftDiameterMm: num(form.value.shaftD),
       shaftHeightMm: num(form.value.shaftH),

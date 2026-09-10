@@ -15,6 +15,7 @@ import {
   computeEmkGeometry,
   computeKolGeometry,
   ellipticBottomsVolumeM3,
+  matrixLengthBucketMm,
   neckCoverMassKg,
   tankMaterial,
   tankPipeLengthMm,
@@ -27,6 +28,7 @@ const PRICES: Record<string, number> = {
   'Собственное производство|Механическая формовка плоского днища|кг': 214.4,
   'Собственное производство|Механическая формовка эллиптических днищ|кг': 214.4,
   'Собственное производство|Ламинация днища (косые и центральный стыки)|кг': 214.4,
+  'Собственное производство|Ламинирование эллиптического днища к корпусу|кг': 310.2,
   'Собственное производство|Ламинирование дна к фальшполу|кг': 310.2,
   'Собственное производство|Формовка гильз|кг': 310.2,
   'Собственное производство|Прорезка отверстия под гильзу входящего патрубка|чел. ч': 1207.8,
@@ -66,11 +68,24 @@ const NORMS: NozzleNorm[] = [
 /** Мс при PN 4 — значение, которое эталон берёт для стыков (лист «Для расчетов»). */
 const JOINT_LAYER_MASS: Record<number, number> = { 3000: 112, 2000: 35 }
 
+/**
+ * Ячейки матрицы «Формовка эллиптических днищ» (лист «Для расчетов»,
+ * prisma/seed-data/engineering.json): одно днище, кг, и его толщина, мм.
+ */
+const ELLIPTIC: Record<string, { massKg: number; thicknessMm: number }> = {
+  '2000|5000': { massKg: 133, thicknessMm: 16 },
+  '2000|6500': { massKg: 149, thicknessMm: 17 },
+  '2000|12000': { massKg: 196, thicknessMm: 23 },
+  '3000|12000': { massKg: 586, thicknessMm: 34 },
+}
+
 const ctx: MaterializeContext = {
   priceOf: (c, n, u) => PRICES[`${c}|${n}|${u}`] ?? null,
   pipeWeightOf: (dn, pn, sn) => WEIGHTS[`${dn}|${pn}|${sn}`] ?? null,
   nozzleNormOf: (dn) => NORMS.find((n) => n.dn === dn) ?? null,
   jointLayerMassOf: (d) => JOINT_LAYER_MASS[d] ?? null,
+  // Строка длины — тем же правилом, что в сторе (stores/calcTree.ts).
+  ellipticBottomOf: (dn, lengthMm) => ELLIPTIC[`${dn}|${matrixLengthBucketMm(lengthMm)}`] ?? null,
   priceListVersion: 1,
 }
 
@@ -105,6 +120,26 @@ describe('ЕМК: габариты из объёма (Реверс §5)', () => 
     const h = computeEmkGeometry({ volumeM3: 50, dn: 2000, placement: 'горизонтальное', installation: 'подземная', hasShaft: false })
     const v = computeEmkGeometry({ volumeM3: 50, dn: 2000, placement: 'вертикальное', installation: 'подземная', hasShaft: false })
     expect(h.overallLengthMm! - v.overallLengthMm!).toBe(1500)
+  })
+
+  it('ручная длина из ОЛ перекрывает расчётную — и габарит, и SN следуют за ней', () => {
+    const g = computeEmkGeometry({ volumeM3: 50, dn: 2000, placement: 'горизонтальное', installation: 'подземная', pipeLengthMm: 5000, hasShaft: false })
+    expect(g.pipeLengthMm).toBe(5000)
+    expect(g.overallLengthMm).toBe(6500)
+    const calc = computeEmkGeometry({ volumeM3: 50, dn: 2000, placement: 'горизонтальное', installation: 'подземная', hasShaft: false })
+    expect(g.sn).not.toBe(calc.sn)
+  })
+
+  // Строки матриц «Для расчетов» — «До 3 м», «До 3,5» … «До 7 м», «До 12»
+  // (эталон H4 листа «Калькулятор ЕМК»).
+  it('строка матрицы по длине: до 3 м, шагом 0,5 м до 7 м, дальше «До 12»', () => {
+    expect(matrixLengthBucketMm(1800)).toBe(3000)
+    expect(matrixLengthBucketMm(3000)).toBe(3000)
+    expect(matrixLengthBucketMm(3001)).toBe(3500)
+    expect(matrixLengthBucketMm(6400)).toBe(6500)
+    expect(matrixLengthBucketMm(7000)).toBe(7000)
+    expect(matrixLengthBucketMm(7001)).toBe(12000)
+    expect(matrixLengthBucketMm(16000)).toBe(12000)
   })
 
   it('объём двух эллиптических днищ = π·(DN/1000)³/15', () => {
@@ -198,31 +233,102 @@ describe('материализация ЕМК', () => {
     expect(rows.some((r) => r.name === 'Механическая формовка плоского днища')).toBe(false)
   })
 
-  // Масса эллиптических днищ берётся из матрицы f(Dн, L), которая сюда не
-  // выведена: молча подставить число хуже пустой строки.
-  it('масса эллиптических днищ НЕ выдумывается', () => {
+  // Днищ два — по одному на каждом конце трубы. Масса одного — ячейка
+  // матрицы «Формовка эллиптических днищ» по DN и строке длины: V 50 м³ при
+  // DN 2000 даёт трубу 16 000 мм → строка «До 12».
+  it('эллиптические: масса 2 днищ — из матрицы по DN и длине трубы', () => {
     const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное' }))
     const row = rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
-    expect(row.qtyCalc).toBeNull()
-    expect(row.note).toContain('матрицы «Для расчетов»')
+    expect(row.qtyCalc).toBe(2 * 196)
+    expect(row.note).toContain('2 днища × 196 кг')
+    expect(row.note).toContain('L до 12 м')
+    expect(row.note).toContain('толщина 23 мм')
   })
 
-  // Ламинация стыков, в отличие от массы днищ, считается: эталон берёт её от
-  // Мс — массы формованных слоёв на стыке, а не от массы днищ, как раньше
-  // утверждал комментарий в шаблоне (лист «Калькулятор ЕМК», строка 25).
-  it('ламинация днища = (Мс/0,707 + Мс/2)·2', () => {
-    const rows = flattenRows(materializeEmk(ctx, { ...EMK, dn: 3000, placement: 'горизонтальное' }))
+  it('эллиптические: строка матрицы следует за длиной — V 20 м³ → 6 400 мм → «До 6,5 м»', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, volumeM3: 20, placement: 'горизонтальное' }))
+    const row = rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
+    expect(row.qtyCalc).toBe(2 * 149)
+  })
+
+  // Крепление к трубе — ламинирование по Мс: масса формованных слоёв стыка
+  // по DN трубы при минимальном PN. Стыков два — по днищу на каждом конце.
+  it('эллиптические: ламинирование к корпусу = 2 × Мс (DN трубы, минимальное PN)', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное' }))
+    const row = rows.find((r) => r.name === 'Ламинирование эллиптического днища к корпусу')!
+    expect(row.qtyCalc).toBe(2 * 35)
+    expect(row.note).toContain('Мс 35 кг')
+    // Цена — из прайса, ФОТ — спутником с коэффициентом ламинирования.
+    expect(row.priceCatalog).toBe(310.2)
+    const fot = rows[rows.indexOf(row) + 1]!
+    expect(fot.name).toBe('ФОТ')
+    expect(fot.fotK).toBe(0.56)
+  })
+
+  it('эллиптические: труба — ровно на корпус, без прибавки', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное' }))
+    expect(rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000'))!.qtyCalc).toBe(16)
+    expect(rows.some((r) => r.name === 'Ламинация днища (косые и центральный стыки)')).toBe(false)
+  })
+
+  // Матрица дискретна: DN вне её — пустое количество с подсказкой, а не
+  // интерполяция и не выдуманное число.
+  it('эллиптические: без ячейки матрицы масса не выдумывается', () => {
+    const noMatrix: MaterializeContext = { ...ctx, ellipticBottomOf: () => null }
+    const rows = flattenRows(materializeEmk(noMatrix, { ...EMK, placement: 'горизонтальное' }))
+    const row = rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
+    expect(row.qtyCalc).toBeNull()
+    expect(row.note).toContain('введите вручную')
+  })
+
+  // Цилиндрические — концы из той же трубы (эталон «новый способ»): трубы
+  // больше на 1,5 м, стыки косые и центральный, лист «Калькулятор ЕМК»,
+  // строки 13 и 25.
+  it('цилиндрические: ламинация стыков = (Мс/0,707 + Мс/2)·2', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, dn: 3000, placement: 'горизонтальное', bottomType: 'цилиндрические' }))
     const row = rows.find((r) => r.name === 'Ламинация днища (косые и центральный стыки)')!
     // Мс(3000) = 112 кг → 428,83 кг, ровно как в эталоне.
     expect(row.qtyCalc).toBeCloseTo(428.83, 2)
     expect(row.note).toContain('Мс 112 кг')
+    expect(rows.some((r) => r.name === 'Механическая формовка эллиптических днищ')).toBe(false)
+    expect(rows.some((r) => r.name === 'Ламинирование эллиптического днища к корпусу')).toBe(false)
+  })
+
+  it('цилиндрические: трубы на 1,5 м больше — днища из неё же', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное', bottomType: 'цилиндрические' }))
+    const pipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000'))!
+    expect(pipe.qtyCalc).toBe(17.5)
+    expect(pipe.note).toContain('+ 1,5 м на цилиндрические днища')
+    const tree = materializeEmk(ctx, { ...EMK, placement: 'горизонтальное', bottomType: 'цилиндрические' })
+    const titles = tree.sections.flatMap((s) => s.components.map((c) => c.title))
+    expect(titles).toContain('Днища цилиндрические ×2')
   })
 
   it('без справочника Мс ламинация просит ручной ввод, а не выдумывает число', () => {
-    const rows = flattenRows(materializeEmk(ctxNoJoint, { ...EMK, dn: 3000, placement: 'горизонтальное' }))
-    const row = rows.find((r) => r.name === 'Ламинация днища (косые и центральный стыки)')!
+    const cyl = flattenRows(materializeEmk(ctxNoJoint, { ...EMK, dn: 3000, placement: 'горизонтальное', bottomType: 'цилиндрические' }))
+    const row = cyl.find((r) => r.name === 'Ламинация днища (косые и центральный стыки)')!
     expect(row.qtyCalc).toBeNull()
     expect(row.note).toContain('введите вручную')
+    const ell = flattenRows(materializeEmk(ctxNoJoint, { ...EMK, placement: 'горизонтальное' }))
+    expect(ell.find((r) => r.name === 'Ламинирование эллиптического днища к корпусу')!.qtyCalc).toBeNull()
+  })
+
+  it('у вертикальной тумблер днищ ни на что не влияет: дно плоское, трубы — на корпус', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, bottomType: 'цилиндрические' }))
+    expect(rows.some((r) => r.name === 'Механическая формовка плоского днища')).toBe(true)
+    expect(rows.some((r) => r.name === 'Ламинация днища (косые и центральный стыки)')).toBe(false)
+    expect(rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000'))!.qtyCalc).toBe(16)
+  })
+
+  // Раньше ОЛ показывал ручные длину и SN, а расчёт считал трубу по объёму.
+  it('ручные длина трубы и SN из ОЛ доходят до расчёта', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное', pipeLengthMm: 5000, sn: 10000 }))
+    const pipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000'))!
+    expect(pipe.name).toBe('Труба СК/НПС-К 2000-0,1-10000')
+    expect(pipe.qtyCalc).toBe(5)
+    expect(pipe.note).toContain('из ОЛ')
+    // Строка матрицы днищ — по той же длине: 5 000 мм → «До 5 м».
+    expect(rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!.qtyCalc).toBe(2 * 133)
   })
 
   it('химстойкая ёмкость меняет марку трубы на СК/ВЭС', () => {
@@ -348,6 +454,11 @@ describe('КОЛ: геометрия с горловиной', () => {
 })
 
 describe('материализация КОЛ', () => {
+  it('SN из ОЛ, в т. ч. ручной, доходит до трубы корпуса', () => {
+    const rows = flattenRows(materializeKol(ctx, { ...KOL, sn: 10000 }))
+    expect(rows.some((r) => r.name === 'Труба СК/НПС-К 1500-0,1-10000')).toBe(true)
+  })
+
   it('цена трубы горловины — своё поле ОЛ, связанное со строкой', () => {
     const rows = flattenRows(materializeKol(ctx, { ...KOL, servicePipePriceRub: 15_500 }))
     const neckPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1000-'))!

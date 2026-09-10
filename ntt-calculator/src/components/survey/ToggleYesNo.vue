@@ -2,8 +2,8 @@
   <div class="tg" :class="{ 'tg--stacked': stacked }">
     <span class="tg-l">{{ label }}</span>
     <div class="tg-seg">
-      <button class="tg-b" :class="{ on: modelValue }" @click="emit('update:modelValue', true)">да</button>
-      <button class="tg-b" :class="{ on: !modelValue }" @click="emit('update:modelValue', false)">нет</button>
+      <button class="tg-b" :class="{ on: modelValue }" @click="emit('update:modelValue', true)">{{ onLabel ?? 'да' }}</button>
+      <button class="tg-b" :class="{ on: !modelValue }" @click="emit('update:modelValue', false)">{{ offLabel ?? 'нет' }}</button>
     </div>
   </div>
 </template>
@@ -20,6 +20,12 @@ defineProps<{
    * оставлен для мест, где тумблер идёт сам по себе.
    */
   stacked?: boolean
+  /**
+   * Подписи половин, если выбор не «да/нет», а из двух вариантов
+   * («эллиптические / цилиндрические»): левая — `true`, правая — `false`.
+   */
+  onLabel?: string
+  offLabel?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
 </script>

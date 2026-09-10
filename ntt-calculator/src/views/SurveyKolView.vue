@@ -480,6 +480,9 @@ function surveyPayload() {
       workingDepthMm: num(form.value.depthMm) ?? 0,
       elevationMm: num(form.value.elevationMm) ?? 0,
       pnSurvey: s.pn.value,
+      // SN — тот, что в листе, в т. ч. заданный вручную (раньше расчёт брал
+      // расчётный и считал другую трубу).
+      sn: s.sn.value,
       hasNeck: form.value.hasNeck,
       neckHeightMm: num(form.value.neckH) ?? 0,
       neckDiameterMm: num(form.value.neckD) ?? 0,

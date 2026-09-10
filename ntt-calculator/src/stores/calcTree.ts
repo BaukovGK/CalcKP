@@ -19,6 +19,7 @@ import {
   type EmkSurveyParams,
   type KolSurveyParams,
 } from '@/engines/template-emk-kol'
+import { matrixLengthBucketMm } from '@/engines/survey-emk-kol'
 import { estimatesApi, type EstimateDetail } from '@/api/estimates'
 import { refsApi } from '@/api/refs'
 import type { PriceBinding, RowResult } from '@/engines/types'
@@ -155,11 +156,18 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     // изделия безнапорные, ламинация считается минимально возможная.
     const jointIdx = jointLayerIndex(engineering.jointLayers ?? [])
 
+    // Эллиптическое днище — ячейка матрицы (DN × строка длины «До 3 м» …
+    // «До 12»). Длина приводится к строке тем же правилом, что в эталоне.
+    const bottomIdx = new Map(
+      (engineering.ellipticBottom ?? []).map((c) => [`${c.d}|${c.lengthMm}`, { massKg: c.massKg, thicknessMm: c.thicknessMm }]),
+    )
+
     ctxCache = {
       priceOf: (c, n, u) => priceIdx.get(priceKey(c, n, u)) ?? null,
       pipeWeightOf: (dn, pn, sn) => weightIdx.get(`${dn}|${pn}|${sn}`) ?? null,
       nozzleNormOf: (dn) => normIdx.get(dn) ?? null,
       jointLayerMassOf: (d) => jointIdx.get(d) ?? null,
+      ellipticBottomOf: (dn, lengthMm) => bottomIdx.get(`${dn}|${matrixLengthBucketMm(lengthMm)}`) ?? null,
       priceListVersion: priceListVersion.value,
     }
     return ctxCache

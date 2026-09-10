@@ -3,6 +3,7 @@ import { tryEvalExpr } from '@/engines/expr'
 import {
   computeEmkGeometry,
   computeKolGeometry,
+  CYLINDRICAL_BOTTOMS_PIPE_MM,
   tankMaterial,
   type Installation,
   type Placement,
@@ -23,12 +24,24 @@ const num = (s: string): number | null => tryEvalExpr(s)
 // ─── ЕМК ─────────────────────────────────────────────────────────────────────
 
 export function useEmkSurvey(form: Ref<EmkSurveyForm>) {
+  /**
+   * Длина трубы, введённая вручную, мм. Действует, пока отмечено «изменить
+   * вручную» — как PN и SN (usePipeOverride): снятая галочка возвращает
+   * расчётные, а не прячет введённое, продолжая по нему считать.
+   */
+  const manualLengthMm = computed<number | null>(() => {
+    if (!form.value.pipeManual) return null
+    const v = num(form.value.lengthManual)
+    return v != null && v > 0 ? v : null
+  })
+
   const geo = computed(() =>
     computeEmkGeometry({
       volumeM3: num(form.value.volumeM3) ?? 0,
       dn: num(form.value.dn) ?? 0,
       placement: form.value.placement as Placement,
       installation: form.value.installation as Installation,
+      pipeLengthMm: manualLengthMm.value,
       hasShaft: form.value.hasShaft,
       shaftDiameterMm: num(form.value.shaftD),
       shaftHeightMm: num(form.value.shaftH),
@@ -36,8 +49,20 @@ export function useEmkSurvey(form: Ref<EmkSurveyForm>) {
   )
 
   /** Длина трубы: ручной ввод перекрывает расчётную из объёма. */
-  const lengthMm = computed<number | null>(() => num(form.value.lengthManual) ?? geo.value.pipeLengthMm)
-  const lengthOverridden = computed(() => num(form.value.lengthManual) != null)
+  const lengthMm = computed<number | null>(() => geo.value.pipeLengthMm)
+  const lengthOverridden = computed(() => manualLengthMm.value != null)
+
+  /** Днища из трубы — только у горизонтальной и только цилиндрические. */
+  const bottomsFromPipe = computed(
+    () => form.value.placement === 'горизонтальное' && form.value.bottomType === 'цилиндрические',
+  )
+  /**
+   * Сколько трубы уходит в расчёт, мм: корпус и, у цилиндрических днищ, ещё
+   * 1,5 м на них (эталон I13). По ней считается стоимость трубы.
+   */
+  const pipeTotalMm = computed<number | null>(() =>
+    lengthMm.value == null ? null : lengthMm.value + (bottomsFromPipe.value ? CYLINDRICAL_BOTTOMS_PIPE_MM : 0),
+  )
 
   /** Габаритная длина с эллиптическими днищами (горизонтальная +1,5 м). */
   const overallMm = computed<number | null>(() =>
@@ -81,7 +106,24 @@ export function useEmkSurvey(form: Ref<EmkSurveyForm>) {
 
   const canCreate = computed(() => missingRequired.value.length === 0)
 
-  return { geo, lengthMm, lengthOverridden, overallMm, sn, snCalc, pn, material, pipeMark, explain, title, missingRequired, canCreate }
+  return {
+    geo,
+    lengthMm,
+    lengthOverridden,
+    manualLengthMm,
+    bottomsFromPipe,
+    pipeTotalMm,
+    overallMm,
+    sn,
+    snCalc,
+    pn,
+    material,
+    pipeMark,
+    explain,
+    title,
+    missingRequired,
+    canCreate,
+  }
 }
 
 // ─── КОЛ ─────────────────────────────────────────────────────────────────────

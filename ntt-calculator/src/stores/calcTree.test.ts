@@ -20,6 +20,7 @@ import { DEFAULT_MARKUP } from '@/engines/economics'
 const estimatesGet = vi.fn()
 const priceVersion = vi.fn()
 const patchSurvey = vi.fn()
+const engineering = vi.fn(() => Promise.resolve({ shell: [], ellipticBottom: [] as unknown[], nozzles: [] }))
 
 vi.mock('@/api/estimates', () => ({
   estimatesApi: {
@@ -32,7 +33,7 @@ vi.mock('@/api/refs', () => ({
   refsApi: {
     nomenclature: () => Promise.resolve({}),
     pipeWeights: () => Promise.resolve({ grp: [], pe: [] }),
-    engineering: () => Promise.resolve({ shell: [], ellipticBottom: [], nozzles: [] }),
+    engineering: () => engineering(),
     priceVersion: (...a: unknown[]) => priceVersion(...a),
   },
 }))
@@ -533,7 +534,7 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
   })
 })
 
-describe('стор calcTree: цена трубы шахты ёмкости', () => {
+describe('стор calcTree: ёмкость', () => {
   /** Параметры ОЛ ёмкости в той форме, в которой их шлёт SurveyEmkView. */
   const emk = (over: Record<string, unknown> = {}) => ({
     dn: 2000, volumeM3: 50, placement: 'вертикальное', installation: 'подземная',
@@ -582,5 +583,30 @@ describe('стор calcTree: цена трубы шахты ёмкости', () 
     expect(body.emk.servicePipePriceRub).toBe(23_500)
     // Цена трубы корпуса не тронута: у неё своё поле.
     expect(body.form.pipePrice).toBeUndefined()
+  })
+
+  // Матрица приходит ячейками (DN × строка длины «До 3 м» … «До 12»), длина
+  // трубы приводится к строке тем же правилом, что в эталоне.
+  it('масса эллиптических днищ — из матрицы справочника по строке длины трубы', async () => {
+    engineering.mockResolvedValueOnce({
+      shell: [],
+      ellipticBottom: [
+        { d: 2000, lengthMm: 7000, massKg: 154, thicknessMm: 18 },
+        { d: 2000, lengthMm: 12000, massKg: 196, thicknessMm: 23 },
+      ],
+      nozzles: [],
+    })
+    const est = emkEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return Promise.resolve(JSON.parse(JSON.stringify(est)))
+    })
+    const store = useCalcTreeStore()
+
+    // V 50 м³ при DN 2000 — труба 16 000 мм → строка «До 12».
+    await store.applySurvey('e1', { form: {}, emk: emk({ placement: 'горизонтальное' }), surveyRev: 2 })
+    const row = store.rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
+    expect(row.qtyCalc).toBe(2 * 196)
   })
 })

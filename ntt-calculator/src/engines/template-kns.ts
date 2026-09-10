@@ -278,6 +278,13 @@ export interface MaterializeContext {
    * поменяется выборка, а таблица в БД уже полная.
    */
   jointLayerMassOf?(d: number): number | null
+  /**
+   * Одно эллиптическое днище: масса, кг, и толщина, мм — матрица «Формовка
+   * эллиптических днищ» листа «Для расчетов» по DN и длине рабочей части
+   * (строки «До 3 м» … «До 12», см. matrixLengthBucketMm). `null` — ячейки
+   * нет: сетка дискретна, интерполировать массу формовки нельзя.
+   */
+  ellipticBottomOf?(dn: number, lengthMm: number): { massKg: number; thicknessMm: number | null } | null
   priceListVersion: number
 }
 
