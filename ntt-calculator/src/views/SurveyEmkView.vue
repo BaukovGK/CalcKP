@@ -26,19 +26,19 @@
         <!-- Порядок и ширины — как в КНС: сверху то, чем лист опознают
              (заявка, тип, стадия, дата), снизу — чей объект. -->
         <div class="ol-grid">
-          <label class="fld fld--3"><span>№ заявки ОЛ</span><input v-model="form.zayavka" /></label>
-          <label class="fld fld--3"><span>Тип ёмкости</span>
+          <label class="fld fld--3"><span v-hint="H.zayavka">№ заявки ОЛ</span><input v-model="form.zayavka" /></label>
+          <label class="fld fld--3"><span v-hint="H.tankType">Тип ёмкости</span>
             <select v-model="form.tankType"><option v-for="t in TANK_TYPES" :key="t">{{ t }}</option></select>
           </label>
-          <label class="fld fld--3"><span>Стадия</span>
+          <label class="fld fld--3"><span v-hint="H.stadiya">Стадия</span>
             <select v-model="form.stadiya"><option v-for="t in STAGES" :key="t">{{ t }}</option></select>
           </label>
-          <label class="fld fld--3"><span>Дата</span><input v-model="form.data" /></label>
-          <label class="fld fld--4"><span>Заказчик <b class="req">*</b></span>
+          <label class="fld fld--3"><span v-hint="H.data">Дата</span><input v-model="form.data" /></label>
+          <label class="fld fld--4"><span v-hint="H.zakazchik">Заказчик <b class="req">*</b></span>
             <input v-model="form.zakazchik" :class="{ 'is-missing': !form.zakazchik.trim() }" />
           </label>
-          <label class="fld fld--5"><span>Объект</span><input v-model="form.obekt" /></label>
-          <label class="fld fld--3"><span>Регион</span><input v-model="form.region" /></label>
+          <label class="fld fld--5"><span v-hint="H.obekt">Объект</span><input v-model="form.obekt" /></label>
+          <label class="fld fld--3"><span v-hint="H.region">Регион</span><input v-model="form.region" /></label>
         </div>
       </section>
 
@@ -57,16 +57,16 @@
       <section id="sec-3" class="ol-sec">
         <h2 class="ol-h">3 · Габариты</h2>
         <div class="ol-grid">
-          <label class="fld fld--3"><span>Объём, м³ <b class="req">*</b></span>
+          <label class="fld fld--3"><span v-hint="H.volumeM3">Объём, м³ <b class="req">*</b></span>
             <input v-model="form.volumeM3" class="num" :class="{ 'is-missing': !form.volumeM3 }" />
           </label>
-          <label class="fld fld--3"><span>DN корпуса, мм <b class="req">*</b></span>
+          <label class="fld fld--3"><span v-hint="H.dn">DN корпуса, мм <b class="req">*</b></span>
             <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
           </label>
-          <label class="fld fld--3"><span>Расположение</span>
+          <label class="fld fld--3"><span v-hint="H.placement">Расположение</span>
             <select v-model="form.placement"><option>горизонтальное</option><option>вертикальное</option></select>
           </label>
-          <label class="fld fld--3"><span>Установка</span>
+          <label class="fld fld--3"><span v-hint="H.installation">Установка</span>
             <select v-model="form.installation">
               <option>наземная</option><option>подземная</option><option>в помещении</option>
             </select>
@@ -77,19 +77,19 @@
           <template v-if="form.placement === 'горизонтальное'">
             <ToggleYesNo
               v-model="ellipticBottoms"
+              :hint="H.bottomType"
               stacked
               class="fld--6"
               label="Днища — 2 шт., по концам трубы"
               on-label="эллиптические"
               off-label="цилиндрические"
             />
-            <div class="ol-pick ol-pick--bottom fld--6">{{ bottomsHint }}</div>
           </template>
         </div>
 
         <!-- Труба: длина считается из объёма, PN/SN — производные -->
         <div class="ol-card">
-          <div class="ol-card-h">Труба корпуса <span class="f-mark" title="Длина считается из объёма; PN и SN продиктованы габаритами">ƒ</span></div>
+          <div class="ol-card-h"><span v-hint="H.pipeCard">Труба корпуса</span> <span class="f-mark">ƒ</span></div>
           <div v-if="s.pipeMark.value" class="ol-grade">{{ s.pipeMark.value }}</div>
           <div v-else class="ol-grade ol-grade--empty">— укажите объём и DN</div>
           <div v-if="s.explain.value" class="ol-explain">{{ s.explain.value }}</div>
@@ -97,23 +97,23 @@
           <!-- Цена трубы договорная, в прайсе её нет: даётся здесь и связана с
                ценой строки трубы в расчёте в обе стороны. -->
           <div class="ol-grid ol-grid--mid">
-            <label class="fld"><span>Цена трубы, ₽/м.п.</span>
+            <label class="fld"><span v-hint="H.pipePrice">Цена трубы, ₽/м.п.</span>
               <input v-model="form.pipePrice" class="num" placeholder="договорная — введите" />
             </label>
             <div class="ol-pick ol-pick--bottom" :class="{ 'ol-pick--warn': !pipePriceValue }">{{ pipeCostHint }}</div>
           </div>
 
           <label class="ol-chk">
-            <input v-model="form.pipeManual" type="checkbox" /><span>изменить вручную</span>
+            <input v-model="form.pipeManual" type="checkbox" /><span v-hint="H.pipeManual">изменить вручную</span>
           </label>
           <div v-if="form.pipeManual" class="ol-manual">
-            <label class="fld fld--3"><span>Длина трубы, мм</span>
+            <label class="fld fld--3"><span v-hint="H.lengthManual">Длина трубы, мм</span>
               <input v-model="form.lengthManual" class="num" :placeholder="String(s.geo.value.pipeLengthMm ?? '')" />
             </label>
-            <label class="fld fld--3"><span>PN, МПа</span>
+            <label class="fld fld--3"><span v-hint="H.pnManual">PN, МПа</span>
               <select v-model="form.pnManual"><option value="">расч.</option><option v-for="p in PN_LIST" :key="p">{{ p }}</option></select>
             </label>
-            <label class="fld fld--3"><span>SN, Па</span>
+            <label class="fld fld--3"><span v-hint="H.snManual">SN, Па</span>
               <select v-model="form.snManual"><option value="">расч.</option><option v-for="v in SN_LIST" :key="v">{{ v }}</option></select>
             </label>
             <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
@@ -123,27 +123,26 @@
         <!-- Признаки и зависимые от них размеры — одной сеткой: шахта и её
              диаметр с высотой читаются вместе, как DN с признаками у КНС. -->
         <div class="ol-grid ol-grid--mid">
-          <ToggleYesNo v-model="form.hasShaft" stacked class="fld--3" label="Шахта обслуживания" />
+          <ToggleYesNo v-model="form.hasShaft" :hint="H.hasShaft" stacked class="fld--3" label="Шахта обслуживания" />
           <!-- Шахта — та же стеклопластиковая труба, что корпус, но своего
                диаметра, поэтому здесь селект по ряду труб, а не свободный
                ввод. Типовая — DN 1200. -->
-          <label v-if="form.hasShaft" class="fld fld--3"><span>DN шахты, мм</span>
+          <label v-if="form.hasShaft" class="fld fld--3"><span v-hint="H.shaftD">DN шахты, мм</span>
             <select v-model="form.shaftD"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
           </label>
-          <label v-if="form.hasShaft" class="fld fld--3"><span>h шахты, мм</span>
+          <label v-if="form.hasShaft" class="fld fld--3"><span v-hint="H.shaftH">h шахты, мм</span>
             <input v-model="form.shaftH" class="num" :placeholder="String(s.geo.value.shaftHeightMm)" />
           </label>
           <!-- Цена трубы шахты — своя, не корпуса: диаметр другой. Связана с
                ценой строки трубы шахты в расчёте, как цена трубы корпуса. -->
-          <label v-if="form.hasShaft" class="fld fld--3"><span>Цена трубы, ₽/м.п.</span>
-            <input v-model="form.servicePipePrice" class="num" placeholder="договорная" :class="{ 'is-missing': !form.servicePipePrice }"
-              title="Без цены строка трубы шахты в расчёте «красная» и КП не выпустить" />
+          <label v-if="form.hasShaft" class="fld fld--3"><span v-hint="H.servicePipePrice">Цена трубы, ₽/м.п.</span>
+            <input v-model="form.servicePipePrice" class="num" placeholder="договорная" :class="{ 'is-missing': !form.servicePipePrice }" />
           </label>
         </div>
         <div class="ol-grid">
-          <ToggleYesNo v-model="form.hasLadder" stacked class="fld--3" label="Лестница" />
-          <ToggleYesNo v-model="form.insulation" stacked class="fld--3" label="Теплоизоляция" />
-          <label v-if="form.insulation" class="fld fld--3"><span>Глубина ТИ, мм</span><input v-model="form.tiGlubina" class="num" /></label>
+          <ToggleYesNo v-model="form.hasLadder" :hint="H.hasLadder" stacked class="fld--3" label="Лестница" />
+          <ToggleYesNo v-model="form.insulation" :hint="H.insulation" stacked class="fld--3" label="Теплоизоляция" />
+          <label v-if="form.insulation" class="fld fld--3"><span v-hint="H.tiGlubina">Глубина ТИ, мм</span><input v-model="form.tiGlubina" class="num" /></label>
         </div>
       </section>
 
@@ -158,14 +157,14 @@
           <div class="ol-card">
             <div class="ol-card-h">Подводящий</div>
             <div class="ol-grid">
-              <label class="fld"><span>Материал</span>
+              <label class="fld"><span v-hint="H.podvMat">Материал</span>
                 <select v-model="form.podvMat"><option v-for="m in MATERIALS" :key="m">{{ m }}</option></select>
               </label>
-              <label class="fld"><span>DN, мм</span><input v-model.lazy="form.podvDn" class="num" list="nozzle-dn" @change="onDnChange('podvDn', $event)" /></label>
-              <label class="fld"><span>Кол-во</span><input v-model="form.podvKol" class="num" /></label>
+              <label class="fld"><span v-hint="H.podvDn">DN, мм</span><input v-model.lazy="form.podvDn" class="num" list="nozzle-dn" @change="onDnChange('podvDn', $event)" /></label>
+              <label class="fld"><span v-hint="H.podvKol">Кол-во</span><input v-model="form.podvKol" class="num" /></label>
               <!-- От глубины лотка — цепь и направляющие корзины: при
                    корзине поле обязательное, как в листе завода (E51). -->
-              <label class="fld"><span>Глубина лотка, мм <b v-if="hasBasket" class="req">*</b></span>
+              <label class="fld"><span v-hint="H.podvLotok">Глубина лотка, мм <b v-if="hasBasket" class="req">*</b></span>
                 <input v-model="form.podvLotok" class="num" :class="{ 'is-missing': hasBasket && !form.podvLotok }" />
               </label>
             </div>
@@ -173,12 +172,12 @@
           <div class="ol-card">
             <div class="ol-card-h">Отводящий</div>
             <div class="ol-grid">
-              <label class="fld"><span>Материал</span>
+              <label class="fld"><span v-hint="H.otvMat">Материал</span>
                 <select v-model="form.otvMat"><option v-for="m in MATERIALS" :key="m">{{ m }}</option></select>
               </label>
-              <label class="fld"><span>DN, мм</span><input v-model.lazy="form.otvDn" class="num" list="nozzle-dn" @change="onDnChange('otvDn', $event)" /></label>
-              <label class="fld"><span>Кол-во</span><input v-model="form.otvKol" class="num" /></label>
-              <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.otvLotok" class="num" /></label>
+              <label class="fld"><span v-hint="H.otvDn">DN, мм</span><input v-model.lazy="form.otvDn" class="num" list="nozzle-dn" @change="onDnChange('otvDn', $event)" /></label>
+              <label class="fld"><span v-hint="H.otvKol">Кол-во</span><input v-model="form.otvKol" class="num" /></label>
+              <label class="fld"><span v-hint="H.otvLotok">Глубина лотка, мм</span><input v-model="form.otvLotok" class="num" /></label>
             </div>
           </div>
         </div>
@@ -187,21 +186,21 @@
       <section id="sec-5" class="ol-sec">
         <h2 class="ol-h">5 · Насосное оборудование</h2>
         <div class="ol-grid">
-          <ToggleYesNo v-model="form.hasPumps" stacked class="fld--3" label="Насосное оборудование" />
+          <ToggleYesNo v-model="form.hasPumps" :hint="H.hasPumps" stacked class="fld--3" label="Насосное оборудование" />
         </div>
         <!-- Прогрессивное раскрытие: при «да» — гидравлический блок как у КНС:
              сверху рабочая точка, снизу сколько насосов её обслуживают. -->
         <template v-if="form.hasPumps">
           <div class="ol-grid">
-            <label class="fld fld--4"><span>Рабочий расход, л/с</span><input v-model="form.rashod" class="num" /></label>
-            <label class="fld fld--4"><span>Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
+            <label class="fld fld--4"><span v-hint="H.rashod">Рабочий расход, л/с</span><input v-model="form.rashod" class="num" /></label>
+            <label class="fld fld--4"><span v-hint="H.napor">Расчётный напор, м</span><input v-model="form.napor" class="num" /></label>
           </div>
           <div class="ol-grid">
-            <label class="fld fld--4"><span>Рабочих насосов <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
-            <label class="fld fld--4"><span>Резервных насосов</span><input v-model="form.nRez" class="num" /></label>
+            <label class="fld fld--4"><span v-hint="H.nRab">Рабочих насосов <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
+            <label class="fld fld--4"><span v-hint="H.nRez">Резервных насосов</span><input v-model="form.nRez" class="num" /></label>
           </div>
           <div class="ol-grid">
-            <label class="fld fld--8"><span>Марка насосов</span><input v-model="form.marka" /></label>
+            <label class="fld fld--8"><span v-hint="H.marka">Марка насосов</span><input v-model="form.marka" /></label>
           </div>
         </template>
         <p v-else class="ol-live-hint">Без насосов раздел «Напорный трубопровод» в расчёте останется пустым.</p>
@@ -213,14 +212,14 @@
              селектом это выражалось значением «обе», которое читалось хуже
              двух тумблеров. Хранится по-прежнему одним полем. -->
         <div class="ol-grid">
-          <ToggleYesNo v-model="hasBasket" stacked class="fld--3" label="Корзина" />
-          <ToggleYesNo v-model="hasGrinder" stacked class="fld--3" label="Дробилка" />
-          <ToggleYesNo v-model="form.hasValves" stacked class="fld--3" label="Запорная арматура" />
-          <ToggleYesNo v-model="form.ventilation" stacked class="fld--3" label="Вентиляция" />
+          <ToggleYesNo v-model="hasBasket" :hint="H.basket" stacked class="fld--3" label="Корзина" />
+          <ToggleYesNo v-model="hasGrinder" :hint="H.grinder" stacked class="fld--3" label="Дробилка" />
+          <ToggleYesNo v-model="form.hasValves" :hint="H.hasValves" stacked class="fld--3" label="Запорная арматура" />
+          <ToggleYesNo v-model="form.ventilation" :hint="H.ventilation" stacked class="fld--3" label="Вентиляция" />
         </div>
         <div class="ol-grid">
-          <ToggleYesNo v-model="form.shu" stacked class="fld--3" label="Шкаф управления" />
-          <ToggleYesNo v-model="form.datchikiUrov" stacked class="fld--3" label="Датчики уровня" />
+          <ToggleYesNo v-model="form.shu" :hint="H.shu" stacked class="fld--3" label="Шкаф управления" />
+          <ToggleYesNo v-model="form.datchikiUrov" :hint="H.datchikiUrov" stacked class="fld--3" label="Датчики уровня" />
         </div>
         <div v-if="hasBasket && !form.podvLotok" class="ol-explain">
           Цепь и направляющие корзины считаются от глубины лотка подводящего —
@@ -237,13 +236,13 @@
     <template #live>
       <div class="ol-live-h">Габариты</div>
       <dl class="ol-live-vals">
-        <div v-for="v in liveValues" :key="v.k" class="ol-live-row" :title="v.f">
-          <dt>{{ v.k }} <span class="ol-f">ƒ</span></dt>
+        <div v-for="v in liveValues" :key="v.k" class="ol-live-row">
+          <dt><span v-hint="v.hint">{{ v.k }}</span> <span class="ol-f">ƒ</span></dt>
           <dd>{{ v.v }}</dd>
         </div>
       </dl>
 
-      <div class="ol-live-lbl">Габаритная длина</div>
+      <div class="ol-live-lbl"><span v-hint="H.overall">Габаритная длина</span></div>
       <div class="ol-live-npodz">
         {{ s.overallMm.value != null ? fmtInt(s.overallMm.value) : '—' }} <span class="ol-live-u">мм</span>
       </div>
@@ -301,6 +300,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import SurveyShell from '@/components/survey/SurveyShell.vue'
 import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
+import { COMMON_HINTS, EMK_HINTS } from '@/hints/survey'
 import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
 import type { DeviceType } from '@/api/estimates'
 import { useEmkSurvey } from '@/composables/useEmkKolSurvey'
@@ -336,6 +336,8 @@ defineEmits<{ 'update:deviceType': [DeviceType] }>()
 
 const router = useRouter()
 const form = ref<EmkSurveyForm>({ ...makeDefaultEmkSurvey(), ...props.initial })
+/** Сноски полей листа: что поле значит и что меняет в расчёте (hints/survey.ts). */
+const H = { ...COMMON_HINTS, ...EMK_HINTS }
 // Разбор числовых полей. Объявлен до useSurveySync намеренно: watch
 // вычисляет нагрузку (surveyPayload → num) сразу при создании, и объявленная
 // ниже константа давала ReferenceError. Ошибка глоталась, а watch запоминал
@@ -359,11 +361,6 @@ const ellipticBottoms = computed({
   get: () => form.value.bottomType !== 'цилиндрические',
   set: (v: boolean) => { form.value.bottomType = v ? 'эллиптические' : 'цилиндрические' },
 })
-const bottomsHint = computed(() =>
-  ellipticBottoms.value
-    ? 'Формованные: масса — из матрицы «Формовка эллиптических днищ» по DN и длине. К трубе — ламинирование по Мс (DN трубы, минимальное PN).'
-    : 'Из той же трубы: +1,5 м трубы на оба днища, ламинация косых и центрального стыков по Мс (DN трубы, минимальное PN).',
-)
 
 const isEdit = computed(() => Boolean(props.estimateId))
 
@@ -449,11 +446,13 @@ const steps = computed(() => [
 const liveValues = computed(() => {
   const g = s.geo.value
   return [
-    { k: 'Объём', v: `${form.value.volumeM3} м³`, f: 'ƒ вход опросного листа' },
+    { k: 'Объём', v: `${form.value.volumeM3} м³`, hint: { title: 'Объём', text: 'Из опросного листа, раздел «Габариты».' } },
     {
       k: 'Длина трубы',
       v: s.lengthMm.value != null ? `${fmtInt(s.lengthMm.value)} мм` : '—',
-      f: s.lengthOverridden.value ? 'ручной ввод' : 'ƒ CEILING(4V/(π·(D/1000)²)·1000; 100)',
+      hint: s.lengthOverridden.value
+        ? { title: 'Длина трубы', text: 'Введена вручную — «изменить вручную» у трубы корпуса.', tone: 'ovr' as const }
+        : { title: 'Длина трубы', text: 'Из объёма и DN, вверх до 100 мм.', formula: 'L = CEILING(4V / (π·(DN/1000)²) · 1000; 100)' },
     },
     {
       k: 'Днища',
@@ -463,12 +462,27 @@ const liveValues = computed(() => {
           : s.bottomsFromPipe.value
             ? 'цилиндр. ×2, +1,5 м трубы'
             : `эллипт. ×2 · ${fmt(g.ellipticVolumeM3)} м³`,
-      f: s.bottomsFromPipe.value
-        ? 'ƒ из той же трубы: (L + 1,5 м), ламинация (Мс/0,707 + Мс/2)·2'
-        : 'ƒ объём 2 днищ = π·(DN/1000)³/15; масса — матрица f(DN, L)',
+      hint:
+        form.value.placement !== 'горизонтальное'
+          ? { title: 'Днище', text: 'У вертикальной ёмкости — плоское дно.' }
+          : s.bottomsFromPipe.value
+            ? { title: 'Днища цилиндрические', text: 'Из той же трубы: трубы больше на 1,5 м.', formula: 'ламинация стыков = (Мс/0,707 + Мс/2)·2' }
+            : {
+                title: 'Днища эллиптические',
+                text: 'Масса одного — ячейка матрицы по DN и длине трубы, днищ два.',
+                formula: 'объём 2 днищ = π·(DN/1000)³/15',
+              },
     },
-    { k: 'Возвышение', v: `${g.elevationMm} мм`, f: 'ƒ подземная — 300 мм, иначе 0' },
-    { k: 'Шахта', v: g.shaftDiameterMm ? `Ø${g.shaftDiameterMm} h${g.shaftHeightMm}` : 'нет', f: 'ƒ по флагу ОЛ' },
+    {
+      k: 'Возвышение',
+      v: `${g.elevationMm} мм`,
+      hint: { title: 'Возвышение', text: 'Подземная — 300 мм над землёй, наземная и в помещении — 0. Справочно: на длину трубы не влияет.' },
+    },
+    {
+      k: 'Шахта',
+      v: g.shaftDiameterMm ? `Ø${g.shaftDiameterMm} h${g.shaftHeightMm}` : 'нет',
+      hint: { title: 'Шахта обслуживания', text: 'Диаметр и высота — из листа, пустые поля — типовые: DN 1200, h 2300 мм у подземной и 2000 мм у остальных.' },
+    },
   ]
 })
 

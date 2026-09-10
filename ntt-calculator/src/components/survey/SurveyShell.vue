@@ -10,9 +10,9 @@
       <div class="ol-top-r">
         <!-- Статус сохранения — настоящий: раньше здесь стояли часы открытия
              страницы с подписью «сохранено», хотя не сохранялось ничего. -->
-        <span class="ol-draft" :class="statusKind ? `ol-draft--${statusKind}` : ''" :title="statusTitle ?? ''">{{ status }}</span>
+        <span v-hint.plain="statusTitle" class="ol-draft" :class="statusKind ? `ol-draft--${statusKind}` : ''">{{ status }}</span>
         <slot name="topbar-actions" />
-        <button class="ol-btn" title="Переключить тему" @click="toggle">
+        <button v-hint="'Переключить тему'" class="ol-btn" aria-label="Переключить тему" @click="toggle">
           {{ theme === 'dark' ? '☾' : '☀' }} тема
         </button>
       </div>

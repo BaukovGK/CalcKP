@@ -1,5 +1,5 @@
 <template>
-  <button class="theme-btn" @click="toggle" :title="isDark ? 'Светлая тема' : 'Тёмная тема'">
+  <button v-hint="isDark ? 'Светлая тема' : 'Тёмная тема'" class="theme-btn" :aria-label="isDark ? 'Светлая тема' : 'Тёмная тема'" @click="toggle">
     <span class="theme-icon">{{ isDark ? '☀' : '☾' }}</span>
     <span class="theme-lbl">{{ isDark ? 'Светлая' : 'Тёмная' }}</span>
   </button>

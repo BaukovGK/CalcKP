@@ -20,7 +20,7 @@
         >
           <input type="checkbox" :checked="catFilter.has(c.name)" @change="toggleCategory(c.name)" />
           <span class="pr-cat-n">{{ c.name }}</span>
-          <span class="pr-cat-c">{{ c.count }}</span>
+          <span v-hint.plain="PRICE_FILTER_HINTS.categoryCount" class="pr-cat-c">{{ c.count }}</span>
         </label>
       </div>
       <div class="sidebar-footer">
@@ -31,7 +31,7 @@
     <div class="main-col">
       <div class="topbar">
         <div class="tb-title">Реестр цен</div>
-        <span v-if="versionLabel" class="pr-ver" :title="versionTitle">{{ versionLabel }}</span>
+        <span v-if="versionLabel" v-hint.plain="versionTitle" class="pr-ver">{{ versionLabel }}</span>
         <div class="tb-spacer"></div>
         <div class="pr-count">{{ countText }}</div>
       </div>
@@ -45,16 +45,16 @@
             ref="searchEl"
             v-model="search"
             class="fi pr-search"
+            v-hint="PRICE_FILTER_HINTS.search"
             placeholder="Поиск: наименование, поставщик — слова через пробел"
-            title="Ищет по наименованию, ЕИ, поставщику и комментарию; все слова должны найтись. Клавиша / — сюда"
             @keydown.escape="search = ''"
           />
-          <button v-if="search" class="pr-search-x" title="Очистить поиск" @click="search = ''">✕</button>
+          <button v-if="search" v-hint="'Очистить поиск'" class="pr-search-x" aria-label="Очистить поиск" @click="search = ''">✕</button>
         </div>
-        <button class="chip-f chip-red" :class="{ on: noPrice }" title="Позиции без цены — в расчёте такая строка «красная»" @click="noPrice = !noPrice">
+        <button v-hint="PRICE_FILTER_HINTS.noPrice" class="chip-f chip-red" :class="{ on: noPrice }" @click="noPrice = !noPrice">
           ● без цены · {{ noPriceCount }}
         </button>
-        <button class="chip-f chip-amber" :class="{ on: withIssues }" title="Цена ноль, не сходится с ценой без скидки или лист за штуку расходится с ценой за м²" @click="withIssues = !withIssues">
+        <button v-hint="PRICE_FILTER_HINTS.issues" class="chip-f chip-amber" :class="{ on: withIssues }" @click="withIssues = !withIssues">
           ⚠ с замечаниями · {{ issuesCount }}
         </button>
         <button v-if="anyFilter" class="btn btn-g" @click="resetFilters">Сбросить фильтры</button>
@@ -65,7 +65,7 @@
              проверяет тоже). Импорт двухшаговый: сначала проверка файла —
              что изменится, — и только потом запись. -->
         <template v-if="canImport">
-          <button class="btn btn-g" :disabled="exporting" title="Лист «НН» в раскладке мастер-шаблона и лист «Проверка» с замечаниями" @click="onExport">
+          <button v-hint="PRICE_FILTER_HINTS.export" class="btn btn-g" :disabled="exporting" @click="onExport">
             {{ exporting ? 'Выгружаем…' : 'Экспорт в xlsx' }}
           </button>
           <input
@@ -75,7 +75,7 @@
             hidden
             @change="onFile"
           />
-          <button class="btn btn-g" :disabled="importing" title="Лист «НН» книги закупок, мастер-шаблона или выгрузки" @click="fileEl?.click()">
+          <button v-hint="PRICE_FILTER_HINTS.import" class="btn btn-g" :disabled="importing" @click="fileEl?.click()">
             {{ importing ? 'Проверяем файл…' : 'Импорт из xlsx' }}
           </button>
         </template>
@@ -89,7 +89,7 @@
           <template v-if="report.dryRun">Проверка файла «{{ reportFile }}» — в прайс ещё ничего не записано</template>
           <template v-else-if="report.version != null">Импорт применён · версия прайса v{{ report.version }}</template>
           <template v-else>Импорт применён · цены не менялись, версия прайса прежняя</template>
-          <button class="pr-imp-x" title="Закрыть" @click="closeReport">✕</button>
+          <button v-hint="'Закрыть отчёт'" class="pr-imp-x" aria-label="Закрыть отчёт" @click="closeReport">✕</button>
         </div>
         <div class="pr-imp-row">
           <span>новых позиций <b>{{ report.created }}</b></span>
@@ -97,7 +97,7 @@
           <span v-if="report.touched">прочих правок <b>{{ report.touched }}</b></span>
           <span>без изменений <b>{{ report.unchanged }}</b></span>
           <span :class="{ 'is-warn': report.keptPrice > 0 }">пустая цена в файле — оставлена прежняя <b>{{ report.keptPrice }}</b></span>
-          <span title="Позиции прайса, которых нет в файле, не удаляются">нет в файле, останутся <b>{{ report.missingInFile }}</b></span>
+          <span v-hint="'Позиции прайса, которых нет в файле, не удаляются'">нет в файле, останутся <b>{{ report.missingInFile }}</b></span>
           <span>исправлено наименований <b>{{ report.nameFixes }}</b></span>
           <span :class="{ 'is-warn': report.skipped > 0 }">пропущено строк <b>{{ report.skipped }}</b></span>
         </div>
@@ -201,11 +201,11 @@
             </colgroup>
             <thead>
               <tr>
-                <th class="pr-th-sort" :aria-sort="ariaSort('name')" @click="setSort('name')">Наименование{{ arrow('name') }}</th>
-                <th class="pr-unit">ЕИ</th>
-                <th class="pr-th-sort pr-num" :aria-sort="ariaSort('price')" @click="setSort('price')">Цена, ₽{{ arrow('price') }}</th>
-                <th class="pr-supplier">Поставщик</th>
-                <th class="pr-th-sort pr-date" :aria-sort="ariaSort('updated')" @click="setSort('updated')">Обновлено{{ arrow('updated') }}</th>
+                <th v-hint.plain="PRICE_COLUMN_HINTS.name" class="pr-th-sort" :aria-sort="ariaSort('name')" @click="setSort('name')">Наименование{{ arrow('name') }}</th>
+                <th v-hint.plain="PRICE_COLUMN_HINTS.unit" class="pr-unit">ЕИ</th>
+                <th v-hint.plain="PRICE_COLUMN_HINTS.price" class="pr-th-sort pr-num" :aria-sort="ariaSort('price')" @click="setSort('price')">Цена, ₽{{ arrow('price') }}</th>
+                <th v-hint.plain="PRICE_COLUMN_HINTS.supplier" class="pr-supplier">Поставщик</th>
+                <th v-hint.plain="PRICE_COLUMN_HINTS.updated" class="pr-th-sort pr-date" :aria-sort="ariaSort('updated')" @click="setSort('updated')">Обновлено{{ arrow('updated') }}</th>
                 <th class="pr-actions"></th>
               </tr>
             </thead>
@@ -216,12 +216,13 @@
                 </tr>
                 <tr
                   v-else
+                  v-hint.row="editingId === line.item.id ? null : priceRowHint(line.item, { canEdit })"
                   :class="{ 'pr-row--edit': editingId === line.item.id, 'pr-row--editable': canEdit }"
                   @dblclick="onRowDblClick(line.item)"
                 >
                   <td class="pr-name">
                     {{ line.item.name }}
-                    <span v-if="line.item.issue" class="pr-issue" :title="line.item.issue">⚠</span>
+                    <span v-if="line.item.issue" class="pr-issue" :aria-label="line.item.issue">⚠</span>
                     <div v-if="line.item.comment" class="pr-comment">{{ line.item.comment }}</div>
                   </td>
                   <td class="pr-unit">{{ line.item.unit }}</td>
@@ -250,17 +251,17 @@
                       @keydown.enter="saveEdit(line.item.id)"
                       @keydown.escape="cancelEdit"
                     />
-                    <span v-else class="pr-sup-val" :class="{ 'pr-price--ro': !canEdit }" :title="line.item.supplier ?? undefined" @click="startEdit(line.item)">
+                    <span v-else class="pr-sup-val" :class="{ 'pr-price--ro': !canEdit }" @click="startEdit(line.item)">
                       {{ line.item.supplier || '—' }}
                     </span>
                   </td>
                   <td class="pr-date">{{ fmtDate(line.item.updatedAt) }}</td>
                   <td class="pr-actions">
                     <template v-if="editingId === line.item.id">
-                      <button class="btn btn-am pr-save-btn" :disabled="saving" title="Сохранить (Enter)" @click="saveEdit(line.item.id)">✓</button>
-                      <button class="btn btn-g pr-save-btn" title="Отменить (Esc)" @click="cancelEdit">✕</button>
+                      <button v-hint="'Сохранить (Enter)'" class="btn btn-am pr-save-btn" :disabled="saving" aria-label="Сохранить" @click="saveEdit(line.item.id)">✓</button>
+                      <button v-hint="'Отменить (Esc)'" class="btn btn-g pr-save-btn" aria-label="Отменить" @click="cancelEdit">✕</button>
                     </template>
-                    <button v-else-if="canEdit" class="pr-edit-btn" title="Изменить цену и поставщика" @click="startEdit(line.item)">✎</button>
+                    <button v-else-if="canEdit" v-hint="'Изменить цену и поставщика — или двойной щелчок по строке'" class="pr-edit-btn" aria-label="Изменить цену и поставщика" @click="startEdit(line.item)">✎</button>
                   </td>
                 </tr>
               </template>
@@ -290,6 +291,7 @@ import ToastHost from '@/components/ui/ToastHost.vue'
 import { toast } from '@/composables/useToast'
 import { tryEvalExpr } from '@/engines/expr'
 import { useAuthStore } from '@/stores/auth'
+import { PRICE_COLUMN_HINTS, PRICE_FILTER_HINTS, priceRowHint } from '@/hints/prices'
 import {
   countByCategory,
   haystack,

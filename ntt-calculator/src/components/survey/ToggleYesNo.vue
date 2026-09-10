@@ -1,6 +1,6 @@
 <template>
   <div class="tg" :class="{ 'tg--stacked': stacked }">
-    <span class="tg-l">{{ label }}</span>
+    <span v-hint="hint" class="tg-l">{{ label }}</span>
     <div class="tg-seg">
       <button class="tg-b" :class="{ on: modelValue }" @click="emit('update:modelValue', true)">{{ onLabel ?? 'да' }}</button>
       <button class="tg-b" :class="{ on: !modelValue }" @click="emit('update:modelValue', false)">{{ offLabel ?? 'нет' }}</button>
@@ -9,6 +9,8 @@
 </template>
 
 <script setup lang="ts">
+import type { HintValue } from '@/directives/hint'
+
 // Сегментированный переключатель «да/нет» — по прототипу ОЛ.
 // Прогрессивное раскрытие: «нет» сворачивает зависимые поля (решает родитель).
 defineProps<{
@@ -26,6 +28,8 @@ defineProps<{
    */
   onLabel?: string
   offLabel?: string
+  /** Сноска к подписи — что меняет тумблер в расчёте. */
+  hint?: HintValue
 }>()
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
 </script>

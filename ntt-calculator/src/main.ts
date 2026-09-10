@@ -4,10 +4,16 @@ import App from './App.vue'
 import router from './router'
 import './assets/main.css'
 import { installNumericGuard } from './utils/numeric-input'
+import { hideHint, vHint } from './directives/hint'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+// Всплывающие сноски с пояснениями — одна директива на всё приложение
+// (directives/hint.ts); окно рисует HintLayer в App.vue.
+app.directive('hint', vHint)
+// Смена экрана убирает открытую сноску: её пункт уже не на экране.
+router.beforeEach(() => hideHint())
 app.mount('#app')
 
 // Числовые поля (класс `num`, атрибут `data-numeric`) принимают только число

@@ -4,7 +4,7 @@
     <header class="tb">
       <div class="tb-l">
         <RouterLink class="tb-lnk" :to="backTarget">{{ backLabel }}</RouterLink>
-        <span class="tb-t">Расчёт: {{ st.estimate?.title ?? '—' }}</span>
+        <span v-hint.plain="st.estimate?.title" class="tb-t">Расчёт: {{ st.estimate?.title ?? '—' }}</span>
         <span v-if="customer" class="tb-cust">· Заказчик {{ customer }}</span>
         <!-- Экран ОЛ — редактирующий, наблюдателю недоступен (роут не пустит). -->
         <RouterLink
@@ -13,45 +13,45 @@
           :to="{ name: 'survey', params: { id: st.estimate.id } }"
         >← Опросный лист</RouterLink>
         <span v-if="zayavka" class="tb-zv">· заявка {{ zayavka }}</span>
-        <span class="badge">{{ statusLabel }}</span>
+        <span v-hint="STATUS_HINT" class="badge">{{ statusLabel }}</span>
       </div>
       <div class="tb-r">
-        <span v-if="readOnly" class="tb-ro" title="Роль «Наблюдатель»: расчёт открыт только для просмотра">👁 просмотр</span>
+        <span v-if="readOnly" v-hint.plain="'Роль «Наблюдатель»: расчёт открыт только для просмотра'" class="tb-ro">👁 просмотр</span>
         <button
           v-if="hasProblems"
+          v-hint="'Показать только проблемные строки: без цены и с конфликтами. Повторное нажатие вернёт все'"
           class="tb-prob"
           :class="{ on: filters.problems }"
-          title="показать только проблемные строки"
           @click="toggleProblems"
         >
           {{ problemsText }}
         </button>
-        <span class="tb-pl">прайс {{ priceListLabel }}</span>
+        <span v-hint.plain="PRICE_LIST_HINT" class="tb-pl">прайс {{ priceListLabel }}</span>
         <template v-if="!readOnly">
           <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
-          <button class="btn" title="История версий расчёта" @click="openVersions">Версии</button>
-          <button class="btn" title="Заявка на закупку" @click="onExport">Экспорт ▾</button>
-          <button class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
+          <button v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
+          <button v-hint="'Заявка на закупку: покупные позиции расчёта с количествами, для отдела закупок'" class="btn" @click="onExport">Экспорт ▾</button>
+          <button v-hint="KP_HINT" class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
         </template>
-        <button v-else class="btn" title="История версий расчёта" @click="openVersions">Версии</button>
-        <button class="btn" title="Переключить тему" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
+        <button v-else v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
+        <button v-hint="'Переключить тему'" class="btn" aria-label="Переключить тему" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
       </div>
     </header>
 
     <!-- ── Фильтры ── -->
     <div class="fl">
       <input v-model="filters.q" class="fl-q" placeholder="поиск по наименованию" />
-      <button class="chip-f chip-red" :class="{ on: filters.missing }" @click="filters.missing = !filters.missing">
+      <button v-hint="FILTER_HINTS.missing" class="chip-f chip-red" :class="{ on: filters.missing }" @click="filters.missing = !filters.missing">
         ● без цены · {{ st.missingPriceIds.size }}
       </button>
-      <button class="chip-f chip-amber" :class="{ on: filters.conflict }" @click="filters.conflict = !filters.conflict">
+      <button v-hint="FILTER_HINTS.conflict" class="chip-f chip-amber" :class="{ on: filters.conflict }" @click="filters.conflict = !filters.conflict">
         ⚠ конфликты · {{ st.conflictIds.size }}
       </button>
-      <button class="chip-f chip-blue" :class="{ on: filters.override }" @click="filters.override = !filters.override">
+      <button v-hint="FILTER_HINTS.override" class="chip-f chip-blue" :class="{ on: filters.override }" @click="filters.override = !filters.override">
         override · {{ st.overrideIds.size }}
       </button>
       <button v-if="anyFilter" class="fl-clear" @click="clearFilters">сбросить ✕</button>
-      <label class="fl-chk"><input v-model="filters.ghosts" type="checkbox" /><span>выключенные</span></label>
+      <label class="fl-chk"><input v-model="filters.ghosts" type="checkbox" /><span v-hint="FILTER_HINTS.ghosts">выключенные</span></label>
       <span class="fl-cnt">показано {{ shownCount }} из {{ st.rows.length }}</span>
     </div>
 
@@ -68,15 +68,15 @@
           class="tr-s"
           :class="{ active: activeSec === sec.code, off: !sec.enabled }"
         >
-          <label class="tr-chk" @click.stop>
-            <input :checked="sec.enabled" type="checkbox" :disabled="readOnly" @change="st.toggleSection(sec.code)" />
+          <label v-hint="sec.enabled ? SECTION_ON_HINT : SECTION_OFF_HINT" class="tr-chk" @click.stop>
+            <input :checked="sec.enabled" type="checkbox" :disabled="readOnly" :aria-label="`Раздел ${sec.code} ${sec.title}`" @change="st.toggleSection(sec.code)" />
           </label>
           <button class="tr-n" @click="goSection(sec.code)">
             <span class="tr-t">{{ sec.code }} {{ sec.title }}</span>
             <span class="tr-sum" :class="{ struck: !sec.enabled }">{{ sectionSum(sec.code) }}</span>
           </button>
-          <span v-if="secProblems(sec.code).red" class="bdg bdg-red">● {{ secProblems(sec.code).red }}</span>
-          <span v-if="secProblems(sec.code).amber" class="bdg bdg-amber">⚠ {{ secProblems(sec.code).amber }}</span>
+          <span v-if="secProblems(sec.code).red" v-hint.plain="`Строк без цены в разделе: ${secProblems(sec.code).red}`" class="bdg bdg-red">● {{ secProblems(sec.code).red }}</span>
+          <span v-if="secProblems(sec.code).amber" v-hint.plain="`Конфликтов с опросным листом в разделе: ${secProblems(sec.code).amber}`" class="bdg bdg-amber">⚠ {{ secProblems(sec.code).amber }}</span>
         </div>
       </nav>
 
@@ -106,6 +106,8 @@
               :conflict="st.conflictIds.has(row.id)"
               :prev-calc="prevCalcOf(row.id)"
               :fot-k="st.fotKOf(row)"
+              :parent="row.parentId ? rowById.get(row.parentId) ?? null : null"
+              :tirage="st.tirage"
               :disabled="!sec.enabled || !c.enabled"
               :readonly="readOnly"
               @qty="st.setQtyManual"
@@ -136,52 +138,53 @@
         <div class="tot-h">Итоги</div>
 
         <div v-for="b in buckets" :key="b.k" class="tot-r">
-          <span>{{ b.k }}</span><span class="num">{{ fmtInt(b.v) }}</span>
+          <span v-hint="BUCKET_HINTS[b.k]">{{ b.k }}</span><span class="num">{{ fmtInt(b.v) }}</span>
         </div>
 
         <div class="tot-r tot-cost">
-          <span>Себестоимость</span><span class="num">{{ fmtInt(e.costRub) }}</span>
+          <span v-hint="TOTAL_HINTS.cost">Себестоимость</span><span class="num">{{ fmtInt(e.costRub) }}</span>
         </div>
 
         <div class="tot-r">
-          <span>Наценка {{ readOnly ? '' : '✎' }}</span>
+          <span v-hint="TOTAL_HINTS.markup">Наценка {{ readOnly ? '' : '✎' }}</span>
           <input v-model="markupText" class="tot-in num" :disabled="readOnly" @change="onMarkup" />
         </div>
 
         <div class="tot-r tot-price">
-          <span>ЦЕНА ПРОДАЖИ</span><span class="num">{{ fmtInt(e.salePriceRub) }}</span>
+          <span v-hint="TOTAL_HINTS.price">ЦЕНА ПРОДАЖИ</span><span class="num">{{ fmtInt(e.salePriceRub) }}</span>
         </div>
 
         <div class="tot-r">
-          <span>Рентабельность</span>
+          <span v-hint="TOTAL_HINTS.profitability">Рентабельность</span>
           <span class="num" :style="{ color: rentColor }">{{ rentText }}</span>
         </div>
 
         <div class="tot-r">
-          <span>Корпусов</span>
+          <span v-hint="TOTAL_HINTS.tirage">Корпусов</span>
           <input v-model="tirageText" class="tot-in num" :disabled="readOnly" @change="onTirage" />
         </div>
         <!-- При тираже ≥2 главные цифры — за весь тираж (согласованы с
              таблицей, где количества умножены на N); строка ниже показывает
              цену одного корпуса отдельным прогоном экономики (tirage=1). -->
         <div v-if="st.tirage >= 2" class="tot-r tot-n">
-          <span>за 1 корп.</span><span class="num">{{ fmtInt(st.economicsUnit.salePriceRub) }}</span>
+          <span v-hint="TOTAL_HINTS.perUnit">за 1 корп.</span><span class="num">{{ fmtInt(st.economicsUnit.salePriceRub) }}</span>
         </div>
 
         <!-- Разложение «Прочих»: прототип его не показывает, но без него
              непонятно, откуда берётся сумма (§9.5). -->
         <details class="tot-d">
           <summary>Прочие — из чего</summary>
-          <div class="tot-r tot-s"><span>ПЗР ({{ fmt(e.pzrHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.pzrRub) }}</span></div>
-          <div class="tot-r tot-s"><span>Ацетон ({{ fmt(e.acetoneKg) }} кг)</span><span class="num">{{ fmtInt(e.acetoneRub) }}</span></div>
-          <div class="tot-r tot-s"><span>СИЗ ({{ fmtInt(e.ppeUnits) }} ед.)</span><span class="num">{{ fmtInt(e.ppeRub) }}</span></div>
-          <div class="tot-r tot-s"><span>Накладные ({{ fmt(e.overheadHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.overheadRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.pzr">ПЗР ({{ fmt(e.pzrHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.pzrRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.acetone">Ацетон ({{ fmt(e.acetoneKg) }} кг)</span><span class="num">{{ fmtInt(e.acetoneRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.ppe">СИЗ ({{ fmtInt(e.ppeUnits) }} ед.)</span><span class="num">{{ fmtInt(e.ppeRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.overhead">Накладные ({{ fmt(e.overheadHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.overheadRub) }}</span></div>
           <div class="tot-note">ПЗР входит в «Работы, ФОТ», а не в «Прочие»</div>
         </details>
 
         <!-- Легенда — по прототипу: пояснение override + таблица клавиш. -->
         <div class="tot-legend">
           Синее значение — override, ↺ возвращает расчётное. ФОТ-спутники пересчитываются от массы родителя.
+          Задержите указатель на строке или подписи с пунктиром — появится пояснение.
           <div class="keys">
             <span class="k">↑ ↓</span><span>по строкам</span>
             <span class="k">← →</span><span>кол-во ⇄ цена</span>
@@ -205,7 +208,7 @@
       <div class="cat-list">
         <button v-for="p in catalogHits" :key="`${p.category}|${p.name}|${p.unit}`" class="cat-i" @click="addFromCatalog(p)">
           <span class="cat-c">{{ p.category }}</span>
-          <span class="cat-n" :title="p.name">{{ p.name }}</span>
+          <span v-hint.plain="p.name" class="cat-n">{{ p.name }}</span>
           <span class="cat-u">{{ p.unit }}</span>
           <span class="cat-p num">{{ p.priceRub == null ? '—' : fmtInt(p.priceRub) }}</span>
         </button>
@@ -239,18 +242,18 @@
             <td class="num">{{ v.totalRub ? fmtInt(v.totalRub) : '—' }}</td>
             <!-- Слепок создания — исходное состояние: проверку строк без цены
                  он не проходил, поэтому КП по нему не печатается. -->
-            <td v-if="v.reason === 'CREATE'" class="ver-dl ver-dl--none" title="Исходное состояние — КП печатается из выпуска КП">—</td>
+            <td v-if="v.reason === 'CREATE'" v-hint="'Исходное состояние — КП печатается из выпуска КП'" class="ver-dl ver-dl--none">—</td>
             <td v-else class="ver-dl">
               <button
                 class="btn btn-xs"
+                v-hint="'Скачать печатную форму КП в Word'"
                 :disabled="kpDownload === `${v.version}:docx`"
-                title="Скачать печатную форму КП в Word"
                 @click="downloadKp(v.version, 'docx')"
               >docx</button>
               <button
                 class="btn btn-xs"
+                v-hint="'Скачать печатную форму КП в PDF'"
                 :disabled="kpDownload === `${v.version}:pdf`"
-                title="Скачать печатную форму КП в PDF"
                 @click="downloadKp(v.version, 'pdf')"
               >pdf</button>
             </td>
@@ -280,6 +283,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { COST_BUCKETS } from '@/engines/economics'
+import { BUCKET_HINTS, FILTER_HINTS, TOTAL_HINTS } from '@/hints/calc'
+import type { Hint } from '@/directives/hint'
 import { tryEvalExpr } from '@/engines/expr'
 import type { CalcComponent, CalcRowNode } from '@/engines/template-kns'
 import { estimatesApi, type EstimateSnapshotInfo, type SnapshotReason } from '@/api/estimates'
@@ -359,6 +364,32 @@ const fmt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 
 const fmtInt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
 
 const buckets = computed(() => COST_BUCKETS.map((k) => ({ k, v: e.value.buckets[k] })))
+
+/** Строки по id — сноске ФОТ-спутника нужна родительская операция. */
+const rowById = computed(() => new Map(st.rows.map((r) => [r.id, r])))
+
+// ── Сноски топбара и дерева (правило оформления — directives/hint.ts) ──
+const STATUS_HINT: Hint = {
+  title: 'Статус расчёта',
+  text: 'Цифры фиксирует не статус, а версия: её снимает выпуск КП, создание единицы и кнопка «Зафиксировать» в «Версиях».',
+}
+const PRICE_LIST_HINT: Hint = {
+  title: 'Версия прайса',
+  text: [
+    'Цены строк и ставки — ФОТ, накладные, ацетон, СИЗ — берутся из этого прайса.',
+    'Ставки пересчитываются по живому прайсу при каждом открытии; сохранить цифры неизменными — зафиксировать версию расчёта.',
+  ],
+}
+const VERSIONS_HINT: Hint = {
+  title: 'История версий',
+  text: 'Слепки расчёта: дерево, итог и версия прайса на момент снимка. Из них печатается КП.',
+}
+const KP_HINT: Hint = {
+  title: 'Сформировать КП',
+  text: 'Печатная форма КП в Word и PDF и новая версия расчёта. Пока есть строки без цены, КП не выпускается.',
+}
+const SECTION_ON_HINT = 'Выключить раздел: его строки не войдут в итог, ручные значения сохранятся'
+const SECTION_OFF_HINT = 'Раздел выключен и в итог не входит. Включить обратно — со всеми ручными значениями'
 
 const rentText = computed(() => `${(e.value.profitability * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %`)
 const rentColor = computed(() => {

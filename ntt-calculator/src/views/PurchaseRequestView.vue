@@ -11,7 +11,7 @@
         <button class="btn btn-acc" :disabled="busy || !rows.length" @click="onExport">
           {{ busy ? 'Готовим…' : 'Выгрузить xlsx' }}
         </button>
-        <button class="btn" title="Переключить тему" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
+        <button v-hint="'Переключить тему'" class="btn" aria-label="Переключить тему" @click="toggle">{{ theme === 'dark' ? '☾' : '☀' }}</button>
       </div>
     </header>
 
@@ -34,8 +34,8 @@
 
         <div v-for="(r, i) in rows" :key="r.id" class="r" :class="{ 'is-red': r.price == null }">
           <div class="c-n">{{ i + 1 }}</div>
-          <div class="c-cat"><span class="chip" :title="r.category">{{ r.category }}</span></div>
-          <div class="c-name" :title="r.name">{{ r.name }}</div>
+          <div class="c-cat"><span v-hint.plain="r.category" class="chip">{{ r.category }}</span></div>
+          <div v-hint.plain="r.name" class="c-name">{{ r.name }}</div>
           <div class="c-u">{{ r.unit }}</div>
           <div class="num">{{ fmt(r.qty) }}</div>
           <div class="num">{{ r.price == null ? '—' : fmt(r.price) }}</div>

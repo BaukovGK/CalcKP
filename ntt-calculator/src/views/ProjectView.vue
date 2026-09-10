@@ -43,7 +43,7 @@
         <!-- КП на проект доступно и наблюдателю: чтение документа шире правки
              расчёта — то же правило, что у КП на единицу. -->
         <button class="btn" :disabled="units.length === 0" @click="openKp">КП на проект</button>
-        <span v-if="!canEdit" class="pv-ro" title="Роль «Наблюдатель»: только просмотр">👁 просмотр</span>
+        <span v-if="!canEdit" v-hint.plain="'Роль «Наблюдатель»: только просмотр'" class="pv-ro">👁 просмотр</span>
       </div>
 
       <!-- Content -->
@@ -94,8 +94,9 @@
                 <span class="pv-uc-date">{{ fmtDate(e.updatedAt) }}</span>
                 <button
                   v-if="canEdit && (e.status === 'DRAFT' || e.status === 'CALC' || e.status === 'REJECTED')"
+                  v-hint="'Удалить единицу'"
                   class="pv-uc-del"
-                  title="Удалить"
+                  aria-label="Удалить единицу"
                   @click.stop="askDeleteEstimate(e)"
                 >×</button>
               </div>
@@ -106,7 +107,7 @@
               <div class="pv-uc-foot">
                 <!-- Карточка открывает ОЛ; в расчёт — отдельной ссылкой, для
                      тонкой настройки строк. -->
-                <button class="pv-uc-calc" title="Открыть расчёт" @click.stop="openCalc(e.id)">расчёт →</button>
+                <button v-hint="'Открыть расчёт: строки, цены и итоги. Сама карточка открывает опросный лист'" class="pv-uc-calc" @click.stop="openCalc(e.id)">расчёт →</button>
                 <span v-if="e.totalRub" class="pv-uc-total">{{ fmt(e.totalRub) }} ₽</span>
               </div>
             </div>

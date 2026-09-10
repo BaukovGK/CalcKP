@@ -37,6 +37,13 @@
 │       ├── composables/         useKnsSurvey, useEmkKolSurvey, usePipeOverride
 │       │                        (труба корпуса: PN/SN с ручным override),
 │       │                        useTheme, useToast
+│       ├── directives/hint.ts   v-hint — всплывающие сноски с пояснениями
+│       │                        (окно — components/ui/HintLayer.vue, место —
+│       │                        utils/hint-position.ts); нативный title в
+│       │                        шаблонах запрещён правилом ESLint
+│       ├── hints/               тексты сносок: survey.ts (поля трёх ОЛ),
+│       │                        calc.ts (строка расчёта, итоги, фильтры),
+│       │                        prices.ts (реестр цен)
 │       ├── engines/             ЧИСТАЯ расчётная библиотека (покрыта тестами):
 │       │   ├── types.ts         контракт расчёта строки (EngineRow, RowResult)
 │       │   ├── row.ts           расчёт строки (qty/price/sum, overrides)

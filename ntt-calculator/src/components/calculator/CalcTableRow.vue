@@ -1,23 +1,31 @@
 <template>
-  <div class="r" :class="rowClass">
+  <!-- Сноска строки: полное наименование, откуда количество и цена, корзина
+       итогов (hints/calc.ts). Заменила четыре title на ячейках. -->
+  <div v-hint.row="hint" class="r" :class="rowClass">
     <!-- Категория-чип -->
-    <div class="c-cat"><span class="chip" :title="row.category">{{ row.category }}</span></div>
+    <div class="c-cat"><span class="chip">{{ row.category }}</span></div>
 
     <!-- Наименование; ФОТ-спутник — с отступом и меткой -->
     <div class="c-name" :class="{ 'is-sat': isSatellite }">
-      <span class="nm" :title="row.name">{{ row.name }}</span>
+      <span class="nm">{{ row.name }}</span>
       <span v-if="isSatellite && fotK != null" class="sat-tag">ФОТ · k={{ fmtK(fotK) }}</span>
     </div>
 
     <!-- Кол-во -->
     <div class="c-qty">
-      <button v-if="res.qtyOverridden && !readonly" class="rst" :title="qtyResetTitle" @click="$emit('resetQty', row.id)">↺</button>
+      <button
+        v-if="res.qtyOverridden && !readonly"
+        v-hint="qtyResetTitle"
+        class="rst"
+        :aria-label="qtyResetTitle"
+        @click="$emit('resetQty', row.id)"
+      >↺</button>
       <input
         class="cell num"
         :class="{ 'is-ovr': res.qtyOverridden, 'is-conflict': conflict }"
         :value="qtyText"
         :disabled="disabled || readonly"
-        :title="qtyTitle"
+        :aria-label="`Количество: ${row.name}`"
         @focus="onFocus"
         @change="onQty"
         @keydown="$emit('nav', $event, row.id, 'qty')"
@@ -28,14 +36,20 @@
 
     <!-- Цена -->
     <div class="c-price">
-      <button v-if="res.priceOverridden && !readonly" class="rst" :title="`↺ вернуть цену прайса: ${fmt(row.priceCatalog)}`" @click="$emit('resetPrice', row.id)">↺</button>
+      <button
+        v-if="res.priceOverridden && !readonly"
+        v-hint="priceResetTitle"
+        class="rst"
+        :aria-label="priceResetTitle"
+        @click="$emit('resetPrice', row.id)"
+      >↺</button>
       <input
         class="cell num"
         :class="{ 'is-ovr': res.priceOverridden, 'is-missing': res.missingPrice }"
         :value="priceText"
         :disabled="disabled || readonly"
         :placeholder="res.missingPrice ? 'цена?' : ''"
-        :title="priceTitle"
+        :aria-label="`Цена: ${row.name}`"
         @focus="onFocus"
         @change="onPrice"
         @keydown="$emit('nav', $event, row.id, 'price')"
@@ -55,11 +69,17 @@
         </template>
       </template>
       <span v-else-if="res.missingPrice" class="note-red">указать цену</span>
-      <span v-else class="note" :title="row.note ?? ''">{{ row.note ?? '' }}</span>
+      <span v-else class="note">{{ row.note ?? '' }}</span>
 
       <!-- Удалять можно только строки, добавленные вручную: строки шаблона
            лишь выключаются (Механика §12.5). -->
-      <button v-if="row.isCustom && !readonly" class="rm" title="удалить строку" @click="emit('remove', row.id)">✕</button>
+      <button
+        v-if="row.isCustom && !readonly"
+        v-hint="'Удалить строку. Удалять можно только добавленные вручную — строки шаблона выключаются'"
+        class="rm"
+        aria-label="Удалить строку"
+        @click="emit('remove', row.id)"
+      >✕</button>
     </div>
   </div>
 </template>
@@ -67,6 +87,7 @@
 <script setup lang="ts">
 import { computed, nextTick } from 'vue'
 import { tryEvalExpr } from '@/engines/expr'
+import { calcRowHint } from '@/hints/calc'
 import type { CalcRowNode } from '@/engines/template-kns'
 import type { RowResult } from '@/engines/types'
 
@@ -87,6 +108,10 @@ const props = defineProps<{
   disabled: boolean
   /** Режим наблюдателя (VIEWER): значения видны, правка недоступна. */
   readonly?: boolean
+  /** Родительская операция ФОТ-спутника — для сноски: от её массы часы. */
+  parent?: CalcRowNode | null
+  /** Тираж — сноска говорит, что количество на все корпуса. */
+  tirage?: number
 }>()
 
 const emit = defineEmits<{
@@ -117,18 +142,20 @@ const fmtK = (k: number) => k.toLocaleString('ru-RU', { minimumFractionDigits: 2
 const qtyText = computed(() => (props.res.qty === 0 && props.disabled ? '0' : fmt(props.res.qty)))
 const priceText = computed(() => (props.res.price == null ? '' : fmt(props.res.price)))
 
-const qtyTitle = computed(() => {
-  if (props.conflict) return `⚠ конфликт: расчётное изменилось (${fmt(props.prevCalc)} → ${fmt(props.row.qtyCalc)}), а количество переопределено вручную`
-  if (props.res.qtyOverridden) return `Переопределено вручную. Выражение: ${props.row.qtyManual}\nƒ расчёт из ОЛ: ${fmt(props.row.qtyCalc)}`
-  return `ƒ расчёт из ОЛ: ${fmt(props.row.qtyCalc)}`
-})
 const qtyResetTitle = computed(() => `↺ вернуть расчётное: ${fmt(props.row.qtyCalc)}`)
+const priceResetTitle = computed(() => `↺ вернуть цену прайса: ${fmt(props.row.priceCatalog)}`)
 
-const priceTitle = computed(() => {
-  if (props.res.missingPrice) return 'Цены нет в прайсе — введите вручную. Строка блокирует выпуск КП'
-  if (props.res.priceOverridden) return `Переопределено вручную.\nЦена прайса: ${fmt(props.row.priceCatalog)}`
-  return 'Цена из прайса'
-})
+/** Сноска строки — всё, что раньше было разбросано по title ячеек. */
+const hint = computed(() =>
+  calcRowHint(props.row, props.res, {
+    conflict: props.conflict,
+    prevCalc: props.prevCalc,
+    fotK: props.fotK,
+    parent: props.parent ?? null,
+    disabled: props.disabled,
+    tirage: props.tirage ?? 1,
+  }),
+)
 
 function onFocus(e: FocusEvent) {
   ;(e.target as HTMLInputElement).select()

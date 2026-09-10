@@ -1,6 +1,6 @@
 <template>
   <div class="cf">
-    <span class="cf-l">{{ label }}</span>
+    <span v-hint="hint" class="cf-l">{{ label }}</span>
 
     <div class="cf-row">
       <!-- data-numeric: поле числовое, текст в него не пропускается
@@ -13,7 +13,7 @@
         :placeholder="String(calc)"
         @input="onInput"
       />
-      <button v-if="overridden" class="cf-reset" :title="`↺ вернуть расчётное: ${calc}`" @click="reset">↺</button>
+      <button v-if="overridden" v-hint="`↺ вернуть расчётное: ${calc}`" class="cf-reset" :aria-label="`Вернуть расчётное: ${calc}`" @click="reset">↺</button>
     </div>
 
     <!-- Подсказка-разбивка формулы под полем (прототип ОЛ).
@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { HintValue } from '@/directives/hint'
 
 /**
  * Вычисляемое поле с ручным override (§5.6 ТЗ).
@@ -41,6 +42,8 @@ const props = defineProps<{
   value: number
   overridden: boolean
   explain: string
+  /** Сноска к подписи. */
+  hint?: HintValue
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [string] }>()

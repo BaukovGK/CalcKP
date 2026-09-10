@@ -5,8 +5,9 @@
       <div class="pc-date">{{ fmtDate(project.updatedAt) }}</div>
       <button
         v-if="canDelete"
+        v-hint="'Удалить проект'"
         class="pc-del"
-        title="Удалить проект"
+        aria-label="Удалить проект"
         @click.stop="$emit('delete', project.id)"
       >×</button>
     </div>

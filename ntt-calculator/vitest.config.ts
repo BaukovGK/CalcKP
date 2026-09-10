@@ -11,6 +11,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.{test,spec}.ts'],
+    // Глобальная директива сносок v-hint — и в тестах компонентов, как в main.ts.
+    setupFiles: ['src/test-setup.ts'],
   },
   resolve: {
     alias: {

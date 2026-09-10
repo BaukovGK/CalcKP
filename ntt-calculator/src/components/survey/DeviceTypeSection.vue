@@ -7,6 +7,7 @@
         class="dt-btn"
         :class="{ active: modelValue === t.value, locked: !canChange }"
         type="button"
+        v-hint="TYPE_HINTS[t.value]"
         :disabled="!canChange"
         @click="$emit('update:modelValue', t.value)"
       >
@@ -47,6 +48,13 @@ defineProps<{
 }>()
 
 defineEmits<{ 'update:modelValue': [DeviceType] }>()
+
+/** Сноски кнопок типа: чем шаблоны отличаются друг от друга. */
+const TYPE_HINTS: Record<DeviceType, string> = {
+  KNS: 'Насосная станция — КНС, ЛНС, ДНС одним шаблоном: глубина подбирается по притоку и лотку, насос — по расходу и напору.',
+  EMK: 'Ёмкость: длина трубы — из объёма и DN; горизонтальная — с двумя днищами, вертикальная — с плоским дном.',
+  KOL: 'Колодец: рабочая часть плюс горловина; без насосов и напорного трубопровода.',
+}
 </script>
 
 <style scoped>

@@ -57,8 +57,8 @@
               <td><input v-model="r.bolt" class="ti" /></td>
               <td><input v-model="r.boltCount" class="ti num" /></td>
               <td class="acts">
-                <button class="btn-mini" title="Сохранить строку" @click="saveNozzle(r)">💾</button>
-                <button class="btn-mini btn-mini--del" title="Удалить норму" @click="removeNozzle(r.dn)">✕</button>
+                <button v-hint="'Сохранить строку'" class="btn-mini" aria-label="Сохранить строку" @click="saveNozzle(r)">💾</button>
+                <button v-hint="'Удалить норму'" class="btn-mini btn-mini--del" aria-label="Удалить норму" @click="removeNozzle(r.dn)">✕</button>
               </td>
             </tr>
             <!-- Новая норма -->
@@ -72,7 +72,7 @@
               <td><input v-model="newNozzle.flangeMassKg" class="ti num" /></td>
               <td><input v-model="newNozzle.bolt" class="ti" /></td>
               <td><input v-model="newNozzle.boltCount" class="ti num" /></td>
-              <td class="acts"><button class="btn-mini" title="Добавить" @click="addNozzle">＋</button></td>
+              <td class="acts"><button v-hint="'Добавить норму'" class="btn-mini" aria-label="Добавить норму" @click="addNozzle">＋</button></td>
             </tr>
           </tbody>
         </table>
@@ -105,8 +105,8 @@
               <td><input v-model="r.wallMm" class="ti num" /></td>
               <td><input v-model="r.kgPerM" class="ti num ti-req" /></td>
               <td class="acts">
-                <button class="btn-mini" title="Сохранить" @click="saveWeight(r)">💾</button>
-                <button class="btn-mini btn-mini--del" title="Удалить" @click="removeWeight(r)">✕</button>
+                <button v-hint="'Сохранить строку'" class="btn-mini" aria-label="Сохранить строку" @click="saveWeight(r)">💾</button>
+                <button v-hint="'Удалить вес'" class="btn-mini btn-mini--del" aria-label="Удалить вес" @click="removeWeight(r)">✕</button>
               </td>
             </tr>
             <tr class="new-row">
@@ -115,7 +115,7 @@
               <td><input v-model="newWeight.sn" class="ti num" placeholder="SN" /></td>
               <td><input v-model="newWeight.wallMm" class="ti num" /></td>
               <td><input v-model="newWeight.kgPerM" class="ti num ti-req" placeholder="кг/пм" /></td>
-              <td class="acts"><button class="btn-mini" title="Добавить" @click="addWeight">＋</button></td>
+              <td class="acts"><button v-hint="'Добавить вес'" class="btn-mini" aria-label="Добавить вес" @click="addWeight">＋</button></td>
             </tr>
           </tbody>
         </table>
@@ -146,12 +146,12 @@
           </thead>
           <tbody>
             <tr v-for="r in shownJoints" :key="`${r.d}|${r.pn}`" :class="{ 'row-used': r.pn === usedJointPn }">
-              <td class="key">{{ r.pn }}<span v-if="r.pn === usedJointPn" class="tpl-used" title="Эту строку читает расчёт">◀</span></td>
+              <td class="key">{{ r.pn }}<span v-if="r.pn === usedJointPn" v-hint.plain="'Эту строку читает расчёт: у каждого диаметра берётся минимальное PN'" class="tpl-used">◀</span></td>
               <td><input v-model="r.massKg" class="ti num ti-req" /></td>
               <td><input v-model="r.hMm" class="ti num" /></td>
               <td><input v-model="r.sMm" class="ti num" /></td>
               <td><input v-model="r.xMm" class="ti num" /></td>
-              <td class="acts"><button class="btn-mini" title="Сохранить" @click="saveJoint(r)">💾</button></td>
+              <td class="acts"><button v-hint="'Сохранить строку'" class="btn-mini" aria-label="Сохранить строку" @click="saveJoint(r)">💾</button></td>
             </tr>
           </tbody>
         </table>
@@ -181,13 +181,13 @@
               <td class="key">{{ fmtInt(r.lengthMm) }}</td>
               <td><input v-model="r.massKg" class="ti num ti-req" /></td>
               <td><input v-model="r.thicknessMm" class="ti num" /></td>
-              <td class="acts"><button class="btn-mini" title="Сохранить" @click="saveMatrixCell(r)">💾</button></td>
+              <td class="acts"><button v-hint="'Сохранить ячейку'" class="btn-mini" aria-label="Сохранить ячейку" @click="saveMatrixCell(r)">💾</button></td>
             </tr>
             <tr class="new-row">
               <td><input v-model="newCell.lengthMm" class="ti num" placeholder="L, мм" /></td>
               <td><input v-model="newCell.massKg" class="ti num ti-req" placeholder="кг" /></td>
               <td><input v-model="newCell.thicknessMm" class="ti num" /></td>
-              <td class="acts"><button class="btn-mini" title="Добавить ячейку" @click="addMatrixCell">＋</button></td>
+              <td class="acts"><button v-hint="'Добавить ячейку'" class="btn-mini" aria-label="Добавить ячейку" @click="addMatrixCell">＋</button></td>
             </tr>
           </tbody>
         </table>

@@ -137,6 +137,17 @@
 [data-theme="light"] .auth-page { background: var(--bg3); }
 
 html, body, #app { height: 100%; overflow: hidden; }
+
+/* ── Сноски (directives/hint.ts) ──
+ * У подписи есть пояснение — пунктир снизу и курсор «?». Пунктир цвета
+ * линий, а не текста: знак сноски не должен спорить с самой подписью. */
+[data-hint-mark] {
+  text-decoration: underline dotted var(--line2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+[data-hint-mark]:hover { text-decoration-color: var(--muted); }
 body { background: var(--bg); color: var(--text); font-family: Archivo, system-ui, sans-serif; }
 button { font-family: inherit; cursor: pointer; }
 
