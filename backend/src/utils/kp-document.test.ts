@@ -6,7 +6,7 @@
  * из цены, а не начисляется сверху.
  */
 import { describe, expect, it } from 'vitest'
-import { extractSpecification, isRowWithoutPrice, resolveRowQty, tirageOf } from './estimate-tree'
+import { extractSpecification, isFotRow, isRowWithoutPrice, resolveRowQty, tirageOf } from './estimate-tree'
 import {
   buildKpDocument,
   buildProjectKpDocument,
@@ -40,6 +40,8 @@ function tree() {
                 { id: 'r1', name: 'Труба СК/НПС-К 3000-0,1-10000', unit: 'м', qtyCalc: 12.5, priceCatalog: 48000 },
                 { id: 'r2', name: 'Выключённая строка', unit: 'шт', qtyCalc: 3, enabled: false },
                 { id: 'r3', name: 'Нулевое количество', unit: 'шт', qtyCalc: 0 },
+                // Спутник операции: в документ заказчику не идёт.
+                { id: 'r7', kind: 'ФОТ', category: 'ФОТ', name: 'ФОТ', unit: 'чел. ч', qtyCalc: 112, priceCatalog: 1207.8 },
               ],
             },
             {
@@ -110,6 +112,43 @@ describe('extractSpecification', () => {
     const spec = extractSpecification(tree())
 
     expect(spec.sections[1]?.rows[0]).toMatchObject({ name: 'Насос', unit: 'шт', qty: 3 })
+  })
+
+  it('не печатает ФОТ — это спутник операции, а не позиция изделия', () => {
+    const spec = extractSpecification(tree())
+
+    const names = spec.sections.flatMap((s) => s.rows.map((r) => r.name))
+    expect(names).not.toContain('ФОТ')
+    // Сама операция при этом остаётся: убран спутник, а не работа.
+    expect(names).toContain('Труба СК/НПС-К 3000-0,1-10000')
+  })
+
+  it('ФОТ узнаётся и по kind, и по категории — у старых снапшотов kind нет', () => {
+    expect(isFotRow({ kind: 'ФОТ', name: 'ФОТ' })).toBe(true)
+    expect(isFotRow({ category: 'ФОТ', name: 'ФОТ' })).toBe(true)
+    expect(isFotRow({ kind: 'ОПЕРАЦИЯ', category: 'Собственное производство', name: 'Монтаж Лестницы' })).toBe(false)
+  })
+
+  it('неразобранное количество у ФОТ печать не блокирует', () => {
+    const t = {
+      tree: {
+        sections: [
+          {
+            code: '1', title: 'Корпус', enabled: true,
+            components: [{
+              title: 'c', enabled: true,
+              rows: [
+                { name: 'Труба', unit: 'м', qtyCalc: 2 },
+                { kind: 'ФОТ', category: 'ФОТ', name: 'ФОТ', unit: 'чел. ч', qtyManual: '2*3' },
+              ],
+            }],
+          },
+        ],
+      },
+    }
+
+    // Строки в документе нет — значит и выдумывать в ней нечего.
+    expect(extractSpecification(t).unresolved).toEqual([])
   })
 
   it('на мусоре не падает, а отдаёт пустую спецификацию', () => {

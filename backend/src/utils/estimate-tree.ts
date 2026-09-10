@@ -13,6 +13,10 @@ export interface TreeRow {
   id?: string
   name?: string
   unit?: string
+  /** Вид строки: МАТЕРИАЛ · ОПЕРАЦИЯ · ФОТ (Механика §5.3). */
+  kind?: string
+  /** Категория прайса — первая часть ключа цены. У спутника ФОТ она «ФОТ». */
+  category?: string
   enabled?: boolean
   qtyCalc?: number | null
   /**
@@ -154,6 +158,28 @@ export function rowsWithoutPrice(surveyData: unknown): TreeRow[] {
   return extractRows(surveyData).filter(isRowWithoutPrice)
 }
 
+/**
+ * Строка ФОТ — спутник операции, а не позиция изделия.
+ *
+ * Материализация добавляет её к каждой операции формовки и ламинирования
+ * (`engines/template-kns.ts`, operationWithFot): те же часы, умноженные на
+ * коэффициент, по ставке из прайса. Заказчику она не говорит ничего о том,
+ * что он покупает, а в спецификации выглядит дублем — «Ламинирование 112 кг»
+ * и сразу «ФОТ 112 чел. ч».
+ *
+ * На итог отказ от печати не влияет: цена берётся из снапшота, а ФОТ входит
+ * в неё через себестоимость. Из гейта «строки без цены» ФОТ тоже не
+ * исключается — там он занижал бы сумму по-настоящему.
+ *
+ * Признаков два: `kind` — то, чем строка является, `category` — ключ прайса.
+ * Достаточно любого: у снапшотов, снятых до появления `kind`, остаётся
+ * категория.
+ */
+export function isFotRow(row: TreeRow): boolean {
+  const label = (v: unknown) => String(v ?? '').trim().toUpperCase()
+  return label(row.kind) === 'ФОТ' || label(row.category) === 'ФОТ'
+}
+
 /** Позиция спецификации — строка расчёта, попавшая в документ заказчику. */
 export interface SpecRow {
   name: string
@@ -198,7 +224,7 @@ export function tirageOf(surveyData: unknown): number {
  *
  * Выключенные разделы, компоненты и строки, а также строки с нулевым
  * количеством отбрасываются: в итог они не входят, и в документе заказчику им
- * делать нечего.
+ * делать нечего. Строки ФОТ не печатаются — см. {@link isFotRow}.
  *
  * КОЛИЧЕСТВА — НА ВЕСЬ ТИРАЖ. Экран расчёта показывает их так же (`engines/row.ts`,
  * resolveQty умножает на тираж), и цена продажи в снапшоте — тоже за весь тираж.
@@ -233,6 +259,9 @@ export function extractSpecification(surveyData: unknown): Specification {
         if (!isObj(r)) continue
         const row = r as TreeRow
         if (row.enabled === false) continue
+        // ФОТ отбрасывается ДО разбора количества: строки, которой в документе
+        // нет, незачем блокировать печать своим неразобранным выражением.
+        if (isFotRow(row)) continue
 
         const name = String(row.name ?? '').trim() || '(без наименования)'
         const unit = String(row.unit ?? '').trim()
