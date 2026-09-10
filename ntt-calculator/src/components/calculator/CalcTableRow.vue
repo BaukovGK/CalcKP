@@ -68,7 +68,7 @@
           <button class="btn-plain" @click="$emit('drop', row.id)">Принять новое</button>
         </template>
       </template>
-      <span v-else-if="res.missingPrice" class="note-red">указать цену</span>
+      <span v-else-if="unpriced" class="note-red">указать цену</span>
       <span v-else class="note">{{ row.note ?? '' }}</span>
 
       <!-- Удалять можно только строки, добавленные вручную: строки шаблона
@@ -127,9 +127,17 @@ const emit = defineEmits<{
 
 const isSatellite = computed(() => props.row.kind === 'ФОТ' && props.row.parentId != null)
 
+/**
+ * Строка без цены, которая входит в итог, — та же, что считает счётчик
+ * «без цены» и гейт КП (stores/calcTree.ts, missingPriceIds). Строка с
+ * нулевым количеством ничего не стоит: красной она быть не должна, иначе
+ * красных строк на экране больше, чем в счётчике.
+ */
+const unpriced = computed(() => props.res.missingPrice && !props.disabled && props.res.qty !== 0)
+
 const rowClass = computed(() => ({
   'is-ghost': props.disabled,
-  'is-red': props.res.missingPrice && !props.disabled,
+  'is-red': unpriced.value,
   'is-sat-row': isSatellite.value,
 }))
 

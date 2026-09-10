@@ -8,9 +8,11 @@ import { PRESSURE_PIPE_EXTRAS, PRESSURE_PIPE_KITS } from './pressure-pipe-kit'
 import {
   __resetIds,
   flattenRows,
+  inletGateValveName,
   KNS_SECTIONS,
   materializeKns,
   sectionEnabledFor,
+  stationHeightM,
   type KnsSurveyParams,
   type MaterializeContext,
 } from './template-kns'
@@ -165,6 +167,13 @@ describe('раздел 2 «Лестница» (Библиотека B1)', () => 
     expect(byName('Монтаж Лестницы').qtyCalc).toBeCloseTo(7.25, 6)
   })
 
+  // Материалы были в эталоне всегда (строки 124–125), а в расчёте — нет:
+  // лестница стоила только работы.
+  it('тетивы из уголка 2 × H, ступени — труба H × 0,44 / 0,35', () => {
+    expect(byName('Уголок 40х40х3мм 08Х18Н10Т(AISI304) ГОСТ 8509-93').qtyCalc).toBeCloseTo(23.2, 6)
+    expect(byName('Труба 25х2 мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81').qtyCalc).toBeCloseTo((11.6 * 0.44) / 0.35, 6)
+  })
+
   // Вопроса «Лестница» в ОЛ КНС нет: узел не следует за ОЛ, его состояние
   // целиком в руках инженера.
   it('у КНС лестница и стояк от ОЛ не зависят', () => {
@@ -196,6 +205,45 @@ describe('раздел 3 «Перекрытие» (B2, B6)', () => {
     expect(Number.isInteger(a)).toBe(true)
     expect(a).toBeGreaterThan(0)
   })
+
+  it('рама перекрытия: профиль по компоновке, работы 7 и 6 чел.ч при DN ≥ 2500', () => {
+    expect(byName('Труба 60х30х2мм 12Х18Н10Т ГОСТ 8639-82').qtyCalc).toBeNull()
+    expect(byName('Изготовление рамы перекрытия из профильной трубы').qtyCalc).toBe(7)
+    expect(byName('Монтаж рамы перекрытия на верхнем стеклокомпозитном перекрытии').qtyCalc).toBe(6)
+
+    const small = flattenRows(materializeKns(ctx, { ...OL3487, dn: 2000 }))
+    expect(small.find((r) => r.name === 'Изготовление рамы перекрытия из профильной трубы')!.qtyCalc).toBe(6)
+    // Меньше DN 1200 профиля в листе нет — нет и рамы.
+    const tiny = flattenRows(materializeKns(ctx, { ...OL3487, dn: 1000 }))
+    expect(tiny.find((r) => r.name === 'Изготовление рамы перекрытия из профильной трубы')).toBeUndefined()
+  })
+
+  // Направляющие насосов — материал из паспорта насоса, а не «0,25 чел.ч на
+  // метр»: лист считает трубу L × насосов × 2 и по 2 чел.ч на насос.
+  it('крепление насосов: труба направляющих L × 3 × 2 = 69,6 м и работы по эталону', () => {
+    const pipe = byName('Труба 32х2мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81')
+    expect(pipe.kind).toBe('МАТЕРИАЛ')
+    expect(pipe.qtyCalc).toBeCloseTo(69.6, 6)
+    expect(byName('Изготовление направляющих насосов').qtyCalc).toBe(6)
+    expect(byName('Монтаж направляющих насосов').qtyCalc).toBe(6)
+    expect(byName('Изготовление рамы насосов').qtyCalc).toBe(7)
+    expect(byName('Монтаж рамы насосов').qtyCalc).toBe(6)
+    // Металл рамы лист не выводит — строки пустые, а не выдуманные.
+    expect(byName('Швеллер 12-П ст3пс ГОСТ 8240-97').qtyCalc).toBeNull()
+  })
+
+  it('цепь подъёма насосов — от высоты станции с возвышением', () => {
+    // Без возвышения: ROUNDUP(3 × (11,6 + 1)) = 38.
+    expect(byName('Цепь короткозвенная сварная 5 мм DIN 766 А2/А4').qtyCalc).toBe(38)
+    // Та же цепь и скобы есть у дробилки и корзины в «Корпусе» — ищем в разделе 3.
+    const raised = materializeKns(ctx, { ...OL3487, elevationMm: 300 })
+      .sections.find((s) => s.code === '3')!
+      .components.flatMap((c) => c.rows)
+    // С возвышением 0,3 м: ROUNDUP(3 × 12,9) = 39; скоб и колец — столько же.
+    for (const n of ['Цепь короткозвенная сварная 5 мм DIN 766 А2/А4', 'Скоба такелажная прямая М6']) {
+      expect(raised.find((r) => r.name === n)!.qtyCalc, n).toBe(39)
+    }
+  })
 })
 
 describe('раздел 4 «Вентстояк» (C1)', () => {
@@ -213,12 +261,8 @@ describe('раздел 4 «Вентстояк» (C1)', () => {
 describe('раздел 5 «Напорный трубопровод» (C2)', () => {
   const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '5')!.components.flatMap((c) => c.rows)
 
-  it('направляющие насосов — труд из «Собственного производства», не метраж', () => {
-    // L × (раб + рез) × 2 = 69,6 м; норматив 0,25 чел.ч/м -> 17,4 чел.ч.
-    const izg = rows.find((r) => r.name === 'Изготовление направляющих насосов')!
-    expect(izg.category).toBe('Собственное производство')
-    expect(izg.unit).toBe('чел. ч')
-    expect(izg.qtyCalc).toBeCloseTo(17.4, 6)
+  it('направляющих насосов в напорном трубопроводе больше нет — они в разделе 3', () => {
+    expect(rows.find((r) => r.name.includes('направляющих насосов'))).toBeUndefined()
   })
 
   // Комплект нитки берётся из эталона по DN напорного (ОЛ3487 — DN150).
@@ -306,6 +350,9 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
     expect(rows2.find((r) => r.name.startsWith('Клапан обратный'))!.qtyCalc).toBe(1)
     expect(rows2.find((r) => r.name.startsWith('Задвижка чугунная'))!.qtyCalc).toBe(1)
     expect(rows2.find((r) => r.name === PRESSURE_PIPE_KITS[150]!.freeFlange.name)!.qtyCalc).toBe(2)
+    // Монтаж арматуры линии — здесь же и выключается вместе с ней.
+    expect(rows2.find((r) => r.name === 'Монтаж Задвижки клиновой')!.qtyCalc).toBe(1)
+    expect(rows2.find((r) => r.name === 'Монтаж Клапанов обратных шаровых')!.qtyCalc).toBe(1)
   })
 
   // Труба аварийной линии идёт по DN напорного, а муфта — нет: её размер
@@ -395,6 +442,27 @@ describe('раздел 1 «Корпус»', () => {
 
   it('придание товарного вида → 26,8 чел.ч', () => {
     expect(Number(byName('Придание изделию товарного вида').qtyCalc!.toFixed(1))).toBe(26.8)
+  })
+
+  it('подготовка трубы = DN/(200·6) × L = 3000/1200 × 11,6 = 29 чел.ч', () => {
+    const prep = byName('Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)')
+    expect(prep.qtyCalc).toBeCloseTo(29, 6)
+  })
+
+  it('кабельный ввод: гильза 0,5 кг, два гермоввода, прорезка Ø100', () => {
+    const entry = korpus.components.find((c) => c.nodeCode === 'A7')!
+    expect(entry.rows.find((r) => r.name === 'Ручная формовка гильз для ввода кабелей')!.qtyCalc).toBe(0.5)
+    expect(entry.rows.find((r) => r.name === 'Гермоввод для труб 89/110 (комплектация 1)')!.qtyCalc).toBe(2)
+    expect(entry.rows.find((r) => r.name === 'Прорезка отверстия под гильзу ввода кабелей')!.qtyCalc).toBeCloseTo(
+      (100 * Math.PI * 0.5) / 1000,
+      9,
+    )
+  })
+
+  it('петли монтажные: DN 3000 — усиленные, четыре', () => {
+    const loops = korpus.components.find((c) => c.nodeCode === 'A10')!
+    expect(loops.title).toContain('усиленные')
+    expect(loops.rows.find((r) => r.name === 'Болт М24-6gх100.21.Ст20 ГОСТ 7798-70')!.qtyCalc).toBe(8)
   })
 
   it('масса формованного дна → 262,8 кг, ламинирование → 78,9 кг', () => {
@@ -488,6 +556,15 @@ describe('раздел 1 «Корпус»', () => {
     const ins = korpus.components.find((c) => c.nodeCode === 'A9')!
     expect(ins.enabled).toBe(true)
   })
+
+  // Лист КНС: боковая площадь вверх до 0,01 м² плюс горловины люков — та же
+  // константа при любых люках; крышка — круг DN.
+  it('теплоизоляция: бок 18,85 + горловины 7,56 + крышка 7,07 = 33,48 м²', () => {
+    const area = byName('Теплоизоляция - Изофом ППЭ ОР 15 1,5х40').qtyCalc!
+    expect(area).toBeCloseTo(18.85 + ((1.5 + 1.5) * 2 + Math.PI * 0.65) * 0.94 + Math.PI * 1.5 ** 2, 9)
+    expect(byName('Монтаж теплоизоляции').qtyCalc).toBeCloseTo(area, 9)
+    expect(byName('Защитный слой ламинации 5 мм на теплоизоляцию').qtyCalc).toBeCloseTo(area * 0.005 * 1850, 9)
+  })
 })
 
 describe('раздел 1: исполнение «труба частями»', () => {
@@ -574,8 +651,22 @@ describe('раздел 7 «Оборудование» — авторасчёт �
     .components.flatMap((c) => c.rows)
   const byName = (n: string) => rows.find((r) => r.name === n)!
 
+  // Лист, строка 408: на подводящем — шиберная задвижка со штоком до
+  // поверхности, а не клиновая. В ОЛ3487 глубина лотка не передана — шток
+  // без длины.
+  const INLET_GATE = inletGateValveName(250, undefined)
+
   it('задвижки = кол-во подводящих × флаг', () => {
-    expect(byName('Задвижка чугунная клиновая металл/металл DN250 PN10/16 клин бронза').qtyCalc).toBe(1)
+    expect(INLET_GATE).toBe('Задвижка шиберная с невыдв.шпинделем с ручным управлением DN250 PN10 и удлиненным штоком')
+    expect(byName(INLET_GATE).qtyCalc).toBe(1)
+    expect(byName(INLET_GATE).note).toContain('укажите в ОЛ глубину лотка')
+  })
+
+  it('шток задвижки на подводящем — от оси трубы: лоток − DN/2', () => {
+    expect(inletGateValveName(400, 9910)).toBe(
+      'Задвижка шиберная с невыдв.шпинделем с ручным управлением DN400 PN10 и удлиненным штоком L=9710 мм ' +
+        '(высота штока указана от оси трубы)',
+    )
   })
 
   // Схема завода: задвижка на стояке каждого установленного насоса плюс по
@@ -593,9 +684,15 @@ describe('раздел 7 «Оборудование» — авторасчёт �
   // 5 напорных + 1 на подводящем + 1 на аварийной линии.
   it('всего задвижек с подводящей и аварийной — 7, как в опросном листе', () => {
     const all = flattenRows(materializeKns(ctx, { ...OL3487, emergencyPipeline: true }))
-      .filter((r) => r.name.startsWith('Задвижка чугунная'))
+      .filter((r) => r.name.startsWith('Задвижка '))
       .reduce((n, r) => n + (r.qtyCalc ?? 0), 0)
     expect(all).toBe(7)
+  })
+
+  it('монтаж арматуры — 1 чел.ч на штуку, от тех же количеств', () => {
+    expect(byName('Монтаж Задвижки шиберной ножевой').qtyCalc).toBe(1)
+    expect(byName('Монтаж Задвижки клиновой').qtyCalc).toBe(5)
+    expect(byName('Монтаж Клапанов обратных шаровых').qtyCalc).toBe(3)
   })
 
   // Дефект: ОЛ показывал ручную цифру в итоге блока арматуры, а материализация
@@ -606,8 +703,9 @@ describe('раздел 7 «Оборудование» — авторасчёт �
       .components.flatMap((c) => c.rows)
     const by = (n: string) => rows7.find((r) => r.name === n)!
 
-    const inlet = by('Задвижка чугунная клиновая металл/металл DN250 PN10/16 клин бронза')
+    const inlet = by(INLET_GATE)
     expect(inlet.qtyCalc).toBe(2)
+    expect(by('Монтаж Задвижки шиберной ножевой').qtyCalc).toBe(2)
     // Расчётное не теряется: оно в примечании, рядом с пометкой о ручном вводе.
     expect(inlet.note).toContain('задано в ОЛ вручную: 2')
     expect(inlet.note).toContain('расчётное 1')
@@ -626,12 +724,34 @@ describe('раздел 7 «Оборудование» — авторасчёт �
     expect(rows7.find((r) => r.name.includes('DN250'))!.note).not.toContain('вручную')
   })
 
-  it('поплавки = раб + рез + 2 = 5', () => {
-    expect(byName('ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ КАБЕЛЬ 10 М').qtyCalc).toBe(5)
+  // Кабель поплавка — наименьший из прайса, не короче высоты станции: 11,6 м
+  // → 20 М. Раньше стоял 10 М при любой глубине — не доставал до верха.
+  it('поплавки = раб + рез + 2 = 5, кабель по высоте станции', () => {
+    expect(byName('ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ КАБЕЛЬ 20 М').qtyCalc).toBe(5)
+    const shallow = flattenRows(materializeKns(ctx, { ...OL3487, depthMm: 6000 }))
+    expect(shallow.find((r) => r.name.startsWith('ПОПЛАВКОВЫЙ'))!.name).toBe('ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ КАБЕЛЬ 10 М')
   })
 
   it('насосы = раб + рез = 3', () => {
     expect(byName('Насос (марка по подбору)').qtyCalc).toBe(3)
+  })
+
+  // Лист, I412: запасные на склад входят в поставку, но не в монтаж.
+  it('запасные насосы — в поставку, но не в монтаж и не в муфты', () => {
+    const rows7 = materializeKns(ctx, { ...OL3487, pumpsSpare: 1 })
+      .sections.find((s) => s.code === '7')!
+      .components.flatMap((c) => c.rows)
+    const by = (n: string) => rows7.find((r) => r.name === n)!
+    expect(by('Насос (марка по подбору)').qtyCalc).toBe(4)
+    expect(by('Насос (марка по подбору)').note).toContain('на склад 1')
+    expect(by('Автоматическая трубная муфта').qtyCalc).toBe(3)
+    expect(by('Монтаж Насосов').qtyCalc).toBe(6)
+    expect(by('Монтаж Систем автоматической трубной муфты').qtyCalc).toBe(9)
+  })
+
+  // Муфты в прайсе нет — цену даёт поставщик насосов, как и самого насоса.
+  it('автоматическая трубная муфта рождается «красной»', () => {
+    expect(computeRow(byName('Автоматическая трубная муфта')).missingPrice).toBe(true)
   })
 
   // Цены нет ни в прайсе, ни в ОЛ — строка «красная», как у трубы корпуса без
@@ -682,6 +802,162 @@ describe('раздел 7 «Оборудование» — авторасчёт �
 
     expect(pump.name).toBe('Насос (марка по подбору)')
     expect(pump.note).toContain('марка не подобрана')
+  })
+})
+
+describe('раздел 7: автоматика и оборудование обслуживания (D2, D5)', () => {
+  const section7 = (p: Partial<KnsSurveyParams>) =>
+    materializeKns(ctx, { ...OL3487, ...p }).sections.find((s) => s.code === '7')!.components
+  const byTitle = (cs: ReturnType<typeof section7>, t: string) => cs.find((c) => c.title === t)!
+
+  it('без полей автоматики узлы собираются выключенными «призраками»', () => {
+    const cs = section7({})
+    for (const t of ['Шкаф управления', 'Датчики давления', 'Датчик уровня', 'Расходомер']) {
+      expect(byTitle(cs, t).enabled, t).toBe(false)
+      expect(byTitle(cs, t).enabledCalc, t).toBe(false)
+    }
+  })
+
+  it('тумблеры ОЛ включают свои узлы', () => {
+    const cs = section7({ hasControlCabinet: true, hasPressureSensors: true, hasLevelSensor: true, hasFlowMeter: true })
+    for (const t of ['Шкаф управления', 'Датчики давления', 'Датчик уровня', 'Расходомер']) {
+      expect(byTitle(cs, t).enabled, t).toBe(true)
+    }
+  })
+
+  it('шкаф: исполнение и пуск — в наименовании, монтаж 6 чел.ч, цена вручную', () => {
+    const cab = byTitle(section7({ hasControlCabinet: true, controlCabinetType: 'уличный', controlCabinetStart: 'плавный' }), 'Шкаф управления')
+    expect(cab.rows[0]!.name).toBe('Шкаф управления насосами (3 шт.), уличный, пуск плавный')
+    expect(computeRow(cab.rows[0]!).missingPrice).toBe(true)
+    expect(cab.rows.find((r) => r.name === 'Монтаж Шкафа управления')!.qtyCalc).toBe(6)
+  })
+
+  it('датчики давления — по напорному патрубку, кабель по высоте станции', () => {
+    const d = byTitle(section7({ hasPressureSensors: true }), 'Датчики давления')
+    expect(d.rows[0]!.name.endsWith('с кабелем 20 м')).toBe(true)
+    expect(d.rows[0]!.qtyCalc).toBe(2)
+    expect(d.rows.find((r) => r.name === 'Монтаж датчиков')!.qtyCalc).toBe(2)
+  })
+
+  it('датчик уровня — один, с футляром ПЭ 110 на всю длину корпуса', () => {
+    const d = byTitle(section7({ hasLevelSensor: true }), 'Датчик уровня')
+    expect(d.rows[0]!.qtyCalc).toBe(1)
+    expect(d.rows.find((r) => r.name === 'Труба ПЭ 100 SDR17 Ø110×6,6 PN10 ГОСТ 18599-2001')!.qtyCalc).toBeCloseTo(11.6, 9)
+  })
+
+  it('расходомер — DN напорного по одному на патрубок', () => {
+    const d = byTitle(section7({ hasFlowMeter: true }), 'Расходомер')
+    expect(d.rows[0]!.name.startsWith('Расходомер электромагнитный DN150 ')).toBe(true)
+    expect(d.rows[0]!.qtyCalc).toBe(2)
+    expect(d.rows.find((r) => r.name === 'Монтаж расходомера')!.qtyCalc).toBe(2)
+  })
+
+  it('тренога, таль по высоте станции и газоанализатор — всегда', () => {
+    const svc = byTitle(section7({}), 'Оборудование для обслуживания')
+    expect(svc.enabled).toBe(true)
+    expect(svc.rows.map((r) => r.name)).toEqual([
+      'Тренога перегрузочная ТП-1000 г/п 1000 кг (без тали)',
+      'Таль ручная цепная ТРШС 0,5т Н=12м',
+      'Переносной газоанализатор (CH4, H2S, CO, O2)',
+    ])
+    // Глубже самой длинной тали — строка «красная» и просит подобрать.
+    const deep = byTitle(section7({ depthMm: 19000 }), 'Оборудование для обслуживания')
+    expect(deep.rows[1]!.name).toContain('высота подъёма по станции')
+    expect(deep.rows[1]!.note).toContain('подберите')
+  })
+})
+
+// Образец эталона: лист «Калькулятор КНС» с его опросным листом
+// (DN 3000, подземная часть 11 500, возвышение 300, подводящий DN400 на
+// 9910, два напорных DN150, 2 + 1 насоса и один на склад). Каждое число ниже —
+// колонка J листа.
+describe('сверка с образцом эталона «Калькулятор КНС»', () => {
+  const REF: KnsSurveyParams = {
+    ...OL3487,
+    depthMm: 11500,
+    elevationMm: 300,
+    inletDn: 400,
+    inletTrayDepthMm: 9910,
+    pumpsSpare: 1,
+    emergencyPipeline: true,
+    hasFlowMeter: true,
+    hasBasket: true,
+    hasControlCabinet: true,
+    hasPressureSensors: true,
+    hasLevelSensor: true,
+  }
+  const tree = materializeKns(ctx, REF)
+  const rows = flattenRows(tree)
+  const enabled = sectionEnabledFor(tree)
+  // Цепь 5 мм и скобы М6 есть и у корзины с дробилкой, поэтому раздел можно
+  // указать. Количество — как в колонке J: с округлением часов и флагами узлов.
+  const qty = (n: string, section?: string) => {
+    const pool = section ? flattenRows({ ...tree, sections: tree.sections.filter((s) => s.code === section) }) : rows
+    const r = pool.find((x) => x.name === n)
+    if (!r) throw new Error(`нет строки: ${n}`)
+    return computeRow(r, { sectionEnabled: enabled(r) }).qty
+  }
+
+  it('высота станции 11,8 м (H5 = I5 + возвышение)', () => {
+    expect(stationHeightM(REF)).toBeCloseTo(11.8, 9)
+  })
+
+  it('корпус: подготовка трубы 28,8, товарный вид 26,6, теплоизоляция 33,5 чел.ч', () => {
+    expect(qty('Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)')).toBe(28.8)
+    expect(qty('Придание изделию товарного вида')).toBe(26.6)
+    expect(qty('Монтаж теплоизоляции')).toBe(33.5)
+    expect(qty('Защитный слой ламинации 5 мм на теплоизоляцию')).toBeCloseTo(309.672, 3)
+  })
+
+  it('петли: болтов 8, листа 6 мм 0,32 м², арматуры 3,6 м, работ 2 + 2', () => {
+    expect(qty('Болт М24-6gх100.21.Ст20 ГОСТ 7798-70')).toBe(8)
+    expect(qty('Лист г/к Б-ПН-О-6,0х1500х3000 ГОСТ 19903-74 // Ст3пс ГОСТ 14637-89')).toBe(0.32)
+    expect(qty('Арматура 20-А-I Ст3пс ГОСТ 5781-82 гладкая (А240)')).toBe(3.6)
+    expect(qty('Ламинирование петель к корпусу')).toBe(2.4)
+    expect(qty('Изготовление Петель монтажных')).toBe(2)
+    expect(qty('Монтаж Петель монтажных')).toBe(2)
+  })
+
+  it('лестница: уголок 23 м, труба ступеней 14,457 м, работы 14,4 и 7,2', () => {
+    expect(qty('Уголок 40х40х3мм 08Х18Н10Т(AISI304) ГОСТ 8509-93')).toBe(23)
+    expect(qty('Труба 25х2 мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81')).toBeCloseTo(14.457, 3)
+    expect(qty('Изготовление Лестницы')).toBe(14.4)
+    expect(qty('Монтаж Лестницы')).toBe(7.2)
+  })
+
+  it('раздел 3: направляющие 69 м, цепь 39 м, скоб и колец по 39, рамы 7 + 6', () => {
+    expect(qty('Труба 32х2мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81')).toBe(69)
+    expect(qty('Цепь короткозвенная сварная 5 мм DIN 766 А2/А4', '3')).toBe(39)
+    expect(qty('Скоба такелажная прямая М6', '3')).toBe(39)
+    expect(qty('Кольцо сварное полированное АРТ 8229 А4 10Х60', '3')).toBe(39)
+    expect(qty('Изготовление рамы перекрытия из профильной трубы')).toBe(7)
+    expect(qty('Монтаж рамы перекрытия на верхнем стеклокомпозитном перекрытии')).toBe(6)
+    expect(qty('Изготовление рамы насосов')).toBe(7)
+    expect(qty('Монтаж рамы насосов')).toBe(6)
+  })
+
+  it('раздел 7: насосов 4, муфт 3, поплавков 5 с кабелем 20 М, датчиков 2 + 1, расходомеров 2', () => {
+    expect(qty('Насос (марка по подбору)')).toBe(4)
+    expect(qty('Автоматическая трубная муфта')).toBe(3)
+    expect(qty('ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ КАБЕЛЬ 20 М')).toBe(5)
+    expect(rows.filter((r) => r.category === 'Датчики').map((r) => r.qtyCalc)).toEqual([2, 1])
+    expect(qty('Труба ПЭ 100 SDR17 Ø110×6,6 PN10 ГОСТ 18599-2001')).toBe(11.5)
+    expect(rows.find((r) => r.category === 'Расходомеры')!.qtyCalc).toBe(2)
+    expect(qty('Таль ручная цепная ТРШС 0,5т Н=12м')).toBe(1)
+  })
+
+  it('раздел 7, работы: задвижка 1, насосы 6, муфты 9, поплавки 5, датчики 3, расходомер 2, шкаф 6', () => {
+    expect(qty('Монтаж Задвижки шиберной ножевой')).toBe(1)
+    expect(qty('Монтаж Насосов')).toBe(6)
+    expect(qty('Монтаж Систем автоматической трубной муфты')).toBe(9)
+    expect(qty('Монтаж Поплавковых выключателей')).toBe(5)
+    expect(rows.filter((r) => r.name === 'Монтаж датчиков').reduce((n, r) => n + (r.qtyCalc ?? 0), 0)).toBe(3)
+    expect(qty('Монтаж расходомера')).toBe(2)
+    expect(qty('Монтаж Шкафа управления')).toBe(6)
+  })
+
+  it('задвижка на подводящем — шиберная DN400 со штоком 9710 мм', () => {
+    expect(rows.find((r) => r.name.startsWith('Задвижка шиберная'))!.name).toContain('DN400 PN10 и удлиненным штоком L=9710 мм')
   })
 })
 

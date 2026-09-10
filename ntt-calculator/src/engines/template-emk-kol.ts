@@ -28,6 +28,7 @@ import {
   insulation,
   laminationMassKg,
   marketableAppearanceHours,
+  pipePrepHours,
 } from './formulas'
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import {
@@ -42,6 +43,7 @@ import {
   operationWithFot,
   surveyToggled,
   type CalcComponent,
+  type CalcRowNode,
   type CalcSection,
   type CalcTree,
   type MaterializeContext,
@@ -61,6 +63,8 @@ import {
 } from './survey-emk-kol'
 import { pnForWeightLookup, sleeveDiameter } from './survey-kns'
 import { buildBasket, buildGrinder } from './basket-grinder'
+import { buildMountingLoops } from './mounting-loops'
+import { buildPumpMounting } from './station-equipment'
 
 // ─── Каркасы разделов ────────────────────────────────────────────────────────
 
@@ -231,6 +235,23 @@ function buildNozzles(
   return out
 }
 
+/**
+ * Предварительные работы для подготовки трубы (транспортировка, разметка
+ * осей, шлифовка) — `DN/(200·6) × L` по каждой трубе изделия: корпусу и
+ * шахте ёмкости (лист ЕМК, строки 79–80), корпусу и горловине колодца
+ * (лист колодца, 78–79).
+ */
+function pipePrepRow(ctx: MaterializeContext, dn: number, lengthM: number): CalcRowNode {
+  return makeRow(ctx, {
+    kind: 'ОПЕРАЦИЯ',
+    category: 'Собственное производство',
+    name: 'Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)',
+    unit: 'чел. ч',
+    qtyCalc: pipePrepHours(dn, lengthM),
+    note: `ƒ DN/(200·6) × L = ${dn}/1200 × ${lengthM.toLocaleString('ru-RU', { maximumFractionDigits: 3 })} м`,
+  })
+}
+
 /** Теплоизоляция — общий узел A9; толщина защитного слоя зависит от изделия. */
 function buildInsulation(
   ctx: MaterializeContext,
@@ -328,6 +349,8 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
           unit: 'чел. ч',
           qtyCalc: marketableAppearanceHours(s.dn, lengthM),
         }),
+        // Вся труба, включая 1,5 м на цилиндрические днища (эталон J13).
+        pipePrepRow(ctx, s.dn, lengthM),
       ],
     },
   ]
@@ -444,6 +467,7 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
           priceBinding: 'servicePipePrice',
           priceManual: boundPrice(s.servicePipePriceRub),
         },
+        pipePrepRow(ctx, geo.shaftDiameterMm, geo.shaftHeightMm / 1000),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ручная формовка шахты обслуживания к корпусу',
@@ -480,6 +504,7 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
   )
 
   components.push(buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 5))
+  components.push(buildMountingLoops(ctx, s.dn))
 
   return components
 }
@@ -528,6 +553,7 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
           unit: 'чел. ч',
           qtyCalc: marketableAppearanceHours(s.dn, lengthM),
         }),
+        pipePrepRow(ctx, s.dn, lengthM),
       ],
     },
     {
@@ -583,6 +609,7 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
           priceBinding: 'servicePipePrice',
           priceManual: boundPrice(s.servicePipePriceRub),
         },
+        pipePrepRow(ctx, s.neckDiameterMm, s.neckHeightMm / 1000),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Механическая формовка горловины к корпусу',
@@ -620,6 +647,7 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
 
   // У колодца защитный слой ламинации 4 мм, а не 5 (Реверс §4.3).
   components.push(buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 4))
+  components.push(buildMountingLoops(ctx, s.dn))
 
   return components
 }
@@ -655,6 +683,7 @@ export function emkLadderHeightMm(survey: Pick<EmkSurveyParams, 'placement' | 'd
 export function materializeEmk(ctx: MaterializeContext, survey: EmkSurveyParams): CalcTree {
   const geo = computeEmkGeometry(survey)
   const depthMm = geo.overallLengthMm ?? 0
+  const ladderMm = emkLadderHeightMm(survey, geo)
 
   const byCode: Record<string, CalcComponent[]> = {
     '1': buildEmkKorpus(ctx, survey),
@@ -663,8 +692,23 @@ export function materializeEmk(ctx: MaterializeContext, survey: EmkSurveyParams)
     '2': [
       buildBasket(ctx, { device: 'EMK', dn: survey.dn, trayDepthMm: survey.inletTrayDepthMm, enabled: survey.hasBasket }),
     ],
-    '3': buildLadder(ctx, { depthMm: emkLadderHeightMm(survey, geo), enabled: survey.hasLadder ?? true }),
-    '4': buildSlab(ctx, { dn: survey.dn, depthMm }),
+    '3': buildLadder(ctx, { depthMm: ladderMm, enabled: survey.hasLadder ?? true, device: 'EMK' }),
+    '4': [
+      ...buildSlab(ctx, { dn: survey.dn, depthMm }),
+      // Крепление и подъём насосов — только при насосах (лист ЕМК, строки
+      // 163–171 и 195–198: всё под `IF(ОЛ!E54="нет";0;…)`). Направляющие и
+      // цепь — на высоту лестницы, как в листе.
+      ...(survey.hasPumps
+        ? buildPumpMounting(ctx, {
+            device: 'EMK',
+            dn: survey.dn,
+            guideHeightM: ladderMm / 1000,
+            liftHeightM: ladderMm / 1000,
+            pumpsWorking: survey.pumpsWorking,
+            pumpsReserve: survey.pumpsReserve,
+          })
+        : []),
+    ],
     '5': buildVent(ctx, { enabled: survey.ventilation ?? true }),
     // Напорный трубопровод — ТОЛЬКО при насосном оборудовании (Реверс §5:
     // «есть разделы "Напорный трубопровод" и "Насосное оборудование", когда
@@ -707,7 +751,7 @@ export function materializeKol(ctx: MaterializeContext, survey: KolSurveyParams)
     ],
     // Лестница — по полной глубине корпуса с горловиной (эталон I113 листа
     // «Калькулятор колодца»). Вентиляции в ОЛ колодца нет — стояк всегда.
-    '3': buildLadder(ctx, { depthMm, enabled: survey.hasLadder ?? true }),
+    '3': buildLadder(ctx, { depthMm, enabled: survey.hasLadder ?? true, device: 'KOL' }),
     '4': buildSlab(ctx, { dn: survey.dn, depthMm }),
     '5': buildVent(ctx),
     '6': buildFasteners(ctx, { outletDn: survey.outletDn, outletCount: survey.outletCount }),

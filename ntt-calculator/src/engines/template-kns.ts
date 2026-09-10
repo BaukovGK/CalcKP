@@ -19,13 +19,15 @@ import {
   anchorCount,
   bottomMassKg,
   cutoutHours,
-  insulation,
+  frameHours,
+  knsInsulation,
+  KNS_NECK_INSULATION_M2,
   ladder,
   laminationMassKg,
   marketableAppearanceHours,
   pipeLengthM,
+  pipePrepHours,
   pressureFlangeCount,
-  pumpGuidesM,
   topSlabMassKg,
   type NozzleNorm,
 } from './formulas'
@@ -50,7 +52,16 @@ import {
   sleeveDiameter,
 } from './survey-kns'
 import type { EngineRow, PriceBinding } from './types'
-import { buildBasket, buildGrinder } from './basket-grinder'
+import { buildBasket, buildGrinder, type BasketDevice } from './basket-grinder'
+import { buildMountingLoops } from './mounting-loops'
+import {
+  buildAutomation,
+  buildPumpMounting,
+  buildServiceEquipment,
+  floatSwitchRow,
+  STATION_WORKS,
+  work,
+} from './station-equipment'
 
 // ─── Параметры ОЛ, от которых материализуется шаблон ────────────────────────
 
@@ -78,6 +89,18 @@ export interface KnsSurveyParams {
 
   pumpsWorking: number
   pumpsReserve: number
+  /**
+   * Запасные насосы на склад (ОЛ, «запасных на склад»): входят в
+   * спецификацию насосов, но не в монтаж, обвязку и такелаж — в станции
+   * их нет. Пусто — ноль.
+   */
+  pumpsSpare?: number
+  /**
+   * Возвышение корпуса над землёй, мм (ОЛ, E25). Вместе с подземной частью
+   * даёт высоту станции (`H5` листа): от неё цепь подъёма насосов, высота
+   * тали и длина кабеля поплавков и датчиков. Пусто — ноль.
+   */
+  elevationMm?: number
   /**
    * Марка насоса: подобрана сервером по притоку, напору и числу рабочих
    * (`/api/pump-station/select-pump`) либо введена инженером вручную.
@@ -116,6 +139,17 @@ export interface KnsSurveyParams {
    * требует двух фланцевых патрубков — см. `pressureFlangeCount`.
    */
   hasFlowMeter?: boolean
+  /**
+   * Блок «Автоматика» ОЛ: шкаф управления (исполнение и пуск идут в его
+   * наименование), датчики давления — по одному на напорный патрубок,
+   * погружной датчик уровня — один с защитным футляром. Пусто — узлы
+   * собираются выключенными «призраками».
+   */
+  hasControlCabinet?: boolean
+  controlCabinetType?: string | null
+  controlCabinetStart?: string | null
+  hasPressureSensors?: boolean
+  hasLevelSensor?: boolean
 
   /** Теплоизоляция и её глубина, мм. */
   insulationEnabled: boolean
@@ -297,6 +331,13 @@ export interface MaterializeContext {
  */
 const INSULATION_LAYER_MM = 5
 
+/** Высота станции, м: подземная часть плюс возвышение над землёй (`H5` листа). */
+export function stationHeightM(s: Pick<KnsSurveyParams, 'depthMm' | 'elevationMm'>): number {
+  return (s.depthMm + (s.elevationMm ?? 0)) / 1000
+}
+
+const fmtNum = (n: number, digits = 2) => n.toLocaleString('ru-RU', { maximumFractionDigits: digits })
+
 /** Каркас 7 разделов КНС — порядок фиксирован (§9.1 ТЗ). */
 export const KNS_SECTIONS: ReadonlyArray<{ code: string; title: string }> = [
   { code: '1', title: 'Корпус' },
@@ -418,6 +459,16 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
         name: 'Придание изделию товарного вида',
         unit: 'чел. ч',
         qtyCalc: marketableAppearanceHours(s.dn, lengthM),
+      }),
+      // Транспортировка, разметка осей и шлифовка — на всю длину трубы,
+      // и при исполнении «частями» тоже (лист, строка 86: `G5/(200·6)·J14`).
+      makeRow(ctx, {
+        kind: 'ОПЕРАЦИЯ',
+        category: 'Собственное производство',
+        name: 'Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)',
+        unit: 'чел. ч',
+        qtyCalc: pipePrepHours(s.dn, lengthM),
+        note: `ƒ DN/(200·6) × L = ${s.dn}/1200 × ${fmtNum(lengthM)} м`,
       }),
     ],
   })
@@ -618,8 +669,53 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
     ],
   })
 
+  // A7 — Кабельный ввод (лист, строки 46–48 и 89): гильза под кабели
+  // ручной формовки, два гермоввода и прорезка отверстия Ø100.
+  //
+  // Масса гильзы в листе — 0,5 кг, если не вписана своя (`IF(H46="";0,5;…)`);
+  // в образце вписано 6. Гермоввод в листе назван «Гермоввод 110
+  // (комплектация 1)» — в прайсе он «для труб 89/110», той же комплектации.
+  const CABLE_SLEEVE_D = 100
+  components.push({
+    id: nextId('c'),
+    nodeCode: 'A7',
+    title: 'Кабельный ввод',
+    enabled: true,
+    rows: [
+      ...operationWithFot(ctx, {
+        category: 'Собственное производство',
+        name: 'Ручная формовка гильз для ввода кабелей',
+        unit: 'кг',
+        qtyCalc: 0.5,
+        fotK: FOT_K_MANUAL,
+        note: 'ƒ норма эталона 0,5 кг · в образце вписано 6 кг — уточните по чертежу',
+      }),
+      makeRow(ctx, {
+        kind: 'МАТЕРИАЛ',
+        category: 'Прочие материалы',
+        name: 'Гермоввод для труб 89/110 (комплектация 1)',
+        unit: 'шт',
+        qtyCalc: 2,
+        note: 'ƒ два на ввод, как в эталоне',
+      }),
+      makeRow(ctx, {
+        kind: 'ОПЕРАЦИЯ',
+        category: 'Собственное производство',
+        name: 'Прорезка отверстия под гильзу ввода кабелей',
+        unit: 'чел. ч',
+        qtyCalc: cutoutHours(CABLE_SLEEVE_D, 1),
+        note: `ƒ Ø${CABLE_SLEEVE_D}·π/1000 × 0,5 чел.ч`,
+      }),
+    ],
+  })
+
   // A9 — Теплоизоляция: включается флагом ОЛ (Механика §7.2).
-  const ins = insulation(s.dn, s.insulationDepthMm, { protectiveThickness: INSULATION_LAYER_MM / 1000 })
+  //
+  // По листу КНС (строки 58–60, 92): боковая площадь вверх до 0,01 м² плюс
+  // горловины люков — константа формулы; слой ламинации и монтаж от всей
+  // площади. У ёмкости и колодца горловин в формуле нет (engines/formulas.ts).
+  const ins = knsInsulation(s.dn, s.insulationDepthMm, INSULATION_LAYER_MM / 1000)
+  const sideM2 = ins.verticalM2 - KNS_NECK_INSULATION_M2
   components.push({
     id: nextId('c'),
     nodeCode: 'A9',
@@ -637,7 +733,9 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
         name: 'Теплоизоляция - Изофом ППЭ ОР 15 1,5х40',
         unit: 'м²',
         qtyCalc: ins.totalM2,
-        note: `ƒ π·(DN/1000)·h + π·(DN/2000)² = ${ins.totalM2.toFixed(1)} м²`,
+        note:
+          `ƒ бок π·DN·h ↑0,01 (${fmtNum(sideM2)}) + горловины люков ${fmtNum(KNS_NECK_INSULATION_M2)} + ` +
+          `крышка π·(DN/2)² (${fmtNum(ins.lidM2)}) = ${fmtNum(ins.totalM2)} м²`,
       }),
       // В прайсе две позиции, различающиеся толщиной слоя: «5 мм» и «4 мм».
       // Это подтверждает Реверс §4.3 (S·0,005·1850 у КНС, 0,004 у колодца) —
@@ -659,6 +757,9 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
       }),
     ],
   })
+
+  // A10 — Монтажные петли: четыре, вариант по DN (mounting-loops.ts).
+  components.push(buildMountingLoops(ctx, s.dn))
 
   // D4, D3 — дробилка и корзина. У КНС оба узла живут в «Корпусе» (лист,
   // строки 74–113): отдельного раздела, как у ёмкости и колодца, нет.
@@ -684,14 +785,33 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
 // ─── Раздел 2: Лестница (Библиотека B1) ─────────────────────────────────────
 
 /**
+ * Материалы нержавеющей лестницы — дословно из прайса. Ступени у ёмкости
+ * в эталоне из трубы 25×2,5, у КНС и колодца — 25×2.
+ */
+export const LADDER_ITEMS = {
+  stringer: { category: 'Металлопрокат', name: 'Уголок 40х40х3мм 08Х18Н10Т(AISI304) ГОСТ 8509-93', unit: 'м' },
+  rungs: { category: 'Металлопрокат', name: 'Труба 25х2 мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81', unit: 'м' },
+  rungsEmk: { category: 'Металлопрокат', name: 'Труба 25х2,5мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81', unit: 'м' },
+} as const satisfies Record<string, { category: EngineRow['category']; name: string; unit: string }>
+
+/**
  * Узел B1 — лестница.
  *
  * `enabled` — ответ ОЛ «Лестница» у ёмкости и колодца: узел следует за
  * тумблером (surveyToggled). У КНС вопроса нет — лестница есть всегда.
+ *
+ * Материалы — по листам всех трёх изделий (КНС 124–125, ЕМК 116–117,
+ * колодец 115–116): тетивы из уголка на две стороны и ступени 0,44 м через
+ * 0,35 м. Приставная алюминиевая лестница, которую листы ёмкости и колодца
+ * кладут рядом, сюда не входит — вопрос заводу, вариант это или дополнение.
  */
-export function buildLadder(ctx: MaterializeContext, s: { depthMm: number; enabled?: boolean }): CalcComponent[] {
+export function buildLadder(
+  ctx: MaterializeContext,
+  s: { depthMm: number; enabled?: boolean; device?: BasketDevice },
+): CalcComponent[] {
   const heightM = s.depthMm / 1000
   const l = ladder(heightM)
+  const rungs = s.device === 'EMK' ? LADDER_ITEMS.rungsEmk : LADDER_ITEMS.rungs
 
   return [
     {
@@ -700,6 +820,18 @@ export function buildLadder(ctx: MaterializeContext, s: { depthMm: number; enabl
       title: 'Лестница нержавеющая',
       ...(s.enabled === undefined ? { enabled: true } : surveyToggled(s.enabled)),
       rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          ...LADDER_ITEMS.stringer,
+          qtyCalc: l.materialM,
+          note: `ƒ 2 тетивы × H (${fmtNum(heightM)} м)`,
+        }),
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          ...rungs,
+          qtyCalc: l.rungPipeM,
+          note: `ƒ H × 0,44 / 0,35 — ступень 0,44 м через 0,35 м`,
+        }),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
@@ -723,11 +855,23 @@ export function buildLadder(ctx: MaterializeContext, s: { depthMm: number; enabl
 
 // ─── Раздел 3: Перекрытие, площадка, несущие балки (B2, B6) ─────────────────
 
-export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: number }): CalcComponent[] {
+/** Рама перекрытия ставится от этого DN (лист КНС, строка 145: `IF(F140<1200;0;…)`). */
+export const SLAB_FRAME_FROM_DN = 1200
+
+/**
+ * Раздел 3: перекрытие и анкеры.
+ *
+ * `frame` — рама перекрытия из профильной трубы (лист КНС, строки 145 и
+ * 218–219). У ёмкости и колодца она зависит от признаков, которых в их ОЛ
+ * нет (исполнение крышки, наличие рамы), — поэтому только по запросу.
+ */
+export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: number; frame?: boolean }): CalcComponent[] {
   const slabMass = topSlabMassKg(s.dn)
   // Наружный диаметр ≈ DN + 300 (по геометрии формовки, Реверс §4.3).
   const outerD = (s.dn + 300) / 1000
   const anchors = anchorCount(outerD, s.depthMm / 1000)
+  const frame = s.frame && s.dn >= SLAB_FRAME_FROM_DN ? frameHours(s.dn) : null
+  const threshold = `DN ${s.dn} ${s.dn < 2500 ? '<' : '≥'} 2500`
 
   return [
     {
@@ -763,6 +907,37 @@ export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: num
         }),
       ],
     },
+    // Рама перекрытия: метраж профиля лист не выводит (в образце вписано
+    // 10 м), нормы работ — по порогу DN 2500, как у рамы насосов. В листе
+    // работы не зависят от DN ≥ 1200, а сам профиль — зависит; раму без
+    // профиля не собрать, поэтому узел целиком следует за порогом.
+    ...(frame
+      ? [
+          {
+            id: nextId('c'),
+            nodeCode: 'B2',
+            title: 'Рама перекрытия из профильной трубы',
+            enabled: true,
+            rows: [
+              makeRow(ctx, {
+                kind: 'МАТЕРИАЛ',
+                category: 'Металлопрокат',
+                name: 'Труба 60х30х2мм 12Х18Н10Т ГОСТ 8639-82',
+                unit: 'м',
+                qtyCalc: null,
+                note: 'Метраж по компоновке рамы — в образце эталона 10 м',
+              }),
+              work(ctx, 'Изготовление рамы перекрытия из профильной трубы', frame.make, `ƒ ${threshold} → ${frame.make} чел.ч`),
+              work(
+                ctx,
+                'Монтаж рамы перекрытия на верхнем стеклокомпозитном перекрытии',
+                frame.mount,
+                `ƒ ${threshold} → ${frame.mount} чел.ч`,
+              ),
+            ],
+          } satisfies CalcComponent,
+        ]
+      : []),
     {
       id: nextId('c'),
       nodeCode: 'B6',
@@ -858,7 +1033,6 @@ export function buildPressurePipe(
     hasFlowMeter?: boolean
   },
 ): CalcComponent[] {
-  const guides = pumpGuidesM(s.depthMm / 1000, s.pumpsWorking, s.pumpsReserve)
   const kit = PRESSURE_PIPE_KITS[s.outletDn] ?? null
   const n = s.outletCount
   const components: CalcComponent[] = []
@@ -1000,6 +1174,11 @@ export function buildPressurePipe(
         qtyCalc: 1,
         note: 'ƒ одна на аварийную линию',
       }),
+      // Монтаж — по норме раздела 7 эталона: 1 чел.ч на задвижку и клапан.
+      // Здесь, а не в разделе 7: работы следуют за своей арматурой и
+      // выключаются вместе с линией.
+      work(ctx, STATION_WORKS.wedgeGateMount, 1, 'ƒ 1 чел.ч на задвижку аварийной линии'),
+      work(ctx, STATION_WORKS.checkValveMount, 1, 'ƒ 1 чел.ч на клапан аварийной линии'),
     )
 
     if (kit) {
@@ -1024,33 +1203,15 @@ export function buildPressurePipe(
     })
   }
 
+  // Направляющие насосов здесь больше не считаются: в эталоне это материал
+  // и работы узла «Крепление насосного оборудования» раздела 3
+  // (station-equipment.ts, buildPumpMounting), а не «0,25 чел.ч на метр».
   components.push({
     id: nextId('c'),
     nodeCode: 'C2',
-    title: 'Направляющие насосов и работы по нитке',
+    title: 'Работы по напорному трубопроводу',
     enabled: true,
     rows: [
-      // «Направляющие насосов» в прайсе — это ТРУД (изготовление + монтаж),
-      // а не метраж материала: категория «Собственное производство», ЕИ
-      // «чел. ч». Длина направляющих (guides, м) идёт нормативом на труд.
-      makeRow(ctx, {
-        kind: 'ОПЕРАЦИЯ',
-        category: 'Собственное производство',
-        name: 'Изготовление направляющих насосов',
-        unit: 'чел. ч',
-        // Норматив: ~0,25 чел.ч на 1 м направляющих (совпадает с B5 «0,5 на
-        // башмак» удвоенно на изготовление+монтаж; уточняется вручную).
-        qtyCalc: guides * 0.25,
-        note: `ƒ L·(раб+рез)·2 = ${guides.toFixed(1)} м · 0,25 чел.ч/м · норматив, уточните`,
-      }),
-      makeRow(ctx, {
-        kind: 'ОПЕРАЦИЯ',
-        category: 'Собственное производство',
-        name: 'Монтаж направляющих насосов',
-        unit: 'чел. ч',
-        qtyCalc: guides * 0.25,
-        note: 'ƒ как изготовление',
-      }),
       // Трудоёмкость самой нитки — норматив эталона, от диаметра и числа
       // ниток не зависит (строки 374–375). Надбавка ×1,2 за коллекторную
       // компоновку не применяется: признака «сложный» в опросном листе нет.
@@ -1205,8 +1366,26 @@ function fromSurvey(calc: number, manual: number | null | undefined, formula: st
   return { qty: manual, note: `задано в ОЛ вручную: ${manual} · расчётное ${calc} (${formula.replace(/^ƒ\s*=?\s*/, '')})` }
 }
 
+/**
+ * Задвижка на подводящем — шиберная с удлинённым штоком (лист, строка 408):
+ * подводящий идёт на глубине лотка, и шток выводится к поверхности. Длина
+ * штока — от оси трубы: глубина лотка минус половина DN.
+ *
+ * В прайсе такой задвижки нет — цена под длину штока, строка «красная» до
+ * ввода (в образце эталона вписано 250 000 ₽).
+ */
+export function inletGateValveName(inletDn: number, trayDepthMm: number | null | undefined): string {
+  const base = `Задвижка шиберная с невыдв.шпинделем с ручным управлением DN${inletDn} PN10 и удлиненным штоком`
+  if (typeof trayDepthMm !== 'number' || !Number.isFinite(trayDepthMm) || trayDepthMm <= 0) return base
+  const stemMm = Math.round(trayDepthMm - inletDn / 2)
+  return `${base} L=${stemMm} мм (высота штока указана от оси трубы)`
+}
+
 function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
   const pumps = s.pumpsWorking + s.pumpsReserve
+  const spare = s.pumpsSpare && s.pumpsSpare > 0 ? s.pumpsSpare : 0
+  const heightM = stationHeightM(s)
+  const W = STATION_WORKS
   const gatesCalc = gateValveCount(s.inletCount, s.valveOnInlet)
   const pressureGatesCalc = pressureGateValveCount(s.pumpsWorking, s.pumpsReserve, s.outletCount)
   const checkValvesCalc = checkValveCount(s.pumpsWorking, s.pumpsReserve)
@@ -1226,18 +1405,26 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
       title: 'Узел запорной арматуры',
       enabled: true,
       rows: [
-        // Наименование в НН содержит полную спецификацию
-        // («…металл/металл DN50 PN10/16 клин бронза»), и позиции есть не для
-        // всех DN. Подбор конкретной позиции — за инженером: он выбирает её
-        // из прайса. Количество при этом посчитано.
+        // На подводящем — шиберная задвижка со штоком до поверхности
+        // (inletGateValveName). Длина штока входит в наименование, и цену
+        // под неё дают по запросу: сменилась глубина лотка в ОЛ — строка
+        // новая и снова «красная», прежняя цена к ней не переносится.
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
           category: 'Запорная арматура',
-          name: `Задвижка чугунная клиновая металл/металл DN${s.inletDn} PN10/16 клин бронза`,
+          name: inletGateValveName(s.inletDn, s.inletTrayDepthMm),
           unit: 'шт',
           qtyCalc: gates.qty,
-          note: gates.note,
+          note:
+            gates.note +
+            (s.inletTrayDepthMm
+              ? ` · шток = лоток ${s.inletTrayDepthMm} − DN/2`
+              : ' · длина штока = глубина лотка − DN/2: укажите в ОЛ глубину лотка подводящего'),
         }),
+        // Клиновые задвижки в НН — с полной спецификацией («…металл/металл
+        // DN50 PN10/16 клин бронза»), и позиции есть не для всех DN: для
+        // нетипового строка останется «красной», и позицию выберет инженер.
+        //
         // Напорная сторона: по схеме завода на стояке каждого установленного
         // насоса стоят задвижка и обратный клапан, плюс задвижка на каждом
         // отводящем патрубке. Резервный насос обвязан как рабочий, поэтому
@@ -1263,6 +1450,11 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
           qtyCalc: checkValves.qty,
           note: checkValves.note,
         }),
+        // Монтаж арматуры — 1 чел.ч на штуку (лист, строки 425–427), от
+        // тех же количеств, включая заданные в ОЛ вручную.
+        work(ctx, W.knifeGateMount, gates.qty, 'ƒ 1 чел.ч на задвижку на подводящем'),
+        work(ctx, W.wedgeGateMount, pressureGates.qty, 'ƒ 1 чел.ч на задвижку напорной стороны'),
+        work(ctx, W.checkValveMount, checkValves.qty, 'ƒ 1 чел.ч на обратный клапан'),
       ],
     },
     {
@@ -1280,39 +1472,58 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
         // насосов (`/api/pump-station/select-pump`, каталог Vandjord VSL) либо
         // вводится вручную в ОЛ. Без неё в КП уходило бы «Насос (марка по
         // подбору)» — строка, по которой заказчику нечего согласовывать.
+        //
+        // Запасные на склад входят в поставку (лист, I412 = раб + рез +
+        // запас), но не в монтаж и не в обвязку.
         bindPrice(
           makeRow(ctx, {
             kind: 'МАТЕРИАЛ',
             category: PUMP_PRICE_CATEGORY,
             name: pumpRowName(s.pumpModel),
             unit: 'шт',
-            qtyCalc: s.pumpsWorking + s.pumpsReserve,
+            qtyCalc: pumps + spare,
             note:
               `ƒ = раб ${s.pumpsWorking} + рез ${s.pumpsReserve}` +
+              (spare ? ` + на склад ${spare}` : '') +
               (s.pumpModel ? '' : ' · марка не подобрана — уточните в опросном листе'),
           }),
           'pumpPrice',
           s.pumpPriceRub,
         ),
+        // Автоматическая трубная муфта — по одной на установленный насос
+        // (лист, строка 413). DN — из паспорта насоса; в прайсе муфты нет,
+        // цену даёт поставщик насосов.
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
-          category: 'Выключатели',
-          // Наименование в НН — капсом и с длиной кабеля.
-          name: 'ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ КАБЕЛЬ 10 М',
+          category: PUMP_PRICE_CATEGORY,
+          name: 'Автоматическая трубная муфта',
           unit: 'шт',
-          qtyCalc: floatSwitchCount(s.pumpsWorking, s.pumpsReserve),
-          note: 'ƒ = раб + рез + 2',
+          qtyCalc: pumps,
+          note: `ƒ по одной на установленный насос (${pumps}) · цена по предложению поставщика насосов; если муфта входит в цену насоса — выключите строку`,
         }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Монтаж Поплавковых выключателей',
-          unit: 'чел. ч',
-          qtyCalc: floatSwitchCount(s.pumpsWorking, s.pumpsReserve),
-          note: 'ƒ 1 чел.ч — 1 выключатель',
-        }),
+        // Кабель поплавка — по высоте станции: в эталоне при 11,8 м — 20 М.
+        floatSwitchRow(ctx, floatSwitchCount(s.pumpsWorking, s.pumpsReserve), heightM, 'ƒ = раб + рез + 2'),
+        work(ctx, W.pumpsMount, 2 * pumps, `ƒ 2 чел.ч на установленный насос (${pumps}); запасные не монтируются`),
+        work(ctx, W.couplingMount, 3 * pumps, `ƒ 3 чел.ч на муфту (${pumps})`),
+        work(ctx, W.floatsMount, floatSwitchCount(s.pumpsWorking, s.pumpsReserve), 'ƒ 1 чел.ч — 1 выключатель'),
       ],
     },
+    // D2 — шкаф управления, датчики, расходомер: каждый под своим тумблером ОЛ.
+    ...buildAutomation(ctx, {
+      heightM,
+      depthM: pipeLengthM(s.depthMm),
+      outletDn: s.outletDn,
+      outletCount: s.outletCount,
+      pumps,
+      controlCabinet: Boolean(s.hasControlCabinet),
+      cabinetType: s.controlCabinetType,
+      cabinetStart: s.controlCabinetStart,
+      pressureSensors: Boolean(s.hasPressureSensors),
+      levelSensor: Boolean(s.hasLevelSensor),
+      flowMeter: Boolean(s.hasFlowMeter),
+    }),
+    // D5 — тренога, таль по высоте станции, газоанализатор.
+    buildServiceEquipment(ctx, { heightM }),
   ]
 }
 
@@ -1331,8 +1542,20 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
 export function materializeKns(ctx: MaterializeContext, survey: KnsSurveyParams): CalcTree {
   const byCode: Record<string, CalcComponent[]> = {
     '1': buildKorpus(ctx, survey),
-    '2': buildLadder(ctx, survey),
-    '3': buildSlab(ctx, survey),
+    // Лестница — на всю длину трубы корпуса (лист, H122 + H123 = J14).
+    '2': buildLadder(ctx, { depthMm: survey.depthMm, device: 'KNS' }),
+    '3': [
+      ...buildSlab(ctx, { dn: survey.dn, depthMm: survey.depthMm, frame: true }),
+      // Крепление и подъём насосов лежат в листе в разделе 3 (строки 189–197).
+      ...buildPumpMounting(ctx, {
+        device: 'KNS',
+        dn: survey.dn,
+        guideHeightM: pipeLengthM(survey.depthMm),
+        liftHeightM: stationHeightM(survey),
+        pumpsWorking: survey.pumpsWorking,
+        pumpsReserve: survey.pumpsReserve,
+      }),
+    ],
     '4': buildVent(ctx),
     '5': buildPressurePipe(ctx, survey),
     '6': buildFasteners(ctx, survey),

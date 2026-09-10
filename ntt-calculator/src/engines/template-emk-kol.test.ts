@@ -616,3 +616,54 @@ describe('комплекты напорной нитки и крепежа у Е
     expect(rows.some((r) => r.name === 'Гайка пожарная ГМ150')).toBe(false)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Сверка с листами эталона: подготовка трубы, петли, лестница, насосы
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ЕМК и КОЛ: строки, которые листы эталона считали всегда', () => {
+  const PREP = 'Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)'
+
+  it('ЕМК: подготовка трубы — у корпуса и у шахты, DN/1200 × L каждой', () => {
+    const tree = materializeEmk(ctx, EMK)
+    const geo = computeEmkGeometry(EMK)
+    const preps = flattenRows(tree).filter((r) => r.name === PREP)
+    expect(preps).toHaveLength(2)
+    expect(preps[0]!.qtyCalc).toBeCloseTo((2000 / 1200) * (geo.pipeLengthMm! / 1000), 9)
+    expect(preps[1]!.qtyCalc).toBeCloseTo((geo.shaftDiameterMm / 1200) * (geo.shaftHeightMm / 1000), 9)
+  })
+
+  it('КОЛ: подготовка трубы — у корпуса и у горловины', () => {
+    const preps = flattenRows(materializeKol(ctx, KOL)).filter((r) => r.name === PREP)
+    expect(preps.map((r) => r.qtyCalc)).toEqual([(1500 / 1200) * 3.5, (1000 / 1200) * 0.8])
+  })
+
+  it('петли монтажные: ЕМК DN 2000 — усиленные, КОЛ DN 1500 — простые', () => {
+    const loopsOf = (t: ReturnType<typeof materializeEmk>) =>
+      t.sections.find((s) => s.code === '1')!.components.find((c) => c.nodeCode === 'A10')!
+    expect(loopsOf(materializeEmk(ctx, EMK)).title).toContain('усиленные')
+    expect(loopsOf(materializeKol(ctx, KOL)).title).toContain('НТТ 648')
+  })
+
+  it('лестница: тетивы 2 × H, ступени у ёмкости из трубы 25×2,5, у колодца 25×2', () => {
+    const emkRows = materializeEmk(ctx, EMK).sections.find((s) => s.code === '3')!.components.flatMap((c) => c.rows)
+    const kolRows = materializeKol(ctx, KOL).sections.find((s) => s.code === '3')!.components.flatMap((c) => c.rows)
+    expect(emkRows.some((r) => r.name === 'Труба 25х2,5мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81')).toBe(true)
+    expect(kolRows.find((r) => r.name === 'Труба 25х2 мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81')!.qtyCalc).toBeCloseTo(
+      (3.5 * 0.44) / 0.35,
+      9,
+    )
+    expect(kolRows.find((r) => r.name.startsWith('Уголок 40х40'))!.qtyCalc).toBe(7)
+  })
+
+  it('крепление и подъём насосов у ёмкости — только при насосах', () => {
+    const titles = (t: ReturnType<typeof materializeEmk>) =>
+      t.sections.find((s) => s.code === '4')!.components.map((c) => c.title)
+    expect(titles(materializeEmk(ctx, EMK))).not.toContain('Крепление насосного оборудования')
+    const withPumps = materializeEmk(ctx, { ...EMK, hasPumps: true, pumpsWorking: 2, pumpsReserve: 1 })
+    expect(titles(withPumps)).toEqual(expect.arrayContaining(['Крепление насосного оборудования', 'Грузоподъём насосов']))
+    // В напорном трубопроводе направляющих больше нет — они в разделе 4.
+    const pipeRows = withPumps.sections.find((s) => s.code === '6')!.components.flatMap((c) => c.rows)
+    expect(pipeRows.some((r) => r.name.includes('направляющих насосов'))).toBe(false)
+  })
+})

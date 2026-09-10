@@ -713,7 +713,8 @@ const blocks = computed(() => [
   { t: 'Крепёж', on: true },
   { t: 'Оборудование и запорная арматура', on: true },
   { t: 'МВК-комплект', on: form.value.mvk },
-  { t: 'Шкаф управления и КИПиА', on: form.value.shu },
+  { t: 'Шкаф управления', on: form.value.shu },
+  { t: 'Датчики и расходомер', on: form.value.datchikiDavl || form.value.datchikiUrov || form.value.rashodomer },
 ])
 
 const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)

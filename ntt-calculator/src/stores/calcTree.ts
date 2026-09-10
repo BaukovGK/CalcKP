@@ -76,6 +76,19 @@ function jointLayerIndex(rows: ReadonlyArray<{ d: number; pn: number; massKg: nu
  */
 const ALWAYS_ON_BEFORE_SURVEY = new Set(['B1', 'C1'])
 
+/**
+ * Узлы шаблона, сменившие название: прежнее → нынешнее. Сопоставление при
+ * пересборке идёт по названию узла, и без этой записи ручные правки строк
+ * переименованного узла у старых расчётов потерялись бы.
+ *
+ * «Направляющие насосов и работы по нитке» (раздел 5) — до 10.09.2026:
+ * направляющие ушли в крепление насосов раздела 3, в узле остались работы
+ * по нитке.
+ */
+const RENAMED_COMPONENTS: Readonly<Record<string, string>> = {
+  'Направляющие насосов и работы по нитке': 'Работы по напорному трубопроводу',
+}
+
 /** Ставки по умолчанию — fallback, если позиции нет в прайсе (Механика §9). */
 const FALLBACK_RATES: Rates = {
   fotRub: 1207.8,
@@ -418,12 +431,23 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       outletCount: n(kns.napKol),
       pumpsWorking: n(kns.nRab),
       pumpsReserve: n(kns.nRez),
+      // Запасные на склад — в поставку насосов, но не в монтаж и такелаж.
+      pumpsSpare: n(kns.nZap),
+      // Возвышение над землёй — к высоте станции: цепь подъёма насосов,
+      // таль, кабели поплавков и датчиков.
+      elevationMm: n(kns.vozv),
       valveOnInlet: Boolean(kns.valveOnInlet),
       emergencyPipeline: Boolean(kns.emergency),
       insulationEnabled: Boolean(kns.insulation),
       insulationDepthMm: n(kns.tiGlubina),
       pipeExecution: kns.ispolnenie === 'частями' ? 'частями' : 'целая',
       hasFlowMeter: Boolean(kns.rashodomer),
+      // Блок «Автоматика»: каждый тумблер ведёт свой узел раздела 7.
+      hasControlCabinet: Boolean(kns.shu),
+      controlCabinetType: typeof kns.shuTip === 'string' ? kns.shuTip : null,
+      controlCabinetStart: typeof kns.shuPusk === 'string' ? kns.shuPusk : null,
+      hasPressureSensors: Boolean(kns.datchikiDavl),
+      hasLevelSensor: Boolean(kns.datchikiUrov),
       // `gaykaGm` — прежнее имя поля (переименовано в тот же день, когда
       // появилось): расчёты, сохранённые между двумя релизами, читаются им.
       emergencyCouplingGm: n(kns.muftaGm ?? kns.gaykaGm) || undefined,
@@ -486,7 +510,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
           continue
         }
 
-        const nc = ns.components.find((c) => c.title === oc.title)
+        const title = RENAMED_COMPONENTS[oc.title] ?? oc.title
+        const nc = ns.components.find((c) => c.title === title)
         if (!nc) continue
         nc.enabled = reconciledEnabled(oc, nc)
 
@@ -582,9 +607,25 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       : economics.value,
   )
 
-  /** Строки без цены — блокируют выпуск КП (Механика §10). */
+  /**
+   * Строки без цены — блокируют выпуск КП (Механика §10).
+   *
+   * Только те, что входят в итог: строка с нулевым количеством — в том числе
+   * в выключенном узле («призраке») — ничего не стоит, и гейт сервера её не
+   * считает (`isRowWithoutPrice`, backend/src/utils/estimate-tree.ts). Иначе
+   * выключенный в ОЛ шкаф управления висел бы в счётчике «без цены», хотя КП
+   * выпускается.
+   */
   const missingPriceIds = computed(
-    () => new Set(rows.value.filter((r) => results.value.get(r.id)?.missingPrice).map((r) => r.id)),
+    () =>
+      new Set(
+        rows.value
+          .filter((r) => {
+            const res = results.value.get(r.id)
+            return res?.missingPrice && res.qty !== 0
+          })
+          .map((r) => r.id),
+      ),
   )
 
   /**

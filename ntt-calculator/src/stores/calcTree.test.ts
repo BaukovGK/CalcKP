@@ -452,6 +452,66 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(node(store, 'Дробилка').enabled).toBe(false)
   })
 
+  it('блок «Автоматика» ОЛ ведёт шкаф, датчики и расходомер; возвышение — к высоте станции', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const auto = kns({
+      shu: true, shuTip: 'уличный', shuPusk: 'плавный',
+      datchikiDavl: true, datchikiUrov: false, rashodomer: true,
+      vozv: '300', nZap: '1',
+    })
+    await store.applySurvey('e1', { form: auto, kns: auto, derived, surveyRev: 2 })
+
+    expect(node(store, 'Шкаф управления').enabled).toBe(true)
+    expect(node(store, 'Шкаф управления').rows[0]!.name).toBe('Шкаф управления насосами (3 шт.), уличный, пуск плавный')
+    expect(node(store, 'Датчики давления').enabled).toBe(true)
+    expect(node(store, 'Датчик уровня').enabled).toBe(false)
+    expect(node(store, 'Расходомер').enabled).toBe(true)
+    // Высота станции 11,6 + 0,3 м: цепь подъёма ROUNDUP(3 × 12,9) = 39.
+    expect(node(store, 'Грузоподъём насосов').rows[0]!.qtyCalc).toBe(39)
+    // Запасной насос — в поставку.
+    expect(node(store, 'Насосная группа').rows[0]!.qtyCalc).toBe(4)
+  })
+
+  // Выключенный узел — «призрак»: его строки ничего не стоят, и гейт КП на
+  // сервере их не считает. Счётчик «без цены» не должен расходиться с гейтом.
+  it('строки без цены с нулевым количеством не попадают в счётчик «без цены»', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const off = kns({ shu: false })
+    await store.applySurvey('e1', { form: off, kns: off, derived, surveyRev: 2 })
+    const cabinet = node(store, 'Шкаф управления').rows[0]!
+    expect(store.results.get(cabinet.id)!.missingPrice).toBe(true)
+    expect(store.missingPriceIds.has(cabinet.id)).toBe(false)
+
+    const on = kns({ shu: true })
+    await store.applySurvey('e1', { form: on, kns: on, derived, surveyRev: 3 })
+    expect(store.missingPriceIds.has(node(store, 'Шкаф управления').rows[0]!.id)).toBe(true)
+  })
+
+  // Узел раздела 5 переименован: направляющие ушли в раздел 3, работы по
+  // нитке остались. Ручная правка старого расчёта не должна потеряться.
+  it('ручная правка узла, сменившего название, переживает пересборку', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    const works = node(store, 'Работы по напорному трубопроводу')
+    works.title = 'Направляющие насосов и работы по нитке'
+    works.rows.find((r) => r.name === 'Изготовление напорного трубопровода')!.qtyManual = '33.6'
+
+    const next = kns({ nRab: '3' })
+    await store.applySurvey('e1', { form: next, kns: next, derived, surveyRev: 3 })
+
+    const row = node(store, 'Работы по напорному трубопроводу').rows.find((r) => r.name === 'Изготовление напорного трубопровода')!
+    expect(row.qtyManual).toBe('33.6')
+  })
+
   // Уход с ОЛ досохраняет правку, а экран расчёта в ту же секунду читает
   // изделие. Раньше чтение обгоняло запись: расчёт показывал прежнюю цену,
   // а первое его сохранение возвращало её и в ОЛ.

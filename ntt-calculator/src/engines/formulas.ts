@@ -10,6 +10,8 @@
  * `doc/Реверс_калькуляторов.md` §4.3.
  */
 
+import { roundUp } from './rounding'
+
 // ─── Балансные константы (Механика §13) ─────────────────────────────────────
 
 /** Плотность ламината, кг/м³. */
@@ -183,9 +185,38 @@ export function insulation(
   insulationDepthMm: number,
   opts: { protectiveThickness?: number } = {},
 ): InsulationResult {
-  const { protectiveThickness = 0.005 } = opts
-
   const verticalM2 = Math.PI * (dn / 1000) * (insulationDepthMm / 1000)
+  return insulationOf(verticalM2, dn, opts.protectiveThickness ?? 0.005)
+}
+
+/**
+ * Утепление горловин люков КНС, м² (эталон, лист КНС, J58):
+ *
+ * ```
+ * ((1,5 + 1,5)·2 + π·0,65)·0,94
+ * ```
+ *
+ * Периметр квадратной горловины 1,5×1,5 м и окружность круглой Ø650 на
+ * высоту 0,94 м. В листе это константа внутри формулы: от люков, выбранных
+ * в разделе 3, она не зависит — такие люки эталон считает типовыми.
+ */
+export const KNS_NECK_INSULATION_M2 = ((1.5 + 1.5) * 2 + Math.PI * 0.65) * 0.94
+
+/**
+ * Теплоизоляция КНС (эталон, строки 58–60 и 92). От общей формулы
+ * отличается двумя деталями листа: боковая площадь округляется вверх до
+ * 0,01 м² (`CEILING.MATH(…; 0,01)`), и к ней прибавляются горловины люков.
+ * Слой ламинации и монтаж считаются уже от всей площади.
+ *
+ * Контроль (ОЛ эталона): DN 3000, глубина ТИ 2000 → 18,85 + 7,56 + 7,07 =
+ * 33,48 м², монтаж 33,5 чел.ч, слой 5 мм — 309,7 кг.
+ */
+export function knsInsulation(dn: number, insulationDepthMm: number, protectiveThickness = 0.005): InsulationResult {
+  const sideM2 = roundUp(Math.PI * (dn / 1000) * (insulationDepthMm / 1000), 2)
+  return insulationOf(sideM2 + KNS_NECK_INSULATION_M2, dn, protectiveThickness)
+}
+
+function insulationOf(verticalM2: number, dn: number, protectiveThickness: number): InsulationResult {
   const lidM2 = Math.PI * (dn / 2000) ** 2
   const totalM2 = verticalM2 + lidM2
 
@@ -281,6 +312,36 @@ export function pumpGuidesM(depthM: number, pumpsWorking: number, pumpsReserve: 
 }
 
 /**
+ * Цепь подъёма насосов, м (эталон: КНС I195, ЕМК I169):
+ * `ROUNDUP(насосов × (H + 1))` — на каждый установленный насос высота
+ * подъёма и метр запаса, всё вверх до целого метра.
+ *
+ * @param pumps установленные насосы (раб + рез); запасные на склад цепи не требуют
+ * @param liftHeightM высота подъёма, м: у КНС — подземная часть с возвышением,
+ *   у ёмкости — высота лестницы
+ */
+export function pumpLiftChainM(pumps: number, liftHeightM: number): number {
+  return roundUp(pumps * (liftHeightM + 1), 0)
+}
+
+/**
+ * Нормы работ рамы из профильной трубы, чел.ч: изготовление 6 и монтаж 5
+ * при DN < 2500, иначе 7 и 6 (эталон `IF(G5<2500;6;7)` / `IF(G5<2500;5;6)` —
+ * у рамы перекрытия и у рамы насосов одинаково).
+ */
+export function frameHours(dn: number): { make: number; mount: number } {
+  return dn < 2500 ? { make: 6, mount: 5 } : { make: 7, mount: 6 }
+}
+
+/**
+ * Наименьший типоразмер, не меньший нужного (длина кабеля, высота подъёма
+ * тали); `null` — нужное больше всех. Ровно совпавший берётся сам.
+ */
+export function pickAtLeast(sizes: readonly number[], need: number): number | null {
+  return [...sizes].sort((a, b) => a - b).find((s) => s >= need) ?? null
+}
+
+/**
  * Кол-во анкеров против всплытия, шт (Реверс §4.3, Библиотека B6):
  *
  * ```
@@ -299,8 +360,14 @@ export function anchorCount(outerDiameterM: number, depthM: number): number {
   return buoyancyN / ANCHOR_CAPACITY_N
 }
 
+/** Ширина ступени лестницы, м (эталон: `(H₁+H₂)·0,44/0,35`). */
+export const LADDER_RUNG_WIDTH_M = 0.44
+/** Шаг ступеней, м. */
+export const LADDER_RUNG_STEP_M = 0.35
+
 /**
- * Лестница (Библиотека B1): длина = H (+ горловина); материал = (H₁+H₂)·2 м;
+ * Лестница (Библиотека B1): длина = H (+ горловина); тетивы — уголок
+ * (H₁+H₂)·2 м; ступени — труба H·0,44/0,35 м (ступень 0,44 м через 0,35 м);
  * изготовление = 1,25·H чел.ч; монтаж = изготовление/2.
  */
 export function ladder(heightM: number, neckHeightM = 0) {
@@ -309,6 +376,7 @@ export function ladder(heightM: number, neckHeightM = 0) {
   return {
     lengthM: totalH,
     materialM: totalH * 2,
+    rungPipeM: (totalH * LADDER_RUNG_WIDTH_M) / LADDER_RUNG_STEP_M,
     fabricationHours,
     mountingHours: fabricationHours / 2,
   }
