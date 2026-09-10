@@ -222,21 +222,25 @@
     >
       <p class="ver-sub">
         Версия фиксирует дерево, итог и версию прайса на момент снимка.
-        Снапшоты создаются при выпуске КП, при утверждении и вручную.
+        Снимается при создании единицы, при выпуске КП и вручную.
       </p>
       <div v-if="versionsLoading" class="ver-state">Загрузка…</div>
       <div v-else-if="!versions.length" class="ver-state">Версий пока нет</div>
       <table v-else class="ver-tbl">
         <thead>
-          <tr><th>Версия</th><th>Дата</th><th>Прайс</th><th class="num">Итог ₽</th><th>КП</th></tr>
+          <tr><th>Версия</th><th>Дата</th><th>Причина</th><th>Прайс</th><th class="num">Итог ₽</th><th>КП</th></tr>
         </thead>
         <tbody>
           <tr v-for="v in versions" :key="v.id">
             <td>v{{ v.version }}</td>
             <td>{{ fmtDateTime(v.createdAt) }}</td>
+            <td class="ver-reason">{{ REASON_LABEL[v.reason ?? 'KP'] }}</td>
             <td>НН v{{ v.priceListVersion }}</td>
             <td class="num">{{ v.totalRub ? fmtInt(v.totalRub) : '—' }}</td>
-            <td class="ver-dl">
+            <!-- Слепок создания — исходное состояние: проверку строк без цены
+                 он не проходил, поэтому КП по нему не печатается. -->
+            <td v-if="v.reason === 'CREATE'" class="ver-dl ver-dl--none" title="Исходное состояние — КП печатается из выпуска КП">—</td>
+            <td v-else class="ver-dl">
               <button
                 class="btn btn-xs"
                 :disabled="kpDownload === `${v.version}:docx`"
@@ -278,7 +282,7 @@ import { toast } from '@/composables/useToast'
 import { COST_BUCKETS } from '@/engines/economics'
 import { tryEvalExpr } from '@/engines/expr'
 import type { CalcComponent, CalcRowNode } from '@/engines/template-kns'
-import { estimatesApi, type EstimateSnapshotInfo } from '@/api/estimates'
+import { estimatesApi, type EstimateSnapshotInfo, type SnapshotReason } from '@/api/estimates'
 
 const route = useRoute()
 const router = useRouter()
@@ -302,6 +306,12 @@ const kpDownload = ref<string | null>(null)
 const versionsOpen = ref(false)
 const versionsLoading = ref(false)
 const versions = ref<EstimateSnapshotInfo[]>([])
+/** Причина слепка — теми же словами, что в сообщениях сервера. */
+const REASON_LABEL: Record<SnapshotReason, string> = {
+  CREATE: 'создание единицы',
+  MANUAL: 'ручная фиксация',
+  KP: 'выпуск КП',
+}
 const snapBusy = ref(false)
 
 const fmtDateTime = (iso: string) =>
@@ -671,6 +681,8 @@ onMounted(() => {
 .ver-tbl td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
 .ver-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
 .ver-dl { white-space: nowrap; }
+.ver-dl--none { color: var(--faint); text-align: center; }
+.ver-reason { font-size: 13.2px; color: var(--muted); white-space: nowrap; }
 .ver-dl .btn-xs { padding: 2px 7px; font-size: 13.2px; line-height: 1.5; }
 .ver-dl .btn-xs + .btn-xs { margin-left: 4px; }
 

@@ -35,7 +35,14 @@ export interface EstimateSnapshotInfo {
   priceListVersion: number
   totalRub: number
   createdAt: string
+  /**
+   * Зачем снят слепок: CREATE — при создании единицы (исходное состояние,
+   * КП по нему не печатается), MANUAL — ручная фиксация, KP — выпуск КП.
+   */
+  reason?: SnapshotReason
 }
+
+export type SnapshotReason = 'CREATE' | 'MANUAL' | 'KP'
 
 /** Ответ выпуска КП: что зафиксировано и каким снапшотом. */
 export interface KpResult {
@@ -80,9 +87,12 @@ export const estimatesApi = {
     return api.get<EstimateSnapshotInfo[]>(`/estimates/${id}/snapshots`).then((r) => r.data)
   },
 
-  /** Ручная фиксация версии: снимает текущее состояние расчёта на сервере. */
-  createSnapshot(id: string): Promise<EstimateSnapshotInfo> {
-    return api.post<EstimateSnapshotInfo>(`/estimates/${id}/snapshot`, {}).then((r) => r.data)
+  /**
+   * Слепок текущего состояния расчёта на сервере: ручная фиксация из окна
+   * «Версии» (MANUAL) или слепок при создании единицы (CREATE).
+   */
+  createSnapshot(id: string, reason: Exclude<SnapshotReason, 'KP'> = 'MANUAL'): Promise<EstimateSnapshotInfo> {
+    return api.post<EstimateSnapshotInfo>(`/estimates/${id}/snapshot`, { reason }).then((r) => r.data)
   },
 
   /** Выпуск КП: серверный гейт «нет строк без цены» + снапшот. */

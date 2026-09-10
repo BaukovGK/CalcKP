@@ -10,6 +10,11 @@ import { rowsWithoutPrice } from '../utils/estimate-tree'
 import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
+import { blocksDeletion, isPrintable, PRINTABLE_REASONS, REASON_LABEL } from '../utils/snapshot-reason'
+import type { SnapshotReason } from '@prisma/client'
+
+/** Причины слепков, при которых расчёт нельзя удалить (см. blocksDeletion). */
+const DELETION_BLOCKING_REASONS = (['CREATE', 'MANUAL', 'KP'] as SnapshotReason[]).filter(blocksDeletion)
 import type { Response, NextFunction } from 'express'
 
 export const estimatesRouter = Router()
@@ -184,7 +189,7 @@ const SNAPSHOT_RETRIES = 3
  * и проигравшему достаточно перечитать максимум. Повторов немного: конкуренция
  * здесь — две вкладки одного инженера, а не нагрузка.
  */
-async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub: number) {
+async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub: number, reason: SnapshotReason) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
@@ -202,6 +207,7 @@ async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub
             priceListVersion: priceList?.version ?? 1,
             totalRub,
             bundlesJson: bundlesJson as never,
+            reason,
           },
         })
       })
@@ -239,7 +245,11 @@ estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) =>
     // Статус после выпуска КП остаётся рабочим (CALC), поэтому проверки статуса
     // выше недостаточно, а EstimateSnapshot.estimateId — onDelete: Cascade:
     // удаление расчёта молча стирало историю выпущенных КП.
-    const snapshotCount = await prisma.estimateSnapshot.count({ where: { estimateId: id } })
+    // Слепок создания единицы удалению не мешает: он снят автоматически и
+    // цену заказчику не подтверждает (utils/snapshot-reason.ts).
+    const snapshotCount = await prisma.estimateSnapshot.count({
+      where: { estimateId: id, reason: { in: DELETION_BLOCKING_REASONS } },
+    })
     if (snapshotCount > 0) {
       res.status(422).json({
         message:
@@ -260,6 +270,13 @@ estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) =>
 const snapshotSchema = z.object({
   bundlesJson: z.unknown().optional(),
   totalRub: z.number().optional(),
+  /**
+   * CREATE — слепок при создании единицы изделия (снимает ОЛ сразу после
+   * первой сборки расчёта), MANUAL — ручная фиксация из окна «Версии».
+   * KP сюда не принимается: слепок КП снимается только через POST /:id/kp,
+   * после проверки строк без цены.
+   */
+  reason: z.enum(['CREATE', 'MANUAL']).optional().default('MANUAL'),
 })
 
 estimatesRouter.post(
@@ -277,14 +294,23 @@ estimatesRouter.post(
         res.status(403).json({ message: 'Нет доступа' }); return
       }
 
+      const reason = req.body.reason as SnapshotReason
+      // Слепок создания — один на единицу: повтор (двойной клик, повторная
+      // отправка формы) не должен плодить «исходных состояний».
+      if (reason === 'CREATE') {
+        const existing = await prisma.estimateSnapshot.findFirst({ where: { estimateId: id, reason: 'CREATE' } })
+        if (existing) { res.status(200).json(existing); return }
+      }
+
       // Тело необязательно: по умолчанию снимаем текущее состояние расчёта.
       const snapshot = await createSnapshot(
         id,
         req.body.bundlesJson ?? estimate.surveyData,
         req.body.totalRub ?? estimate.totalRub ?? 0,
+        reason,
       )
 
-      await audit(auth.userId, 'estimate.snapshot', 'Estimate', id, { version: snapshot.version })
+      await audit(auth.userId, 'estimate.snapshot', 'Estimate', id, { version: snapshot.version, reason })
       res.status(201).json(snapshot)
     } catch (e) { next(e) }
   },
@@ -337,7 +363,7 @@ estimatesRouter.post(
         return
       }
 
-      const snapshot = await createSnapshot(id, estimate.surveyData, estimate.totalRub ?? 0)
+      const snapshot = await createSnapshot(id, estimate.surveyData, estimate.totalRub ?? 0, 'KP')
 
       await audit(auth.userId, 'estimate.kp', 'Estimate', id, { snapshotVersion: snapshot.version })
 
@@ -407,10 +433,21 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       res.status(403).json({ message: 'Нет доступа' }); return
     }
 
+    // Без версии — последний ПЕЧАТНЫЙ слепок: слепок создания проверку строк
+    // без цены не проходил, и КП по нему занизил бы итог.
     const snapshot = await prisma.estimateSnapshot.findFirst({
-      where: { estimateId: id, ...(version != null ? { version } : {}) },
+      where: { estimateId: id, ...(version != null ? { version } : { reason: { in: [...PRINTABLE_REASONS] } }) },
       orderBy: { version: 'desc' },
     })
+    if (snapshot && !isPrintable(snapshot.reason)) {
+      res.status(422).json({
+        message:
+          `Редакция ${snapshot.version} — ${REASON_LABEL[snapshot.reason]}: это исходное состояние расчёта, ` +
+          'КП по нему не печатается. Выпустите КП — он проверит строки без цены и снимет свою редакцию.',
+        code: 'KP_NOT_PRINTABLE',
+      })
+      return
+    }
     if (!snapshot) {
       res.status(422).json({
         message:
@@ -495,7 +532,7 @@ estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunct
       orderBy: { version: 'desc' },
       // bundlesJson не отдаём в списке: снимок дерева на 300–450 строк
       // раздул бы ответ. Полное содержимое — отдельным запросом при need.
-      select: { id: true, version: true, priceListVersion: true, totalRub: true, createdAt: true },
+      select: { id: true, version: true, priceListVersion: true, totalRub: true, createdAt: true, reason: true },
     })
     res.json(snapshots)
   } catch (e) { next(e) }

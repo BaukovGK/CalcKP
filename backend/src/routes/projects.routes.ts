@@ -8,6 +8,7 @@ import { audit } from '../utils/audit'
 import { buildProjectKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
+import { PRINTABLE_REASONS } from '../utils/snapshot-reason'
 import type { Response, NextFunction } from 'express'
 
 export const projectsRouter = Router()
@@ -80,7 +81,11 @@ projectsRouter.get('/:id', async (req, res: Response, next: NextFunction) => {
             // Последняя редакция: по ней экран проекта видит, выпускалось ли
             // КП по единице — без этого «КП на проект» пришлось бы предлагать
             // вслепую и ловить отказ сервера.
+            // Только печатные слепки: слепок создания единицы есть у каждой
+            // новой, и считать по нему единицу «готовой к КП» — значит
+            // напечатать непроверенный расчёт.
             snapshots: {
+              where: { reason: { in: [...PRINTABLE_REASONS] } },
               orderBy: { version: 'desc' },
               take: 1,
               select: { version: true, createdAt: true },
@@ -214,7 +219,7 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
       orderBy: { createdAt: 'asc' },
       select: {
         id: true, title: true, deviceType: true,
-        snapshots: { orderBy: { version: 'desc' }, take: 1 },
+        snapshots: { where: { reason: { in: [...PRINTABLE_REASONS] } }, orderBy: { version: 'desc' }, take: 1 },
       },
     })
 

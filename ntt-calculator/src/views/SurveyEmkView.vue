@@ -495,6 +495,14 @@ async function createEstimate() {
       ? await projectsApi.addEstimate(props.projectId, dto)
       : await estimatesApi.create(dto)
     await store.applySurvey(est.id, { ...surveyPayload(), surveyRev: 2 })
+    // Временной слепок исходного состояния: дальше ОЛ пересобирает расчёт
+    // при каждой правке, и то, с чего единица начала, иначе не восстановить.
+    // Не удался — единица уже создана, поэтому не обрываем, а предупреждаем.
+    try {
+      await estimatesApi.createSnapshot(est.id, 'CREATE')
+    } catch {
+      toast('Слепок исходного состояния не снят — зафиксируйте версию вручную в расчёте', 'error')
+    }
     toast('Расчёт ёмкости создан, расчёт собран', 'success')
     previewOpen.value = false
     await router.replace({ name: 'survey', params: { id: est.id } })
