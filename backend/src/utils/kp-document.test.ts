@@ -6,7 +6,7 @@
  * из цены, а не начисляется сверху.
  */
 import { describe, expect, it } from 'vitest'
-import { extractSpecification, isFotRow, isRowWithoutPrice, resolveRowQty, tirageOf } from './estimate-tree'
+import { extractSpecification, isFotRow, isRowWithoutPrice, isWorkRow, resolveRowQty, tirageOf } from './estimate-tree'
 import {
   buildKpDocument,
   buildProjectKpDocument,
@@ -121,6 +121,41 @@ describe('extractSpecification', () => {
     expect(names).not.toContain('ФОТ')
     // Сама операция при этом остаётся: убран спутник, а не работа.
     expect(names).toContain('Труба СК/НПС-К 3000-0,1-10000')
+  })
+
+  it('не печатает работы: заказчик покупает изделие, а не трудозатраты', () => {
+    const t = {
+      tree: {
+        sections: [
+          {
+            code: '1', title: 'Корпус', enabled: true,
+            components: [{
+              title: 'c', enabled: true,
+              rows: [
+                { kind: 'МАТЕРИАЛ', name: 'Труба СК/НПС-К 3000-0,1-12000', unit: 'м', qtyCalc: 11.6 },
+                { kind: 'ОПЕРАЦИЯ', name: 'Ламинирование частей корпуса', unit: 'кг', qtyCalc: 112 },
+                { kind: 'ОПЕРАЦИЯ', name: 'Прорезка отверстия под гильзу', unit: 'чел. ч', qtyCalc: 0.7 },
+                { kind: 'ФОТ', category: 'ФОТ', name: 'ФОТ', unit: 'чел. ч', qtyCalc: 112 },
+              ],
+            }],
+          },
+        ],
+      },
+    }
+
+    const names = extractSpecification(t).sections.flatMap((s) => s.rows.map((r) => r.name))
+    expect(names).toEqual(['Труба СК/НПС-К 3000-0,1-12000'])
+  })
+
+  it('работа опознаётся по kind, а без него — по ЕИ «чел. ч»', () => {
+    expect(isWorkRow({ kind: 'ОПЕРАЦИЯ', name: 'Монтаж Лестницы', unit: 'чел. ч' })).toBe(true)
+    expect(isWorkRow({ kind: 'ОПЕРАЦИЯ', name: 'Механическое формованное дно', unit: 'кг' })).toBe(true)
+    expect(isWorkRow({ kind: 'ФОТ', name: 'ФОТ', unit: 'чел. ч' })).toBe(true)
+    expect(isWorkRow({ kind: 'МАТЕРИАЛ', name: 'Насос', unit: 'шт' })).toBe(false)
+    // Без kind: часы — труд, всё остальное считаем закупкой, чтобы не выкинуть
+    // из документа материал, у которого ЕИ совпала с формовочной.
+    expect(isWorkRow({ name: 'Прорезка отверстия', unit: 'чел. ч' })).toBe(true)
+    expect(isWorkRow({ name: 'Труба ПЭ 100 SDR17', unit: 'м' })).toBe(false)
   })
 
   it('ФОТ узнаётся и по kind, и по категории — у старых снапшотов kind нет', () => {
