@@ -8,6 +8,7 @@
  */
 
 import { roundUp } from './rounding'
+import { tryEvalExpr } from './expr'
 
 // ─── Константы подбора глубины (Механика §13, прототип ОЛ) ──────────────────
 
@@ -47,6 +48,32 @@ export function fromLps(lps: number, unit: FlowUnit): number {
     case 'm3/day':
       return lps * 86.4
   }
+}
+
+/**
+ * Значение поля расхода при смене единиц — то же количество воды в новых
+ * единицах: 25,13 л/с → 90,47 м³/ч.
+ *
+ * Раньше менялась только подпись: 25,13 л/с становились 25,13 м³/ч, то есть
+ * в 3,6 раза меньше, а вслед за расходом молча уезжали подбор насоса, глубина
+ * и гидравлика напорного.
+ *
+ * Два знака после запятой: при переключении туда и обратно значение
+ * возвращается к исходному (90,47 м³/ч → 25,13 л/с).
+ *
+ * @returns новый текст поля; `null` — пересчитывать нечего (пусто, не число,
+ *          единицы те же)
+ */
+export function convertFlowText(raw: string, from: FlowUnit, to: FlowUnit): string | null {
+  if (from === to) return null
+  const value = tryEvalExpr(raw)
+  if (value == null) return null
+  return formatFlow(fromLps(toLps(value, from), to))
+}
+
+/** Расход в поле ОЛ: два знака, запятая, без пробелов-разрядов — как вводят руками. */
+export function formatFlow(value: number): string {
+  return value.toLocaleString('ru-RU', { maximumFractionDigits: 2, useGrouping: false })
 }
 
 export interface DepthInput {

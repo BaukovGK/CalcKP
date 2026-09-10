@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkValveCount,
+  convertFlowText,
   pressureGateValveCount,
   computeDepth,
   floatSwitchCount,
@@ -76,6 +77,29 @@ describe('конвертация притока', () => {
     for (const u of ['l/s', 'm3/h', 'm3/day'] as const) {
       expect(toLps(fromLps(25.13, u), u)).toBeCloseTo(25.13, 6)
     }
+  })
+
+  // Дефект: при смене единиц менялась только подпись — 25,13 л/с становились
+  // 25,13 м³/ч, в 3,6 раза меньше, и вслед уезжали подбор насоса и глубина.
+  it('смена единиц пересчитывает значение поля: воды столько же', () => {
+    expect(convertFlowText('25,13', 'l/s', 'm3/h')).toBe('90,47')
+    expect(convertFlowText('25,13', 'l/s', 'm3/day')).toBe('2171,23')
+    expect(convertFlowText('90,47', 'm3/h', 'l/s')).toBe('25,13')
+  })
+
+  it('туда и обратно — исходное значение', () => {
+    const there = convertFlowText('25,13', 'l/s', 'm3/h')!
+    expect(convertFlowText(there, 'm3/h', 'l/s')).toBe('25,13')
+  })
+
+  it('пустое, нечисловое и те же единицы не трогает', () => {
+    expect(convertFlowText('', 'l/s', 'm3/h')).toBeNull()
+    expect(convertFlowText('2**3', 'l/s', 'm3/h')).toBeNull()
+    expect(convertFlowText('25,13', 'l/s', 'l/s')).toBeNull()
+  })
+
+  it('выражение считается перед пересчётом', () => {
+    expect(convertFlowText('20+5,13', 'l/s', 'm3/h')).toBe('90,47')
   })
 
   it('ЕИ не меняет итоговую глубину', () => {

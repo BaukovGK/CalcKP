@@ -1,6 +1,10 @@
-import { computed, type Ref } from 'vue'
+import { computed, watch, type Ref } from 'vue'
 import {
   checkValveCount,
+  convertFlowText,
+  formatFlow,
+  fromLps,
+  toLps,
   pressureGateValveCount,
   computeDepth,
   gateValveCount,
@@ -20,6 +24,37 @@ import type { KnsSurveyForm } from '@/types/survey'
  */
 export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const num = (s: string): number | null => tryEvalExpr(s)
+
+  // Смена единиц расхода пересчитывает само значение: воды столько же, в
+  // новых единицах (25,13 л/с → 90,47 м³/ч). Раньше менялась только подпись —
+  // и расход тихо становился в 3,6 раза меньше или больше.
+  //
+  // Пересчёт идёт от ТОЧНОГО значения последнего ручного ввода (в л/с), а не
+  // от показанного округлённого: цепочка л/с → м³/ч → м³/сут иначе копила бы
+  // ошибку округления (2171,28 вместо 2171,23).
+  let anchorLps: number | null = null
+  let convertedText: string | null = null
+
+  watch(
+    () => form.value.rashod,
+    (raw) => {
+      if (raw === convertedText) return // это наш пересчёт, а не ввод
+      convertedText = null
+      const v = num(raw)
+      anchorLps = v == null ? null : toLps(v, form.value.rashodUnit)
+    },
+    { immediate: true },
+  )
+
+  watch(
+    () => form.value.rashodUnit,
+    (to, from) => {
+      const text = anchorLps != null ? formatFlow(fromLps(anchorLps, to)) : convertFlowText(form.value.rashod, from, to)
+      if (text == null) return
+      convertedText = text
+      form.value.rashod = text
+    },
+  )
 
   /** Подбор глубины — фирменная механика ОЛ (live-панель прототипа). */
   const depth = computed(() =>
