@@ -8,6 +8,7 @@ import { audit } from '../utils/audit'
 import { logger } from '../utils/logger'
 import { parseNnSheet } from '../utils/nn-sheet'
 import { buildPriceWorkbook } from '../utils/nn-export'
+import { findPriceIssues } from '../utils/price-issues'
 import { applyImport, importSummary, loadExisting, planImport } from '../utils/price-import'
 import ExcelJS from 'exceljs'
 import multer from 'multer'
@@ -25,13 +26,25 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024, files: 1 },
 })
 
-// GET /api/prices
+/**
+ * GET /api/prices — позиции прайса.
+ *
+ * К каждой приложено `issue` — замечание к цене (utils/price-issues.ts: ноль,
+ * расхождение с ценой без скидки, лист за штуку против цены за м²) или
+ * `null`. Те же замечания, что на листе «Проверка» выгрузки; «нет цены»
+ * сюда не входит — экран видит его по самой цене.
+ */
 pricesRouter.get('/', async (_req, res: Response, next: NextFunction) => {
   try {
     const items = await prisma.priceItem.findMany({
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     })
-    res.json(items)
+    const issues = new Map<number, string[]>()
+    for (const i of findPriceIssues(items)) {
+      if (i.kind === 'no-price') continue
+      issues.set(i.index, [...(issues.get(i.index) ?? []), i.message])
+    }
+    res.json(items.map((p, index) => ({ ...p, issue: issues.get(index)?.join('; ') ?? null })))
   } catch (e) { next(e) }
 })
 
