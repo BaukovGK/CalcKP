@@ -164,6 +164,17 @@ describe('раздел 2 «Лестница» (Библиотека B1)', () => 
   it('монтаж = изготовление / 2 = 7,25 чел.ч', () => {
     expect(byName('Монтаж Лестницы').qtyCalc).toBeCloseTo(7.25, 6)
   })
+
+  // Вопроса «Лестница» в ОЛ КНС нет: узел не следует за ОЛ, его состояние
+  // целиком в руках инженера.
+  it('у КНС лестница и стояк от ОЛ не зависят', () => {
+    const tree = materializeKns(ctx, OL3487)
+    const ladder = tree.sections.find((s) => s.code === '2')!.components[0]!
+    const vent = tree.sections.find((s) => s.code === '4')!.components[0]!
+    expect(ladder.enabled).toBe(true)
+    expect(ladder.enabledCalc).toBeUndefined()
+    expect(vent.enabledCalc).toBeUndefined()
+  })
 })
 
 describe('раздел 3 «Перекрытие» (B2, B6)', () => {

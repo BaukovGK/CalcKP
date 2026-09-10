@@ -95,6 +95,28 @@ describe.each(VIEWS)('ОЛ $label: автосохранение', ({ view, key, 
     expect(payload[key]!.sn).toBe(10000)
   })
 
+  it('ответ «Лестница: нет» уходит в расчёт', async () => {
+    const wrapper = mount(view as Component, {
+      props: {
+        estimateId: 'e1',
+        surveyRev: 1,
+        totalRub: 1_000_000,
+        savedSurvey: null,
+        initial: { zakazchik: 'Заказчик', obekt: 'Объект' },
+        deviceType,
+        deviceTypes: [{ value: deviceType, label: deviceType }],
+        canChangeType: false,
+      },
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    const ladder = wrapper.findAll('.tg').find((t) => t.text().startsWith('Лестница'))!
+    await ladder.findAll('button').find((b) => b.text() === 'нет')!.trigger('click')
+    await vi.advanceTimersByTimeAsync(SYNC_DELAY_MS + 10)
+
+    const [, payload] = applySurvey.mock.calls[0] as [string, Record<string, Record<string, unknown>>]
+    expect(payload[key]!.hasLadder).toBe(false)
+  })
+
   it('правка DN сохраняется, не трогая «Общих»', async () => {
     const wrapper = mountView()
     const label = wrapper.findAll('label.fld').find((l) => l.text().startsWith(dnLabel))!

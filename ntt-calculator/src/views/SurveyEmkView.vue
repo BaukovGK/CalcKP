@@ -505,7 +505,8 @@ const blocks = computed(() => [
   { t: 'Вентиляционный стояк', on: form.value.ventilation },
   { t: 'Напорный трубопровод', on: form.value.hasPumps },
   { t: 'Крепёж', on: true },
-  { t: 'Запорная арматура', on: form.value.hasValves },
+  // Запорная арматура в блоки не входит: раздел «Оборудование и запорная
+  // арматура» заполняется в расчёте вручную, тумблер ОЛ его не наполняет.
 ])
 const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)
 
@@ -571,6 +572,8 @@ function surveyPayload() {
       sn: s.sn.value,
       pipeLengthMm: s.manualLengthMm.value,
       hasShaft: form.value.hasShaft,
+      hasLadder: form.value.hasLadder,
+      ventilation: form.value.ventilation,
       shaftDiameterMm: num(form.value.shaftD),
       shaftHeightMm: num(form.value.shaftH),
       servicePipePriceRub: num(form.value.servicePipePrice),

@@ -69,6 +69,13 @@ function jointLayerIndex(rows: ReadonlyArray<{ d: number; pn: number; massKg: nu
   return new Map([...min].map(([d, v]) => [d, v.massKg]))
 }
 
+/**
+ * Узлы, которые до своей связи с тумблером ОЛ строились включёнными всегда:
+ * B1 — лестница, C1 — вентстояк (у ёмкости и колодца тумблеры дошли до них
+ * 10.09.2026). См. reconciledEnabled.
+ */
+const ALWAYS_ON_BEFORE_SURVEY = new Set(['B1', 'C1'])
+
 /** Ставки по умолчанию — fallback, если позиции нет в прайсе (Механика §9). */
 const FALLBACK_RATES: Rates = {
   fotRub: 1207.8,
@@ -516,7 +523,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
    */
   function reconciledEnabled(oc: CalcComponent, nc: CalcComponent): boolean {
     if (nc.enabledCalc === undefined) return oc.enabled
-    const before = oc.enabledCalc ?? oc.enabled
+    // Лестница и вентстояк до связи с ОЛ строились включёнными всегда:
+    // прежний «ответ ОЛ» у их старых деревьев известен — «да». Выключенный
+    // в расчёте узел — ручная правка, и ответ ОЛ «да» её не отменяет.
+    const legacy = nc.nodeCode && ALWAYS_ON_BEFORE_SURVEY.has(nc.nodeCode) ? true : oc.enabled
+    const before = oc.enabledCalc ?? legacy
     return before === nc.enabledCalc ? oc.enabled : nc.enabled
   }
 

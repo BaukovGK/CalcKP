@@ -54,6 +54,7 @@ import {
   neckCoverMassKg,
   tankMaterial,
   type EmkBottomType,
+  type EmkGeometry,
   type Installation,
   type Placement,
   type TankType,
@@ -103,6 +104,13 @@ export interface EmkSurveyParams {
   pipeLengthMm?: number | null
   /** Днища горизонтальной ёмкости; пусто — эллиптические. */
   bottomType?: EmkBottomType
+  /**
+   * Ответы ОЛ «Лестница» и «Вентиляция»: узлы лестницы и вентстояка следуют
+   * за ними. Пусто — у расчётов, собранных до появления полей: тогда «да»,
+   * как узлы и строились.
+   */
+  hasLadder?: boolean
+  ventilation?: boolean
 
   hasShaft: boolean
   /**
@@ -148,6 +156,8 @@ export interface KolSurveyParams {
   pnSurvey: number
   /** SN из ОЛ — расчётная по глубине либо заданная вручную; пусто — по глубине. */
   sn?: number | null
+  /** Ответ ОЛ «Лестница»; пусто — «да», как у расчётов до появления поля. */
+  hasLadder?: boolean
 
   hasNeck: boolean
   neckHeightMm: number
@@ -629,6 +639,18 @@ function assemble(
   }))
 }
 
+/**
+ * Высота лестницы ёмкости, мм (эталон I114 листа «Калькулятор ЕМК»).
+ *
+ * У вертикальной — во всю высоту корпуса. У горизонтальной лестница ведёт
+ * через шахту на дно: диаметр корпуса плюс высота шахты. Раньше и для
+ * горизонтальной бралась длина корпуса — у ёмкости 50 м³ это 17,5 м лестницы
+ * вместо 4,3 м.
+ */
+export function emkLadderHeightMm(survey: Pick<EmkSurveyParams, 'placement' | 'dn'>, geo: EmkGeometry): number {
+  return survey.placement === 'горизонтальное' ? survey.dn + geo.shaftHeightMm : (geo.overallLengthMm ?? 0)
+}
+
 /** «Создать расчёт» из ОЛ ёмкости. */
 export function materializeEmk(ctx: MaterializeContext, survey: EmkSurveyParams): CalcTree {
   const geo = computeEmkGeometry(survey)
@@ -641,9 +663,9 @@ export function materializeEmk(ctx: MaterializeContext, survey: EmkSurveyParams)
     '2': [
       buildBasket(ctx, { device: 'EMK', dn: survey.dn, trayDepthMm: survey.inletTrayDepthMm, enabled: survey.hasBasket }),
     ],
-    '3': buildLadder(ctx, { depthMm }),
+    '3': buildLadder(ctx, { depthMm: emkLadderHeightMm(survey, geo), enabled: survey.hasLadder ?? true }),
     '4': buildSlab(ctx, { dn: survey.dn, depthMm }),
-    '5': buildVent(ctx),
+    '5': buildVent(ctx, { enabled: survey.ventilation ?? true }),
     // Напорный трубопровод — ТОЛЬКО при насосном оборудовании (Реверс §5:
     // «есть разделы "Напорный трубопровод" и "Насосное оборудование", когда
     // ёмкость с насосами»). Без насосов раздел остаётся пустым каркасом.
@@ -683,7 +705,9 @@ export function materializeKol(ctx: MaterializeContext, survey: KolSurveyParams)
     '2': [
       buildBasket(ctx, { device: 'KOL', dn: survey.dn, trayDepthMm: survey.inletTrayDepthMm, enabled: survey.hasBasket }),
     ],
-    '3': buildLadder(ctx, { depthMm }),
+    // Лестница — по полной глубине корпуса с горловиной (эталон I113 листа
+    // «Калькулятор колодца»). Вентиляции в ОЛ колодца нет — стояк всегда.
+    '3': buildLadder(ctx, { depthMm, enabled: survey.hasLadder ?? true }),
     '4': buildSlab(ctx, { dn: survey.dn, depthMm }),
     '5': buildVent(ctx),
     '6': buildFasteners(ctx, { outletDn: survey.outletDn, outletCount: survey.outletCount }),

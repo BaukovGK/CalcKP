@@ -433,7 +433,8 @@ const blocks = computed(() => [
   { t: 'Перекрытие, площадка и несущие балки', on: true },
   { t: 'Вентиляционный стояк', on: true },
   { t: 'Крепёж', on: true },
-  { t: 'Запорная арматура', on: form.value.hasValves },
+  // Запорная арматура в блоки не входит: раздел «Оборудование и запорная
+  // арматура» заполняется в расчёте вручную, тумблер ОЛ его не наполняет.
 ])
 const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)
 
@@ -494,6 +495,7 @@ function surveyPayload() {
       // расчётный и считал другую трубу).
       sn: s.sn.value,
       hasNeck: form.value.hasNeck,
+      hasLadder: form.value.hasLadder,
       neckHeightMm: num(form.value.neckH) ?? 0,
       neckDiameterMm: num(form.value.neckD) ?? 0,
       servicePipePriceRub: num(form.value.servicePipePrice),

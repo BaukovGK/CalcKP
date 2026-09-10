@@ -331,6 +331,41 @@ describe('материализация ЕМК', () => {
     expect(rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!.qtyCalc).toBe(2 * 133)
   })
 
+  // Раньше тумблеры «Лестница» и «Вентиляция» ОЛ до расчёта не доходили:
+  // разделы строились всегда, а превью листа считало их выключенными.
+  it('лестница и вентстояк следуют за тумблерами ОЛ', () => {
+    const tree = materializeEmk(ctx, { ...EMK, hasLadder: false, ventilation: false })
+    const ladder = tree.sections.find((s) => s.title === 'Лестница')!.components[0]!
+    const vent = tree.sections.find((s) => s.code === '5')!.components[0]!
+    expect(ladder.title).toBe('Лестница нержавеющая')
+    expect([ladder.enabled, ladder.enabledCalc]).toEqual([false, false])
+    expect([vent.enabled, vent.enabledCalc]).toEqual([false, false])
+  })
+
+  it('без ответов ОЛ (расчёт до появления полей) лестница и стояк включены', () => {
+    const tree = materializeEmk(ctx, EMK)
+    const ladder = tree.sections.find((s) => s.code === '3')!.components[0]!
+    const vent = tree.sections.find((s) => s.code === '5')!.components[0]!
+    expect([ladder.enabled, ladder.enabledCalc]).toEqual([true, true])
+    expect([vent.enabled, vent.enabledCalc]).toEqual([true, true])
+  })
+
+  // Лестница горизонтальной ёмкости ведёт через шахту на дно: DN + h шахты
+  // (эталон I114). Раньше бралась длина корпуса — 17,5 м вместо 4,3 м.
+  it('лестница горизонтальной ёмкости — на диаметр плюс высоту шахты', () => {
+    const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное' }))
+    // DN 2000 + h шахты 2300 (типовая у подземной) = 4,3 м → 1,25 × 4,3.
+    expect(rows.find((r) => r.name === 'Изготовление Лестницы')!.qtyCalc).toBeCloseTo(5.375, 9)
+    const noShaft = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное', hasShaft: false }))
+    expect(noShaft.find((r) => r.name === 'Изготовление Лестницы')!.qtyCalc).toBeCloseTo(2.5, 9)
+  })
+
+  it('лестница вертикальной ёмкости — во всю высоту корпуса', () => {
+    const rows = flattenRows(materializeEmk(ctx, EMK))
+    // V 50 м³ при DN 2000 — корпус 16 000 мм → 1,25 × 16.
+    expect(rows.find((r) => r.name === 'Изготовление Лестницы')!.qtyCalc).toBeCloseTo(20, 9)
+  })
+
   it('химстойкая ёмкость меняет марку трубы на СК/ВЭС', () => {
     const rows = flattenRows(materializeEmk(ctx, { ...EMK, tankType: 'Химстойкая' }))
     expect(rows.some((r) => r.name.startsWith('Труба СК/ВЭС-К'))).toBe(true)
@@ -454,6 +489,21 @@ describe('КОЛ: геометрия с горловиной', () => {
 })
 
 describe('материализация КОЛ', () => {
+  it('лестница колодца следует за тумблером ОЛ; вентстояк — всегда: вопроса нет', () => {
+    const tree = materializeKol(ctx, { ...KOL, hasLadder: false })
+    const ladder = tree.sections.find((s) => s.code === '3')!.components[0]!
+    const vent = tree.sections.find((s) => s.code === '5')!.components[0]!
+    expect([ladder.enabled, ladder.enabledCalc]).toEqual([false, false])
+    expect(vent.enabled).toBe(true)
+    expect(vent.enabledCalc).toBeUndefined()
+  })
+
+  it('лестница колодца — на полную глубину корпуса с горловиной', () => {
+    const rows = flattenRows(materializeKol(ctx, KOL))
+    // 2500 + (800 + 200) = 3500 мм → 1,25 × 3,5.
+    expect(rows.find((r) => r.name === 'Изготовление Лестницы')!.qtyCalc).toBeCloseTo(4.375, 9)
+  })
+
   it('SN из ОЛ, в т. ч. ручной, доходит до трубы корпуса', () => {
     const rows = flattenRows(materializeKol(ctx, { ...KOL, sn: 10000 }))
     expect(rows.some((r) => r.name === 'Труба СК/НПС-К 1500-0,1-10000')).toBe(true)

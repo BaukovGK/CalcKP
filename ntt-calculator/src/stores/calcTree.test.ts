@@ -585,6 +585,64 @@ describe('стор calcTree: ёмкость', () => {
     expect(body.form.pipePrice).toBeUndefined()
   })
 
+  /** Узел дерева по началу заголовка. */
+  const node = (store: ReturnType<typeof useCalcTreeStore>, title: string) =>
+    store.tree!.sections.flatMap((s) => s.components).find((c) => c.title.startsWith(title))!
+
+  function emkStore() {
+    const est = emkEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return Promise.resolve(JSON.parse(JSON.stringify(est)))
+    })
+    return useCalcTreeStore()
+  }
+
+  it('тумблер «Лестница» ОЛ ведёт узел; ручное переключение живёт до правки тумблера', async () => {
+    const store = emkStore()
+    await store.applySurvey('e1', { form: {}, emk: emk({ hasLadder: false }), surveyRev: 2 })
+    expect(node(store, 'Лестница').enabled).toBe(false)
+
+    // Инженер включил лестницу в расчёте — правка другого поля ОЛ её не трогает.
+    store.toggleComponent('3', node(store, 'Лестница').id)
+    await store.applySurvey('e1', { form: {}, emk: emk({ hasLadder: false, volumeM3: 60 }), surveyRev: 3 })
+    expect(node(store, 'Лестница').enabled).toBe(true)
+
+    // А смена ответа в ОЛ — трогает.
+    await store.applySurvey('e1', { form: {}, emk: emk({ hasLadder: true, volumeM3: 60 }), surveyRev: 4 })
+    await store.applySurvey('e1', { form: {}, emk: emk({ hasLadder: false, volumeM3: 60 }), surveyRev: 5 })
+    expect(node(store, 'Лестница').enabled).toBe(false)
+  })
+
+  it('тумблер «Вентиляция» ОЛ ведёт вентстояк', async () => {
+    const store = emkStore()
+    await store.applySurvey('e1', { form: {}, emk: emk({ ventilation: false }), surveyRev: 2 })
+    expect(node(store, 'Вентиляционный стояк').enabled).toBe(false)
+    await store.applySurvey('e1', { form: {}, emk: emk({ ventilation: true }), surveyRev: 3 })
+    expect(node(store, 'Вентиляционный стояк').enabled).toBe(true)
+  })
+
+  // Дерево, собранное до связи с ОЛ: лестница там строилась включённой
+  // всегда, поэтому выключенная — это ручная правка инженера.
+  it('старое дерево: выключенную вручную лестницу ответ ОЛ «да» не включает, ответ «нет» — выключает', async () => {
+    const store = emkStore()
+    await store.applySurvey('e1', { form: {}, emk: emk(), surveyRev: 2 })
+    const legacy = () => {
+      for (const c of store.tree!.sections.flatMap((s) => s.components)) delete c.enabledCalc
+    }
+
+    legacy()
+    store.toggleComponent('3', node(store, 'Лестница').id)
+    await store.applySurvey('e1', { form: {}, emk: emk({ hasLadder: true, volumeM3: 60 }), surveyRev: 3 })
+    expect(node(store, 'Лестница').enabled).toBe(false)
+
+    store.toggleComponent('3', node(store, 'Лестница').id)
+    legacy()
+    await store.applySurvey('e1', { form: {}, emk: emk({ hasLadder: false, volumeM3: 70 }), surveyRev: 4 })
+    expect(node(store, 'Лестница').enabled).toBe(false)
+  })
+
   // Матрица приходит ячейками (DN × строка длины «До 3 м» … «До 12»), длина
   // трубы приводится к строке тем же правилом, что в эталоне.
   it('масса эллиптических днищ — из матрицы справочника по строке длины трубы', async () => {

@@ -683,7 +683,13 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
 
 // ─── Раздел 2: Лестница (Библиотека B1) ─────────────────────────────────────
 
-export function buildLadder(ctx: MaterializeContext, s: { depthMm: number }): CalcComponent[] {
+/**
+ * Узел B1 — лестница.
+ *
+ * `enabled` — ответ ОЛ «Лестница» у ёмкости и колодца: узел следует за
+ * тумблером (surveyToggled). У КНС вопроса нет — лестница есть всегда.
+ */
+export function buildLadder(ctx: MaterializeContext, s: { depthMm: number; enabled?: boolean }): CalcComponent[] {
   const heightM = s.depthMm / 1000
   const l = ladder(heightM)
 
@@ -692,7 +698,7 @@ export function buildLadder(ctx: MaterializeContext, s: { depthMm: number }): Ca
       id: nextId('c'),
       nodeCode: 'B1',
       title: 'Лестница нержавеющая',
-      enabled: true,
+      ...(s.enabled === undefined ? { enabled: true } : surveyToggled(s.enabled)),
       rows: [
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
@@ -791,7 +797,13 @@ export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: num
 
 // ─── Раздел 4: Вентиляционный стояк (C1) ────────────────────────────────────
 
-export function buildVent(ctx: MaterializeContext): CalcComponent[] {
+/**
+ * Узел C1 — вентиляционный стояк.
+ *
+ * `enabled` — ответ ОЛ «Вентиляция» у ёмкости: узел следует за тумблером.
+ * У КНС и колодца вопроса нет — стояк есть всегда.
+ */
+export function buildVent(ctx: MaterializeContext, s: { enabled?: boolean } = {}): CalcComponent[] {
   // Ø вентстояка в ОЛ не задаётся; типовой ПЭ Ду110 — под него есть дефлектор.
   const VENT_D = 110
 
@@ -800,7 +812,7 @@ export function buildVent(ctx: MaterializeContext): CalcComponent[] {
       id: nextId('c'),
       nodeCode: 'C1',
       title: 'Вентиляционный стояк ПЭ Ду110',
-      enabled: true,
+      ...(s.enabled === undefined ? { enabled: true } : surveyToggled(s.enabled)),
       rows: [
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
