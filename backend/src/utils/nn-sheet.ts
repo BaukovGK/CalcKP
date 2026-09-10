@@ -1,17 +1,24 @@
 import type ExcelJS from 'exceljs'
+import { normalizePriceName, normalizePriceText } from './price-name'
 
 /**
- * Разбор листа «НН» (прайс) из книги мастер-шаблона.
+ * Разбор листа «НН» (прайс) — книги мастер-шаблона, книги отдела закупок или
+ * выгрузки из самого приложения (`GET /api/prices/export`).
  *
- * Единственное место, где зафиксировано соответствие колонок — им пользуются и
- * импорт (`POST /api/prices/import`), и экстрактор сидов (`tools/extract-refs`).
+ * Единственное место, где зафиксировано соответствие колонок: им пользуются
+ * импорт (`POST /api/prices/import`), консольный импорт
+ * (`tools/import-prices`) и экстрактор сидов (`tools/extract-refs`).
  *
- * Колонки (проверено по шапке листа, Реверс §9.1):
+ * Колонки ищутся по заголовкам первой строки: выгрузка добавляет
+ * «Поставщик», а закупщик мог вставить свою колонку — жёсткие номера тогда
+ * съехали бы. Если заголовков нет, работают номера листа мастер-шаблона
+ * (Реверс §9.1):
  *   A ключ (формула)  B Группа        D Номенклатура   F ЕИ
  *   G Цена без скидки H Валюта        I Скидка, %      J Цена, руб  ← её тянет VLOOKUP
  *   K Комментарии     L/M курсы (не используются)
  *
- * Колонки «Поставщик» в листе нет — при импорте supplier не заполняется.
+ * Наименования, категории и ЕИ приводятся к каноническому виду
+ * (utils/price-name.ts) — дубли и совпадения ищутся уже по нему.
  */
 
 export const NN_COLUMNS = {
@@ -25,6 +32,22 @@ export const NN_COLUMNS = {
   comment: 11,
 } as const
 
+/** Заголовки колонок — те же, что в листе мастер-шаблона и в выгрузке. */
+export const NN_HEADERS = {
+  category: 'Группа',
+  name: 'Номенклатура',
+  unit: 'ЕИ',
+  priceBaseRub: 'Цена без скидки',
+  currency: 'Валюта',
+  discountPct: 'Скидка, %',
+  priceRub: 'Цена, руб',
+  comment: 'Комментарии',
+  supplier: 'Поставщик',
+} as const
+
+type ColumnKey = keyof typeof NN_HEADERS
+export type NnColumns = Record<Exclude<ColumnKey, 'supplier'>, number> & { supplier: number | null }
+
 export interface NnRow {
   category: string
   name: string
@@ -34,8 +57,22 @@ export interface NnRow {
   currency: string
   priceRub: number | null
   comment: string | null
+  /**
+   * Поставщик: `undefined` — колонки в листе нет (лист мастер-шаблона), и
+   * импорт поставщика не трогает; `null` — колонка есть, ячейка пуста.
+   */
+  supplier?: string | null
   /** Номер строки в листе — для внятных сообщений об ошибках. */
   sheetRow: number
+}
+
+export interface NnDuplicate {
+  sheetRow: number
+  key: string
+  firstRow: number
+  /** Цена повтора и цена первой строки: разные — это вопрос к закупкам. */
+  price: number | null
+  firstPrice: number | null
 }
 
 export interface NnParseResult {
@@ -43,7 +80,14 @@ export interface NnParseResult {
   /** Строки, пропущенные из-за неполного ключа или запрещённого символа. */
   skipped: Array<{ sheetRow: number; reason: string }>
   /** Дубли ключа (категория, наименование, ЕИ): побеждает первая — как VLOOKUP. */
-  duplicates: Array<{ sheetRow: number; key: string; firstRow: number }>
+  duplicates: NnDuplicate[]
+  /**
+   * Наименования, исправленные нормализацией сверх обрезки пробелов по
+   * краям: двойные и неразрывные пробелы, латиница на месте кириллицы.
+   */
+  nameFixes: Array<{ sheetRow: number; from: string; to: string }>
+  /** Как найдены колонки: по заголовкам или по номерам мастер-шаблона. */
+  columns: 'header' | 'fixed'
 }
 
 function raw(cell: ExcelJS.Cell): unknown {
@@ -58,9 +102,14 @@ function raw(cell: ExcelJS.Cell): unknown {
   return v
 }
 
-export function cellStr(cell: ExcelJS.Cell): string {
+/** Текст ячейки как есть — без обрезки: её делает нормализация. */
+function cellRaw(cell: ExcelJS.Cell): string {
   const v = raw(cell)
-  return v == null ? '' : String(v).trim()
+  return v == null ? '' : String(v)
+}
+
+export function cellStr(cell: ExcelJS.Cell): string {
+  return cellRaw(cell).trim()
 }
 
 export function cellNum(cell: ExcelJS.Cell): number | null {
@@ -69,7 +118,7 @@ export function cellNum(cell: ExcelJS.Cell): number | null {
   if (typeof v === 'string') {
     // В книге встречаются числа строкой с запятой-разделителем («0,193 »).
     const n = Number(v.replace(/\s/g, '').replace(',', '.'))
-    return Number.isFinite(n) ? n : null
+    return v.trim() !== '' && Number.isFinite(n) ? n : null
   }
   return null
 }
@@ -78,17 +127,56 @@ export function cellNum(cell: ExcelJS.Cell): number | null {
 export const lookupKeyOf = (category: string, name: string, unit: string): string =>
   `${category}:${name}:${unit}`
 
+const headerKey = (s: string) => normalizePriceText(s).toLowerCase()
+
+/**
+ * Колонки листа: по заголовкам первой строки, если нашлись обязательные
+ * (группа, номенклатура, ЕИ, цена), иначе — номера мастер-шаблона.
+ */
+export function detectColumns(ws: ExcelJS.Worksheet): { columns: NnColumns; mode: 'header' | 'fixed' } {
+  const wanted = new Map(Object.entries(NN_HEADERS).map(([k, h]) => [headerKey(h), k as ColumnKey]))
+  const found: Partial<Record<ColumnKey, number>> = {}
+  ws.getRow(1).eachCell((cell, col) => {
+    const key = wanted.get(headerKey(cellRaw(cell)))
+    if (key && found[key] == null) found[key] = col
+  })
+
+  const required: ColumnKey[] = ['category', 'name', 'unit', 'priceRub']
+  if (required.every((k) => found[k] != null)) {
+    return {
+      mode: 'header',
+      columns: {
+        category: found.category!,
+        name: found.name!,
+        unit: found.unit!,
+        priceRub: found.priceRub!,
+        priceBaseRub: found.priceBaseRub ?? 0,
+        currency: found.currency ?? 0,
+        discountPct: found.discountPct ?? 0,
+        comment: found.comment ?? 0,
+        supplier: found.supplier ?? null,
+      },
+    }
+  }
+  return { mode: 'fixed', columns: { ...NN_COLUMNS, supplier: null } }
+}
+
 export function parseNnSheet(ws: ExcelJS.Worksheet): NnParseResult {
   const rows: NnRow[] = []
   const skipped: NnParseResult['skipped'] = []
-  const duplicates: NnParseResult['duplicates'] = []
-  const seen = new Map<string, number>()
+  const duplicates: NnDuplicate[] = []
+  const nameFixes: NnParseResult['nameFixes'] = []
+  const seen = new Map<string, NnRow>()
+  const { columns, mode } = detectColumns(ws)
+  // Колонка 0 — «нет такой колонки»: у ExcelJS нумерация с единицы.
+  const at = (row: ExcelJS.Row, col: number) => (col > 0 ? row.getCell(col) : null)
 
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r)
-    const category = cellStr(row.getCell(NN_COLUMNS.category))
-    const name = cellStr(row.getCell(NN_COLUMNS.name))
-    const unit = cellStr(row.getCell(NN_COLUMNS.unit))
+    const rawName = cellRaw(row.getCell(columns.name))
+    const category = normalizePriceText(cellRaw(row.getCell(columns.category)))
+    const name = normalizePriceName(rawName)
+    const unit = normalizePriceText(cellRaw(row.getCell(columns.unit)))
 
     if (!category || !name || !unit) {
       // Неполный ключ — позиция недостижима и в самом Excel: VLOOKUP по
@@ -105,26 +193,38 @@ export function parseNnSheet(ws: ExcelJS.Worksheet): NnParseResult {
       continue
     }
 
+    if (name !== rawName.trim()) nameFixes.push({ sheetRow: r, from: rawName.trim(), to: name })
+
+    const priceCell = at(row, columns.priceRub)
+    const priceRub = priceCell ? cellNum(priceCell) : null
     const key = lookupKeyOf(category, name, unit)
     const first = seen.get(key)
-    if (first != null) {
-      duplicates.push({ sheetRow: r, key, firstRow: first })
+    if (first) {
+      duplicates.push({ sheetRow: r, key, firstRow: first.sheetRow, price: priceRub, firstPrice: first.priceRub })
       continue
     }
-    seen.set(key, r)
 
-    rows.push({
+    const baseCell = at(row, columns.priceBaseRub)
+    const discountCell = at(row, columns.discountPct)
+    const currencyCell = at(row, columns.currency)
+    const commentCell = at(row, columns.comment)
+    const supplierCell = columns.supplier != null ? row.getCell(columns.supplier) : null
+
+    const parsed: NnRow = {
       category,
       name,
       unit,
-      priceBaseRub: cellNum(row.getCell(NN_COLUMNS.priceBaseRub)),
-      discountPct: cellNum(row.getCell(NN_COLUMNS.discountPct)),
-      currency: cellStr(row.getCell(NN_COLUMNS.currency)) || 'руб',
-      priceRub: cellNum(row.getCell(NN_COLUMNS.priceRub)),
-      comment: cellStr(row.getCell(NN_COLUMNS.comment)) || null,
+      priceBaseRub: baseCell ? cellNum(baseCell) : null,
+      discountPct: discountCell ? cellNum(discountCell) : null,
+      currency: (currencyCell ? normalizePriceText(cellRaw(currencyCell)) : '') || 'руб',
+      priceRub,
+      comment: (commentCell ? normalizePriceText(cellRaw(commentCell)) : '') || null,
       sheetRow: r,
-    })
+    }
+    if (supplierCell) parsed.supplier = normalizePriceText(cellRaw(supplierCell)) || null
+    seen.set(key, parsed)
+    rows.push(parsed)
   }
 
-  return { rows, skipped, duplicates }
+  return { rows, skipped, duplicates, nameFixes, columns: mode }
 }

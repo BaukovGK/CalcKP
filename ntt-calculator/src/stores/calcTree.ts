@@ -25,6 +25,11 @@ import type { PriceBinding, RowResult } from '@/engines/types'
 import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
 import { hasBasketIn, hasGrinderIn, type Grinder } from '@/types/survey'
+import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
+
+/** Ключ цены — тройка в каноническом виде (engines/price-name.ts). */
+const priceKey = (category: string, name: string, unit: string): string =>
+  `${normalizePriceText(category)}|${normalizePriceName(name)}|${normalizePriceText(unit)}`
 
 /**
  * Стор дерева расчёта (§9, Библиотека §6.3).
@@ -116,12 +121,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     priceListVersion.value = priceVersion.version
 
     // Индексы справочников: поиск по тройке (категория, наименование, ЕИ)
-    // и по (DN; PN_трубы; SN) — ровно как VLOOKUP эталона.
+    // и по (DN; PN_трубы; SN) — ровно как VLOOKUP эталона. Тройка приводится
+    // к каноническому виду с обеих сторон: невидимая разница в пробелах или
+    // латинская «x» в прайсе не должна делать строку расчёта «красной».
     const priceIdx = new Map<string, number | null>()
     const flat: typeof catalog.value = []
     for (const [category, items] of Object.entries(prices)) {
       for (const p of items) {
-        priceIdx.set(`${category}|${p.name}|${p.unit}`, p.priceRub)
+        priceIdx.set(priceKey(category, p.name, p.unit), p.priceRub)
         flat.push({ category, name: p.name, unit: p.unit, priceRub: p.priceRub })
       }
     }
@@ -133,10 +140,10 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     // меняет экономику новых расчётов. Fallback — если позиции в базе нет
     // (например, БД засеяна до их добавления).
     rates.value = {
-      fotRub: priceIdx.get('ФОТ|ФОТ|чел. ч') ?? FALLBACK_RATES.fotRub,
-      overheadRub: priceIdx.get('ФОТ|Накладные расходы|чел. ч') ?? FALLBACK_RATES.overheadRub,
-      acetoneRub: priceIdx.get('Прочие материалы|Ацетон|кг') ?? FALLBACK_RATES.acetoneRub,
-      ppeRub: priceIdx.get('Прочие материалы|СИЗ и РМ|ед.') ?? FALLBACK_RATES.ppeRub,
+      fotRub: priceIdx.get(priceKey('ФОТ', 'ФОТ', 'чел. ч')) ?? FALLBACK_RATES.fotRub,
+      overheadRub: priceIdx.get(priceKey('ФОТ', 'Накладные расходы', 'чел. ч')) ?? FALLBACK_RATES.overheadRub,
+      acetoneRub: priceIdx.get(priceKey('Прочие материалы', 'Ацетон', 'кг')) ?? FALLBACK_RATES.acetoneRub,
+      ppeRub: priceIdx.get(priceKey('Прочие материалы', 'СИЗ и РМ', 'ед.')) ?? FALLBACK_RATES.ppeRub,
     }
 
     // Нормы патрубков — источник массы формовки гильз (лист «Для расчетов»).
@@ -149,7 +156,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     const jointIdx = jointLayerIndex(engineering.jointLayers ?? [])
 
     ctxCache = {
-      priceOf: (c, n, u) => priceIdx.get(`${c}|${n}|${u}`) ?? null,
+      priceOf: (c, n, u) => priceIdx.get(priceKey(c, n, u)) ?? null,
       pipeWeightOf: (dn, pn, sn) => weightIdx.get(`${dn}|${pn}|${sn}`) ?? null,
       nozzleNormOf: (dn) => normIdx.get(dn) ?? null,
       jointLayerMassOf: (d) => jointIdx.get(d) ?? null,
@@ -395,7 +402,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
    * ЕИ (внутри компонента, с учётом повторов по порядку следования).
    */
   function rowMatchKey(r: CalcRowNode): string {
-    return `${r.kind}|${r.name}|${r.unit}`
+    // Наименование — в каноническом виде: у деревьев, собранных до чистки
+    // прайса, в именах строк остались двойные пробелы и латиница, а свежая
+    // материализация даёт уже приведённые — сопоставление по сырому имени
+    // потеряло бы ручные правки этих строк.
+    return `${r.kind}|${normalizePriceName(r.name)}|${normalizePriceText(r.unit)}`
   }
 
   /**

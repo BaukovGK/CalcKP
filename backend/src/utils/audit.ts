@@ -23,6 +23,8 @@ export type AuditAction =
   | 'estimate.kp.export'
   | 'prices.update'
   | 'prices.import'
+  /** Выгрузка прайса в xlsx (лист «НН» + «Проверка»). */
+  | 'prices.export'
   | 'user.create'
   /** Смена роли, имени или активности пользователя. */
   | 'user.update'

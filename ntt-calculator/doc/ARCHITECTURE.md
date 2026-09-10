@@ -264,7 +264,10 @@ GET    /api/estimates/:id/snapshots   история версий
 POST   /api/estimates/:id/purchase-request/export   заявка на закупку (xlsx)
 
 GET    /api/prices                    PATCH /api/prices/:id
-POST   /api/prices/import             импорт xlsx (лист НН)
+POST   /api/prices/import             импорт xlsx (лист НН); dryRun=1 — предпросмотр
+                                      без записи (utils/price-import.ts)
+GET    /api/prices/export             выгрузка xlsx: лист «НН» в раскладке
+                                      мастер-шаблона + «Проверка»
 
 GET    /api/refs/nomenclature | /pipe-weights | /engineering
 GET    /api/refs/price-version        активная версия прайса = MAX(version)

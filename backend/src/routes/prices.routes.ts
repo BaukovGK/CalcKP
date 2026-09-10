@@ -6,7 +6,9 @@ import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { logger } from '../utils/logger'
-import { lookupKeyOf, parseNnSheet } from '../utils/nn-sheet'
+import { parseNnSheet } from '../utils/nn-sheet'
+import { buildPriceWorkbook } from '../utils/nn-export'
+import { applyImport, importSummary, loadExisting, planImport } from '../utils/price-import'
 import ExcelJS from 'exceljs'
 import multer from 'multer'
 import type { Response, NextFunction } from 'express'
@@ -30,6 +32,35 @@ pricesRouter.get('/', async (_req, res: Response, next: NextFunction) => {
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     })
     res.json(items)
+  } catch (e) { next(e) }
+})
+
+/**
+ * GET /api/prices/export — прайс книгой .xlsx в раскладке листа «НН».
+ *
+ * Выгрузку можно вставить в свою книгу закупок или поправить и загрузить
+ * обратно импортом. Второй лист, «Проверка», — позиции без цены и с
+ * подозрительными ценами (utils/nn-export.ts).
+ */
+pricesRouter.get('/export', requireRole('ADMIN', 'BUYER'), async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const [items, version] = await Promise.all([
+      prisma.priceItem.findMany(),
+      prisma.priceListVersion.findFirst({ orderBy: { version: 'desc' } }),
+    ])
+    const wb = buildPriceWorkbook(items, { versionLabel: version?.label ?? null })
+
+    await audit(auth.userId, 'prices.export', 'PriceListVersion', version ? String(version.version) : undefined, {
+      items: items.length,
+    })
+
+    const date = new Date().toISOString().slice(0, 10)
+    const name = encodeURIComponent(`Прайс_НН_${date}.xlsx`)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${name}`)
+    await wb.xlsx.write(res)
+    res.end()
   } catch (e) { next(e) }
 })
 
@@ -74,13 +105,14 @@ pricesRouter.patch('/:id', requireRole('ADMIN', 'BUYER'), validate(patchSchema),
  * POST /api/prices/import — импорт прайса из .xlsx (ТЗ §7, приоритет высокий).
  *
  * Тело: multipart/form-data, поле `file`. Опционально `sheet` (имя листа,
- * по умолчанию «НН») и `label` (подпись версии прайса).
+ * по умолчанию «НН»), `label` (подпись версии прайса) и `dryRun` («1» —
+ * только показать, что изменится, ничего не записывая).
  *
- * Upsert по тройке (категория, наименование, ЕИ) — реальному ключу прайса.
- * Каждое изменение цены пишется в PriceHistory. Импорт создаёт новую версию
- * прайса: «Прайс версионируется целиком» (ТЗ §3).
- *
- * Ответ: `{ updated, created, skipped, version, duplicates }`.
+ * Правила импорта — в utils/price-import.ts: upsert по тройке (категория,
+ * наименование, ЕИ) в каноническом виде, позиции без строки в файле не
+ * удаляются, пустая цена в файле цену базы не стирает. Каждое изменение цены
+ * пишется в PriceHistory; если цены поменялись, создаётся новая версия
+ * прайса: «прайс версионируется целиком» (ТЗ §3).
  */
 pricesRouter.post(
   '/import',
@@ -94,6 +126,7 @@ pricesRouter.post(
         res.status(400).json({ message: 'Файл не передан: ожидается multipart/form-data, поле «file»' })
         return
       }
+      const dryRun = ['1', 'true'].includes(String(req.body?.dryRun ?? ''))
 
       const wb = new ExcelJS.Workbook()
       try {
@@ -119,101 +152,42 @@ pricesRouter.post(
         return
       }
 
-      let created = 0
-      let updated = 0
-      let unchanged = 0
-
-      // Читаем текущее состояние одним запросом: по позиции на строку было бы
+      // Текущее состояние — одним запросом: по позиции на строку было бы
       // ~1000 round-trip'ов.
-      const existing = await prisma.priceItem.findMany({
-        select: { id: true, category: true, name: true, unit: true, priceRub: true },
-      })
-      const byKey = new Map(existing.map((p) => [lookupKeyOf(p.category, p.name, p.unit), p]))
+      const existing = await loadExisting(prisma)
+      const plan = planImport(parsed, existing)
 
-      for (const row of parsed.rows) {
-        const key = lookupKeyOf(row.category, row.name, row.unit)
-        const prev = byKey.get(key)
-
-        const data = {
-          lookupKey: key,
-          category: row.category,
-          name: row.name,
-          unit: row.unit,
-          priceBaseRub: row.priceBaseRub,
-          discountPct: row.discountPct,
-          currency: row.currency,
-          priceRub: row.priceRub,
-          comment: row.comment,
-        }
-
-        if (!prev) {
-          await prisma.priceItem.create({ data })
-          created++
-          continue
-        }
-
-        if (prev.priceRub === row.priceRub) {
-          // Цена не изменилась — обновляем сопутствующие поля без записи в
-          // историю: иначе каждый импорт плодил бы ~1000 пустых событий.
-          await prisma.priceItem.update({ where: { id: prev.id }, data })
-          unchanged++
-          continue
-        }
-
-        await prisma.priceItem.update({ where: { id: prev.id }, data })
-        await prisma.priceHistory.create({
-          data: {
-            priceItemId: prev.id,
-            oldPrice: prev.priceRub,
-            newPrice: row.priceRub,
-            changedById: auth.userId,
-          },
-        })
-        updated++
+      if (dryRun) {
+        res.json(importSummary(plan, null, true))
+        return
       }
 
-      // Новая версия прайса: снапшоты расчётов ссылаются на неё (ТЗ §3).
-      const last = await prisma.priceListVersion.findFirst({ orderBy: { version: 'desc' } })
-      const version = (last?.version ?? 0) + 1
-      await prisma.priceListVersion.create({
-        data: {
-          version,
-          label: String(req.body?.label ?? `НН v${version}`),
-          note: `Импорт из «${file.originalname}», лист «${sheetName}»`,
-          createdById: auth.userId,
-        },
+      const version = await applyImport(prisma, plan, existing, {
+        userId: auth.userId ?? null,
+        label: req.body?.label ? String(req.body.label) : undefined,
+        note: `Импорт из «${file.originalname}», лист «${sheetName}»`,
       })
-
-      const skipped = parsed.skipped.length + parsed.duplicates.length
 
       // Не «тихая» усечка: что именно отброшено — видно и в ответе, и в логе.
-      if (skipped > 0) {
+      if (plan.skipped.length + plan.duplicates.length > 0) {
         logger.warn('Импорт прайса: часть строк пропущена', {
-          skipped: parsed.skipped,
-          duplicates: parsed.duplicates,
+          skipped: plan.skipped,
+          duplicates: plan.duplicates,
         })
       }
 
-      await audit(auth.userId, 'prices.import', 'PriceListVersion', String(version), {
+      await audit(auth.userId, 'prices.import', 'PriceListVersion', version != null ? String(version) : undefined, {
         file: file.originalname,
         sheet: sheetName,
-        created,
-        updated,
-        unchanged,
-        skipped,
+        created: plan.created.length,
+        updated: plan.changed.length,
+        touched: plan.touched,
+        unchanged: plan.unchanged,
+        keptPrice: plan.keptPrices.length,
+        skipped: plan.skipped.length + plan.duplicates.length,
       })
 
-      res.json({
-        created,
-        updated,
-        unchanged,
-        skipped,
-        version,
-        // Дубли ключа в НН — реальность исходных данных (План §4.1-bis C):
-        // побеждает первая запись, ровно как VLOOKUP.
-        duplicates: parsed.duplicates,
-        skippedRows: parsed.skipped,
-      })
+      res.json(importSummary(plan, version, false))
     } catch (e) { next(e) }
   },
 )

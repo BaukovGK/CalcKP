@@ -1279,7 +1279,7 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
           kind: 'МАТЕРИАЛ',
           category: 'Выключатели',
           // Наименование в НН — капсом и с длиной кабеля.
-          name: 'ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ  КАБЕЛЬ 10 М',
+          name: 'ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ КАБЕЛЬ 10 М',
           unit: 'шт',
           qtyCalc: floatSwitchCount(s.pumpsWorking, s.pumpsReserve),
           note: 'ƒ = раб + рез + 2',

@@ -13,6 +13,7 @@
  * Источник: doc/Реверс_калькуляторов.md §9, ТЗ §3 (модель PriceItem).
  */
 import ExcelJS from 'exceljs'
+import { parseNnSheet } from '../src/utils/nn-sheet'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
@@ -72,52 +73,38 @@ export interface PriceSeed {
 }
 
 function extractPrices(ws: ExcelJS.Worksheet): PriceSeed[] {
-  const out: PriceSeed[] = []
-  const seen = new Set<string>()
-  let skipped = 0
-  let dupes = 0
-
-  for (let r = 2; r <= ws.rowCount; r++) {
-    const row = ws.getRow(r)
-    const category = str(row.getCell(2))
-    const name = str(row.getCell(4))
-    const unit = str(row.getCell(6))
-
-    // Ключ прайса — тройка (категория, наименование, ЕИ): VLOOKUP(C&D&K,...).
-    if (!category || !name || !unit) {
-      skipped++
-      continue
-    }
-
-    // Символ «~» запрещён в наименованиях (наследие VLOOKUP, ТЗ §9.8).
-    if (name.includes('~')) {
-      console.warn(`  ⚠ НН строка ${r}: «~» в наименовании — пропущена: ${name}`)
-      skipped++
-      continue
-    }
-
-    const key = `${category}:${name}:${unit}`
-    if (seen.has(key)) {
-      dupes++
-      continue
-    }
-    seen.add(key)
-
-    out.push({
-      category,
-      name,
-      unit,
-      priceBaseRub: num(row.getCell(7)),
-      discountPct: num(row.getCell(9)),
-      currency: str(row.getCell(8)) || 'руб',
-      priceRub: num(row.getCell(10)),
-      comment: str(row.getCell(11)) || null,
-    })
-  }
-
-  console.log(`  прайс: ${out.length} позиций, пропущено ${skipped}, дублей ключа ${dupes}`)
-  return out
+  // Тот же разбор, что у импорта: наименования в каноническом виде
+  // (utils/price-name.ts). Сид с «грязным» именем вернул бы в базу позицию,
+  // которую миграция нормализации только что привела, — вторую на ту же вещь.
+  const parsed = parseNnSheet(ws)
+  for (const s of parsed.skipped) console.warn(`  ⚠ НН строка ${s.sheetRow}: ${s.reason}`)
+  console.log(
+    `  прайс: ${parsed.rows.length} позиций, пропущено ${parsed.skipped.length}, ` +
+      `дублей ключа ${parsed.duplicates.length}, исправлено наименований ${parsed.nameFixes.length}`,
+  )
+  return parsed.rows.map((r) => ({
+    category: r.category,
+    name: r.name,
+    unit: r.unit,
+    priceBaseRub: r.priceBaseRub,
+    discountPct: r.discountPct,
+    currency: r.currency,
+    priceRub: r.priceRub,
+    comment: r.comment,
+  }))
 }
+
+/**
+ * Ставки экономического блока (Механика §9) — позиции прайса, которых нет в
+ * листе «НН»: в книге они живут константами «Калькулятора КНС». В сид их
+ * добавили вручную, и перезапуск экстрактора молча выбрасывал бы их из
+ * prices.json — экономика откатилась бы к запасным константам кода.
+ */
+const ECONOMIC_RATES: PriceSeed[] = [
+  { category: 'ФОТ', name: 'Накладные расходы', unit: 'чел. ч', priceBaseRub: 1584.73, discountPct: null, currency: 'руб', priceRub: 1584.73, comment: 'Ставка экономического блока (Механика §9)' },
+  { category: 'Прочие материалы', name: 'Ацетон', unit: 'кг', priceBaseRub: 109.4, discountPct: null, currency: 'руб', priceRub: 109.4, comment: 'Ставка экономического блока (Механика §9)' },
+  { category: 'Прочие материалы', name: 'СИЗ и РМ', unit: 'ед.', priceBaseRub: 122, discountPct: null, currency: 'руб', priceRub: 122, comment: 'Ставка экономического блока (Механика §9)' },
+]
 
 // ─── Веса труб ───────────────────────────────────────────────────────────────
 // GRP: B=DN, C=SN, D=PN, F=толщина стенки, G=вес кг/пм.
@@ -350,7 +337,7 @@ async function main() {
     return ws
   }
 
-  const prices = extractPrices(sheet('НН'))
+  const prices = [...extractPrices(sheet('НН')), ...ECONOMIC_RATES]
   const { grp, pe } = extractPipeWeights(sheet('Вес трубы, ПЭ трубы'))
   const lists = extractLists(sheet('Списки'))
   const engineering = extractEngineering(sheet('Для расчетов'))
