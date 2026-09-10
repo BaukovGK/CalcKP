@@ -286,6 +286,7 @@ import { COST_BUCKETS } from '@/engines/economics'
 import { BUCKET_HINTS, FILTER_HINTS, TOTAL_HINTS } from '@/hints/calc'
 import type { Hint } from '@/directives/hint'
 import { tryEvalExpr } from '@/engines/expr'
+import { handleCellNav } from '@/utils/cell-nav'
 import type { CalcComponent, CalcRowNode } from '@/engines/template-kns'
 import { estimatesApi, type EstimateSnapshotInfo, type SnapshotReason } from '@/api/estimates'
 
@@ -519,18 +520,13 @@ function onScroll() {
 }
 
 /** Клавиатура: Enter — вниз, ↑↓ по строкам, ←→ кол-во ⇄ цена, Esc — отмена. */
+/**
+ * Клавиатура в таблице — как в Excel (utils/cell-nav.ts). Enter в последней
+ * строке таблицы или фильтра снимает фокус: ввод ячейки фиксируется только
+ * уходом из неё, и раньше цена, введённая туда, не применялась.
+ */
 function onNav(ev: KeyboardEvent, _id: string, col: 'qty' | 'price') {
-  const cells = [...(tableEl.value?.querySelectorAll<HTMLInputElement>('.cell') ?? [])]
-  const i = cells.indexOf(ev.target as HTMLInputElement)
-  if (i < 0) return
-  const step = 2 // в строке две ячейки: кол-во и цена
-  const go = (j: number) => { cells[j]?.focus(); ev.preventDefault() }
-
-  if (ev.key === 'Enter' || ev.key === 'ArrowDown') go(i + step)
-  else if (ev.key === 'ArrowUp') go(i - step)
-  else if (ev.key === 'ArrowRight' && col === 'qty') go(i + 1)
-  else if (ev.key === 'ArrowLeft' && col === 'price') go(i - 1)
-  else if (ev.key === 'Escape') (ev.target as HTMLInputElement).blur()
+  handleCellNav(ev, [...(tableEl.value?.querySelectorAll<HTMLInputElement>('.cell') ?? [])], col)
 }
 
 function onMarkup() {

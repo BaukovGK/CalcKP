@@ -475,6 +475,29 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(node(store, 'Насосная группа').rows[0]!.qtyCalc).toBe(4)
   })
 
+  // Шкаф управления — договорная позиция: цены в прайсе нет, её вводят в
+  // расчёте. Введённая цена должна сразу снимать строку из «без цены».
+  it('цена шкафа управления, введённая в расчёте, снимает строку из «без цены»', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const on = kns({ shu: true, shuTip: 'уличный', shuPusk: 'плавный' })
+    await store.applySurvey('e1', { form: on, kns: on, derived, surveyRev: 2 })
+    const cabinet = node(store, 'Шкаф управления').rows[0]!
+    expect(store.missingPriceIds.has(cabinet.id)).toBe(true)
+
+    store.setPriceManual(cabinet.id, 1_200_000)
+
+    expect(store.results.get(cabinet.id)).toMatchObject({ price: 1_200_000, sum: 1_200_000, missingPrice: false })
+    expect(store.missingPriceIds.has(cabinet.id)).toBe(false)
+
+    // И переживает пересборку по правке ОЛ: ключ строки — наименование.
+    const next = kns({ shu: true, shuTip: 'уличный', shuPusk: 'плавный', nRab: '2', vozv: '500' })
+    await store.applySurvey('e1', { form: next, kns: next, derived, surveyRev: 3 })
+    expect(node(store, 'Шкаф управления').rows[0]!.priceManual).toBe(1_200_000)
+  })
+
   // Выключенный узел — «призрак»: его строки ничего не стоят, и гейт КП на
   // сервере их не считает. Счётчик «без цены» не должен расходиться с гейтом.
   it('строки без цены с нулевым количеством не попадают в счётчик «без цены»', async () => {
