@@ -37,6 +37,9 @@
       </div>
 
       <div class="pr-toolbar">
+        <!-- Содержимое панели — в тех же пределах, что таблица: иначе на
+             широком экране кнопки выгрузки уезжали бы от неё к краю окна. -->
+        <div class="pr-toolbar-in">
         <div class="pr-search-w">
           <input
             ref="searchEl"
@@ -76,6 +79,7 @@
             {{ importing ? 'Проверяем файл…' : 'Импорт из xlsx' }}
           </button>
         </template>
+        </div>
       </div>
 
       <!-- Итог проверки или импорта: держим на экране, а не тостом — цифры
@@ -182,8 +186,19 @@
         <template v-else>
           <!-- Одна таблица на весь прайс: шапка прилипает, категории — строками-
                заголовками. Выводится порциями: все 1 100 строк разом рисовались
-               четверть секунды на каждое изменение фильтра. -->
+               четверть секунды на каждое изменение фильтра.
+               Ширина ограничена: на широком экране цена уезжала от
+               наименования на полтора метра, и строку было не прочесть.
+               Узкие колонки заданы жёстко, наименование получает остаток. -->
           <table class="pr-table">
+            <colgroup>
+              <col />
+              <col class="pr-col-unit" />
+              <col class="pr-col-price" />
+              <col class="pr-col-supplier" />
+              <col class="pr-col-date" />
+              <col class="pr-col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th class="pr-th-sort" :aria-sort="ariaSort('name')" @click="setSort('name')">Наименование{{ arrow('name') }}</th>
@@ -199,7 +214,11 @@
                 <tr v-if="line.kind === 'group'" class="pr-grp">
                   <td colspan="6">{{ line.category }} <span class="pr-grp-c">{{ line.total }}</span></td>
                 </tr>
-                <tr v-else :class="{ 'pr-row--edit': editingId === line.item.id }">
+                <tr
+                  v-else
+                  :class="{ 'pr-row--edit': editingId === line.item.id, 'pr-row--editable': canEdit }"
+                  @dblclick="onRowDblClick(line.item)"
+                >
                   <td class="pr-name">
                     {{ line.item.name }}
                     <span v-if="line.item.issue" class="pr-issue" :title="line.item.issue">⚠</span>
@@ -231,7 +250,7 @@
                       @keydown.enter="saveEdit(line.item.id)"
                       @keydown.escape="cancelEdit"
                     />
-                    <span v-else class="pr-sup-val" :class="{ 'pr-price--ro': !canEdit }" @click="startEdit(line.item)">
+                    <span v-else class="pr-sup-val" :class="{ 'pr-price--ro': !canEdit }" :title="line.item.supplier ?? undefined" @click="startEdit(line.item)">
                       {{ line.item.supplier || '—' }}
                     </span>
                   </td>
@@ -481,6 +500,19 @@ function startEdit(item: RegistryPrice) {
   })
 }
 
+/**
+ * Двойной щелчок в любом месте строки — правка цены и поставщика. Строка,
+ * которая уже правится, не сбрасывается: двойной щелчок в поле ввода
+ * выделяет слово и не должен терять набранное.
+ */
+function onRowDblClick(item: RegistryPrice) {
+  if (!canEdit.value || editingId.value === item.id) return
+  // Двойной щелчок выделяет слово в наименовании — снимаем выделение, фокус
+  // уходит в поле цены.
+  window.getSelection()?.removeAllRanges()
+  startEdit(item)
+}
+
 function cancelEdit() {
   editingId.value = null
 }
@@ -661,8 +693,13 @@ onBeforeUnmount(() => {
 /* ── Шапка и панель фильтров ── */
 .pr-ver { font-size: 12px; color: var(--faint); margin-left: 6px; }
 .pr-count { font-size: 12px; color: var(--tx3); font-variant-numeric: tabular-nums; }
-.pr-toolbar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg1); flex-shrink: 0; flex-wrap: wrap; }
-.pr-search-w { position: relative; flex: 1 1 320px; min-width: 220px; }
+/* Предельная ширина рабочей колонки: таблица, панель фильтров и отчёт
+ * импорта не растягиваются шире — строку прайса читают слева направо, от
+ * наименования к цене, и глазу нельзя ехать через весь экран. */
+.main-col { --pr-max: 1280px; }
+.pr-toolbar { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg1); flex-shrink: 0; }
+.pr-toolbar-in { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: var(--pr-max); }
+.pr-search-w { position: relative; flex: 1 1 320px; min-width: 220px; max-width: 560px; }
 .pr-search { width: 100%; padding-right: 26px; }
 .pr-search-x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: var(--faint); font-size: 13.2px; padding: 2px 5px; }
 .pr-search-x:hover { color: var(--text); }
@@ -673,7 +710,7 @@ onBeforeUnmount(() => {
 .chip-amber.on { border-color: var(--amber); color: var(--amber); background: var(--amber-bg); }
 
 /* ── Отчёт импорта ── */
-.pr-imp { margin: 8px 12px; border: 1px solid var(--line2); background: var(--panel); padding: 8px 10px; }
+.pr-imp { margin: 8px 12px; border: 1px solid var(--line2); background: var(--panel); padding: 8px 10px; max-width: var(--pr-max); }
 .pr-imp-h { display: flex; align-items: center; font-size: 13.8px; font-weight: 600; margin-bottom: 6px; }
 .pr-imp-x { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 14.4px; }
 .pr-imp-row { display: flex; gap: 16px; font-size: 13.2px; color: var(--muted); flex-wrap: wrap; }
@@ -694,8 +731,13 @@ onBeforeUnmount(() => {
 .pr-imp-t .pr-down { color: var(--green); }
 
 /* ── Таблица ── */
-.pr-area { padding: 0 0 24px; }
-.pr-table { width: 100%; border-collapse: collapse; font-size: 13.2px; }
+.pr-area { padding: 0 12px 24px; }
+.pr-table { width: 100%; max-width: var(--pr-max); table-layout: fixed; border-collapse: collapse; font-size: 13.2px; }
+.pr-col-unit { width: 64px; }
+.pr-col-price { width: 132px; }
+.pr-col-supplier { width: 220px; }
+.pr-col-date { width: 96px; }
+.pr-col-actions { width: 76px; }
 .pr-table th {
   text-align: left; padding: 6px 10px; font-size: 10.8px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
   color: var(--tx3); background: var(--bg1); border-bottom: 1px solid var(--border);
@@ -711,22 +753,23 @@ onBeforeUnmount(() => {
 }
 .pr-grp-c { color: var(--faint); font-weight: 500; letter-spacing: 0; margin-left: 4px; }
 .pr-row--edit td { background: var(--bg3); }
+.pr-row--editable { cursor: default; }
 
-.pr-name { line-height: 1.35; }
+.pr-name { line-height: 1.35; overflow-wrap: anywhere; }
 .pr-issue { color: var(--amber); cursor: help; margin-left: 4px; }
 .pr-comment { font-size: 11.4px; color: var(--faint); margin-top: 1px; }
-.pr-unit { font-size: 11.4px; color: var(--tx3); white-space: nowrap; width: 56px; }
-.pr-num { text-align: right; white-space: nowrap; width: 130px; font-variant-numeric: tabular-nums; }
+.pr-unit { font-size: 11.4px; color: var(--tx3); white-space: nowrap; }
+.pr-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pr-price-val { cursor: pointer; font-size: 13.2px; font-weight: 600; color: var(--accent); }
 .pr-price-val:hover { text-decoration: underline; }
 .pr-price--none { color: var(--acc); font-weight: 500; font-size: 12px; }
 .pr-price--ro { cursor: default; }
 .pr-price--ro:hover { text-decoration: none; }
-.pr-supplier { width: 180px; }
+.pr-supplier { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-sup-val { cursor: pointer; }
 .pr-sup-val:hover { text-decoration: underline; color: var(--tx1); }
-.pr-date { font-size: 11.4px; color: var(--tx3); width: 92px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pr-actions { width: 72px; white-space: nowrap; text-align: right; }
+.pr-date { font-size: 11.4px; color: var(--tx3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pr-actions { white-space: nowrap; text-align: right; }
 
 .pr-inp { padding: 2px 5px; font-size: 13.2px; height: 24px; width: 100%; }
 .pr-num .pr-inp { text-align: right; }
@@ -737,7 +780,7 @@ onBeforeUnmount(() => {
 }
 .pr-edit-btn:hover { color: var(--accent); }
 
-.pr-more { display: flex; align-items: center; gap: 10px; padding: 12px; font-size: 12.6px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pr-more { display: flex; align-items: center; gap: 10px; padding: 12px 0; max-width: var(--pr-max); font-size: 12.6px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
 .nav-section { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
 
