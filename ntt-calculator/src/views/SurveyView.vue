@@ -62,6 +62,7 @@ import SurveyKolView from '@/views/SurveyKolView.vue'
 import { estimatesApi, type DeviceType } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
 import { boundPricesFromTree } from '@/engines/price-binding'
+import { useCalcTreeStore } from '@/stores/calcTree'
 import type { KnsSurveyForm } from '@/types/survey'
 import type { EmkSurveyForm, KolSurveyForm } from '@/types/survey-emk-kol'
 
@@ -75,6 +76,7 @@ import type { EmkSurveyForm, KolSurveyForm } from '@/types/survey-emk-kol'
  */
 
 const route = useRoute()
+const calcStore = useCalcTreeStore()
 
 const estimateId = computed(() => {
   const id = route.params.id
@@ -129,6 +131,10 @@ async function loadSurvey() {
   if (estimateId.value) {
     loading.value = true
     try {
+      // Сохранение расчёта, начатое перед переходом сюда, могло ещё не дойти
+      // до сервера: прочитанный раньше ОЛ показал бы прежние цены, и первая
+      // же правка листа вернула бы их в расчёт.
+      await calcStore.settled()
       const est = await estimatesApi.get(estimateId.value)
       deviceType.value = est.deviceType
       estimateProjectId.value = est.projectId

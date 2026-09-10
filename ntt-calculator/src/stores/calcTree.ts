@@ -170,26 +170,57 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     return ctxCache?.priceOf(category, name, unit) ?? null
   }
 
+  // ── Очередь записи ────────────────────────────────────────────────────────
+
+  /**
+   * Записи расчёта, которые ещё летят на сервер: пересчёт из ОЛ и сохранение.
+   *
+   * Уход с ОЛ досохраняет последнюю правку (useSurveySync, onBeforeUnmount), а
+   * экран расчёта в ту же секунду читает изделие. Без очереди чтение обгоняло
+   * запись: расчёт показывал прежнее дерево — цена, только что введённая в ОЛ,
+   * «не переносилась», — а первое же сохранение из расчёта возвращало старую
+   * цифру и в ОЛ. Поэтому записи идут по одной, а чтение ждёт начатых.
+   */
+  let writes: Promise<unknown> = Promise.resolve()
+
+  function enqueue<T>(job: () => Promise<T>): Promise<T> {
+    const run = writes.then(job)
+    // Упавшая запись очередь не останавливает: ошибку получит её вызвавший.
+    writes = run.catch(() => undefined)
+    return run
+  }
+
+  /** Дождаться записей, начатых к этому моменту, — перед чтением изделия. */
+  function settled(): Promise<void> {
+    return writes.then(() => undefined)
+  }
+
   async function load(id: string) {
     loading.value = true
     error.value = null
     try {
-      // Экран расчёта всегда берёт свежий прайс: между визитами его могли
-      // поправить, а кеш нужен только частым пересчётам из ОЛ.
-      const [est, ctx] = await Promise.all([estimatesApi.get(id), ensureContext({ fresh: true })])
-      estimate.value = est
-
-      const saved = est.surveyData as Record<string, unknown>
-      restoreTotals(saved)
-
-      const savedTree = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
-      const problem = rebuildTree(ctx, est.deviceType, saved, savedTree, { force: false })
-      if (problem) error.value = problem
+      await settled()
+      await fetchEstimate(id)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Не удалось загрузить расчёт'
     } finally {
       loading.value = false
     }
+  }
+
+  /** Прочитать изделие и поднять дерево — без ожидания очереди записи. */
+  async function fetchEstimate(id: string) {
+    // Экран расчёта всегда берёт свежий прайс: между визитами его могли
+    // поправить, а кеш нужен только частым пересчётам из ОЛ.
+    const [est, ctx] = await Promise.all([estimatesApi.get(id), ensureContext({ fresh: true })])
+    estimate.value = est
+
+    const saved = est.surveyData as Record<string, unknown>
+    restoreTotals(saved)
+
+    const savedTree = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
+    const problem = rebuildTree(ctx, est.deviceType, saved, savedTree, { force: false })
+    if (problem) error.value = problem
   }
 
   /**
@@ -275,7 +306,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
    * @param payload поля surveyData, которые пишет ОЛ (form, kns/emk/kol, derived…)
    * @returns цена продажи после пересчёта, ₽ — её показывает живая панель ОЛ
    */
-  async function applySurvey(id: string, payload: Record<string, unknown>): Promise<number | null> {
+  function applySurvey(id: string, payload: Record<string, unknown>): Promise<number | null> {
+    return enqueue(() => applySurveyNow(id, payload))
+  }
+
+  async function applySurveyNow(id: string, payload: Record<string, unknown>): Promise<number | null> {
     const ctx = await ensureContext()
 
     // Первый пересчёт в сессии ОЛ: поднимаем расчёт с сервера — нужны его
@@ -760,17 +795,32 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     return changed ? { form: nextForm, ...params } : null
   }
 
-  async function save() {
+  function save(): Promise<void> {
+    return enqueue(saveNow)
+  }
+
+  async function saveNow() {
     if (!estimate.value || !tree.value) return
     const current = estimate.value
-    const updated = await estimatesApi.patchSurvey(current.id, {
-      ...boundPricesPatch(),
-      tree: treeForSave(),
-      // Фиксируем, из какой ревизии ОЛ построено дерево, — чтобы load()
-      // не рематериализовал его повторно.
-      treeSurveyRev: treeSurveyRev.value,
-      totals: totalsForSave(),
-    })
+    let updated: EstimateDetail
+    try {
+      updated = await estimatesApi.patchSurvey(current.id, {
+        ...boundPricesPatch(),
+        tree: treeForSave(),
+        // Фиксируем, из какой ревизии ОЛ построено дерево, — чтобы load()
+        // не рематериализовал его повторно, а сервер отклонил запись, если
+        // ОЛ с тех пор поправили (backend/src/utils/survey-write.ts).
+        treeSurveyRev: treeSurveyRev.value,
+        totals: totalsForSave(),
+      })
+    } catch (e) {
+      const code = (e as { response?: { data?: { code?: string } } }).response?.data?.code
+      if (code !== 'SURVEY_CHANGED') throw e
+      // ОЛ поправили в другой вкладке: в базе дерево новее нашего. Своё не
+      // пишем — оно откатило бы ОЛ, — а поднимаем свежее.
+      await fetchEstimate(current.id)
+      throw new Error('Опросный лист изменился после того, как был открыт расчёт. Расчёт перечитан — повторите правку')
+    }
     estimate.value = mergeEstimate(current, updated)
   }
 
@@ -791,7 +841,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     // показывает именно её.
     priceListVersion,
     rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, enabledFor, prevQtyCalc,
-    load, save, clear, recalcAll,
+    load, save, clear, recalcAll, settled,
     // Пересчёт из ОЛ и цены прайса для его подсказок.
     applySurvey, ensureContext, catalogPrice,
     setQtyManual, setPriceManual, resetQty, resetPrice,

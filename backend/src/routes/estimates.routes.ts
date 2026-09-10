@@ -5,6 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import { isStaleTreeWrite, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
 import { rowsWithoutPrice } from '../utils/estimate-tree'
 import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
@@ -596,6 +597,16 @@ estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
     }
     if (estimate.status === 'REJECTED') {
       res.status(422).json({ message: 'Отклонённый расчёт редактировать нельзя', code: 'ESTIMATE_REJECTED' })
+      return
+    }
+
+    // Дерево из старой ревизии ОЛ (расчёт открыт в другой вкладке, ОЛ за это
+    // время поправили) не записываем: оно откатило бы и дерево, и цены ОЛ.
+    if (isStaleTreeWrite(estimate.surveyData, req.body as Record<string, unknown>)) {
+      res.status(409).json({
+        message: 'Опросный лист изменился после того, как был открыт расчёт. Сохранение отменено — расчёт нужно перечитать',
+        code: SURVEY_CHANGED,
+      })
       return
     }
 

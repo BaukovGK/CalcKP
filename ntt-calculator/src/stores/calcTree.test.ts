@@ -451,6 +451,74 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(node(store, 'Дробилка').enabled).toBe(false)
   })
 
+  // Уход с ОЛ досохраняет правку, а экран расчёта в ту же секунду читает
+  // изделие. Раньше чтение обгоняло запись: расчёт показывал прежнюю цену,
+  // а первое его сохранение возвращало её и в ОЛ.
+  it('расчёт, открытый сразу после правки цены в ОЛ, видит эту цену', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(est))))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const before = kns({ pipePrice: '52000' })
+    await store.applySurvey('e1', { form: before, kns: before, derived, surveyRev: 2 })
+
+    // Следующий PATCH отвечает не сразу — как по сети.
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    patchSurvey.mockImplementation(async (_id: string, body: Record<string, unknown>) => {
+      await gate
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return JSON.parse(JSON.stringify(est))
+    })
+
+    const after = kns({ pipePrice: '61000' })
+    const saving = store.applySurvey('e1', { form: after, kns: after, derived, surveyRev: 3 })
+    const loading = store.load('e1') // экран расчёта открылся, пока ОЛ ещё сохраняется
+    release()
+    await Promise.all([saving, loading])
+
+    expect(store.rows.find((r) => r.priceBinding === 'pipePrice')?.priceManual).toBe(61_000)
+  })
+
+  // Расчёт открыт в другой вкладке, а ОЛ тем временем поправили: «Сохранить»
+  // записало бы дерево из старого ОЛ и вернуло бы старую цену в сам ОЛ.
+  it('устаревшее сохранение из расчёта отклоняется, стор поднимает свежее', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockImplementation(() => Promise.resolve(JSON.parse(JSON.stringify(est))))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const old = kns({ pipePrice: '52000' })
+    await store.applySurvey('e1', { form: old, kns: old, derived, surveyRev: 2 })
+
+    // Другая вкладка сохранила ОЛ с ценой 61 000 — на сервере ревизия 3.
+    const fresh = kns({ pipePrice: '61000' })
+    est.surveyData = { ...est.surveyData, form: fresh, kns: fresh, surveyRev: 3 } as typeof est.surveyData
+    patchSurvey.mockRejectedValueOnce({ response: { status: 409, data: { code: 'SURVEY_CHANGED' } } })
+
+    await expect(store.save()).rejects.toThrow('Опросный лист изменился')
+    expect(store.rows.find((r) => r.priceBinding === 'pipePrice')?.priceManual).toBe(61_000)
+  })
+
+  it('save() и пересчёт из ОЛ не перекрываются, settled() ждёт обоих', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    const order: string[] = []
+    patchSurvey.mockImplementation(async (_id: string, body: Record<string, unknown>) => {
+      order.push(body.surveyRev != null ? `ОЛ ${body.surveyRev}` : 'расчёт')
+      await Promise.resolve()
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return JSON.parse(JSON.stringify(est))
+    })
+    const store = useCalcTreeStore()
+    const p1 = store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    const p2 = store.save()
+    const p3 = store.applySurvey('e1', { form: kns({ nRab: '3' }), kns: kns({ nRab: '3' }), derived, surveyRev: 3 })
+    await store.settled()
+
+    expect(order).toEqual(['ОЛ 2', 'расчёт', 'ОЛ 3'])
+    await Promise.all([p1, p2, p3])
+  })
+
   it('без правки связанной цены save() форму не трогает', async () => {
     const est = freshEstimate()
     estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
