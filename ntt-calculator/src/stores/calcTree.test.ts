@@ -314,6 +314,25 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(row.qtyManual).toBe('5')
   })
 
+  it('ручные количества арматуры из ОЛ доезжают до расчёта', async () => {
+    // Раньше ОЛ показывал их в итоге блока, а материализация пересчитывала заново.
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+
+    const manual = kns({ zadvManual: '2', kranManual: '7', klapanManual: '4' })
+    await store.applySurvey('e1', { form: manual, kns: manual, derived, surveyRev: 2 })
+
+    // Только раздел 7: задвижки с тем же DN есть и в обвязке напорного (раздел 5).
+    const valves = store.tree!.sections.find((s) => s.code === '7')!
+      .components.flatMap((c) => c.rows)
+      .filter((r) => r.category === 'Запорная арматура')
+    expect(valves.find((r) => r.name.includes('DN250'))?.qtyCalc).toBe(2)
+    expect(valves.find((r) => r.name.startsWith('Задвижка') && r.name.includes('DN150'))?.qtyCalc).toBe(7)
+    expect(valves.find((r) => r.name.startsWith('Клапан обратный'))?.qtyCalc).toBe(4)
+  })
+
   it('цена трубы из ОЛ становится ценой строки трубы', async () => {
     const est = freshEstimate()
     estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))

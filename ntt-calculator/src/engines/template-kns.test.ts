@@ -587,6 +587,34 @@ describe('раздел 7 «Оборудование» — авторасчёт �
     expect(all).toBe(7)
   })
 
+  // Дефект: ОЛ показывал ручную цифру в итоге блока арматуры, а материализация
+  // её не читала и пересчитывала заново — расчёт расходился с ОЛ.
+  it('ручные количества арматуры из ОЛ становятся расчётными количествами строк', () => {
+    const rows7 = materializeKns(ctx, { ...OL3487, gatesInletManual: 2, gatesPressureManual: 7, checkValvesManual: 4 })
+      .sections.find((s) => s.code === '7')!
+      .components.flatMap((c) => c.rows)
+    const by = (n: string) => rows7.find((r) => r.name === n)!
+
+    const inlet = by('Задвижка чугунная клиновая металл/металл DN250 PN10/16 клин бронза')
+    expect(inlet.qtyCalc).toBe(2)
+    // Расчётное не теряется: оно в примечании, рядом с пометкой о ручном вводе.
+    expect(inlet.note).toContain('задано в ОЛ вручную: 2')
+    expect(inlet.note).toContain('расчётное 1')
+
+    expect(by('Задвижка чугунная клиновая металл/металл DN150 PN10/16 клин бронза').qtyCalc).toBe(7)
+    expect(by('Клапан обратный фланцевый с мягким уплотнением и наклонным седлом DN150 PN10/16').qtyCalc).toBe(4)
+    // Канал ручного override самого расчёта остаётся свободным.
+    expect(inlet.qtyManual).toBeNull()
+  })
+
+  it('пустые ручные количества — расчётные, как раньше', () => {
+    const rows7 = materializeKns(ctx, { ...OL3487, gatesInletManual: null, checkValvesManual: undefined })
+      .sections.find((s) => s.code === '7')!
+      .components.flatMap((c) => c.rows)
+    expect(rows7.find((r) => r.name.startsWith('Клапан обратный'))!.qtyCalc).toBe(3)
+    expect(rows7.find((r) => r.name.includes('DN250'))!.note).not.toContain('вручную')
+  })
+
   it('поплавки = раб + рез + 2 = 5', () => {
     expect(byName('ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ  КАБЕЛЬ 10 М').qtyCalc).toBe(5)
   })

@@ -373,6 +373,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       // же парсером, что поля ОЛ: «12 500» с пробелом-разделителем — число.
       pipePriceRub: tryEvalExpr(String(kns.pipePrice ?? '')),
       pumpPriceRub: tryEvalExpr(String(kns.pumpPrice ?? '')),
+      // Ручные количества арматуры из ОЛ. Ключ kranManual исторический — это
+      // задвижки напорной стороны (см. useKnsSurvey).
+      gatesInletManual: tryEvalExpr(String(kns.zadvManual ?? '')),
+      gatesPressureManual: tryEvalExpr(String(kns.kranManual ?? '')),
+      checkValvesManual: tryEvalExpr(String(kns.klapanManual ?? '')),
     }
   }
 

@@ -88,6 +88,15 @@ export interface KnsSurveyParams {
 
   /** Арматура на подводящем. */
   valveOnInlet: boolean
+  /**
+   * Количества арматуры, заданные в ОЛ вручную («изменить вручную» у блока
+   * арматуры). Пусто — расчётное. Раньше ОЛ показывал ручную цифру в итоге
+   * блока, а материализация её не читала и пересчитывала заново: расчёт
+   * расходился с тем, что инженер видел и вводил в ОЛ.
+   */
+  gatesInletManual?: number | null
+  gatesPressureManual?: number | null
+  checkValvesManual?: number | null
   /** Аварийный трубопровод. */
   emergencyPipeline: boolean
   /**
@@ -1114,11 +1123,32 @@ export function buildFasteners(ctx: MaterializeContext, s: { outletDn: number; o
 
 // ─── Раздел 7: Оборудование (частично — насосная группа и арматура) ─────────
 
+/**
+ * Количество из ОЛ с учётом ручного ввода и примечание, объясняющее его.
+ *
+ * Ручная цифра ОЛ становится РАСЧЁТНЫМ количеством строки (qtyCalc), а не её
+ * ручным override: для расчёта это вход шаблона, как любое другое поле ОЛ.
+ * Канал ручного override в самом расчёте остаётся свободным.
+ */
+function fromSurvey(calc: number, manual: number | null | undefined, formula: string): { qty: number; note: string } {
+  if (manual == null || !Number.isFinite(manual) || manual < 0) return { qty: calc, note: formula }
+  // «ƒ = насосов (3) + …» → «насосов (3) + …»: в скобках — только сама формула.
+  return { qty: manual, note: `задано в ОЛ вручную: ${manual} · расчётное ${calc} (${formula.replace(/^ƒ\s*=?\s*/, '')})` }
+}
+
 function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
-  const gates = gateValveCount(s.inletCount, s.valveOnInlet)
-  const pressureGates = pressureGateValveCount(s.pumpsWorking, s.pumpsReserve, s.outletCount)
-  const checkValves = checkValveCount(s.pumpsWorking, s.pumpsReserve)
   const pumps = s.pumpsWorking + s.pumpsReserve
+  const gatesCalc = gateValveCount(s.inletCount, s.valveOnInlet)
+  const pressureGatesCalc = pressureGateValveCount(s.pumpsWorking, s.pumpsReserve, s.outletCount)
+  const checkValvesCalc = checkValveCount(s.pumpsWorking, s.pumpsReserve)
+
+  const gates = fromSurvey(gatesCalc, s.gatesInletManual, `ƒ = подводящих (${s.inletCount}) × флаг «арматура на подводящем»`)
+  const pressureGates = fromSurvey(
+    pressureGatesCalc,
+    s.gatesPressureManual,
+    `ƒ = насосов (${pumps}) + отводящих (${s.outletCount}) = ${pressureGatesCalc} шт`,
+  )
+  const checkValves = fromSurvey(checkValvesCalc, s.checkValvesManual, `ƒ = по клапану на каждый установленный насос (${pumps})`)
 
   return [
     {
@@ -1136,8 +1166,8 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
           category: 'Запорная арматура',
           name: `Задвижка чугунная клиновая металл/металл DN${s.inletDn} PN10/16 клин бронза`,
           unit: 'шт',
-          qtyCalc: gates,
-          note: `ƒ = подводящих (${s.inletCount}) × флаг «арматура на подводящем»`,
+          qtyCalc: gates.qty,
+          note: gates.note,
         }),
         // Напорная сторона: по схеме завода на стояке каждого установленного
         // насоса стоят задвижка и обратный клапан, плюс задвижка на каждом
@@ -1153,16 +1183,16 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
           category: 'Запорная арматура',
           name: `Задвижка чугунная клиновая металл/металл DN${s.outletDn} PN10/16 клин бронза`,
           unit: 'шт',
-          qtyCalc: pressureGates,
-          note: `ƒ = насосов (${pumps}) + отводящих (${s.outletCount}) = ${pressureGates} шт`,
+          qtyCalc: pressureGates.qty,
+          note: pressureGates.note,
         }),
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
           category: 'Запорная арматура',
           name: `Клапан обратный фланцевый с мягким уплотнением и наклонным седлом DN${s.outletDn} PN10/16`,
           unit: 'шт',
-          qtyCalc: checkValves,
-          note: `ƒ = по клапану на каждый установленный насос (${pumps})`,
+          qtyCalc: checkValves.qty,
+          note: checkValves.note,
         }),
       ],
     },
