@@ -378,6 +378,79 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(body.kns.pipePrice).toBe('52500')
   })
 
+  /** Узел дерева по началу заголовка. */
+  const node = (store: ReturnType<typeof useCalcTreeStore>, title: string) =>
+    store.tree!.sections.flatMap((s) => s.components).find((c) => c.title.startsWith(title))!
+
+  // Раньше пересборка переносила состояние узла из старого дерева, и
+  // выключенная в ОЛ теплоизоляция продолжала считаться.
+  it('тумблер ОЛ включает и выключает узел расчёта', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const on = kns({ insulation: true })
+    await store.applySurvey('e1', { form: on, kns: on, derived, surveyRev: 2 })
+    expect(node(store, 'Теплоизоляция').enabled).toBe(true)
+
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 3 })
+
+    expect(node(store, 'Теплоизоляция').enabled).toBe(false)
+  })
+
+  it('узел, переключённый в расчёте, живёт до правки своего тумблера в ОЛ', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const on = kns({ insulation: true })
+    await store.applySurvey('e1', { form: on, kns: on, derived, surveyRev: 2 })
+    store.toggleComponent('1', node(store, 'Теплоизоляция').id)
+
+    // Правка другого поля ОЛ ручное переключение не отменяет.
+    const other = kns({ insulation: true, nRab: '3' })
+    await store.applySurvey('e1', { form: other, kns: other, derived, surveyRev: 3 })
+    expect(node(store, 'Теплоизоляция').enabled).toBe(false)
+
+    // А правка самого тумблера — отменяет: выигрывает последнее изменение.
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 4 })
+    await store.applySurvey('e1', { form: on, kns: on, derived, surveyRev: 5 })
+    expect(node(store, 'Теплоизоляция').enabled).toBe(true)
+  })
+
+  it('дерево, собранное до пометки ОЛ, тоже следует за тумблером', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const on = kns({ insulation: true })
+    await store.applySurvey('e1', { form: on, kns: on, derived, surveyRev: 2 })
+    for (const c of store.tree!.sections.flatMap((s) => s.components)) delete c.enabledCalc
+
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 3 })
+
+    expect(node(store, 'Теплоизоляция').enabled).toBe(false)
+  })
+
+  it('корзина и дробилка КНС следуют за ОЛ, цепь — от глубины лотка', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    const both = kns({ drobilka: 'обе', podvLotok: '9910' })
+    await store.applySurvey('e1', { form: both, kns: both, derived, surveyRev: 2 })
+
+    expect(node(store, 'Корзина сороудерживающая').enabled).toBe(true)
+    expect(node(store, 'Дробилка').enabled).toBe(true)
+    expect(node(store, 'Корзина').rows.find((r) => r.name.startsWith('Цепь'))?.qtyCalc).toBe(11)
+
+    const none = kns({ drobilka: 'нет', podvLotok: '9910' })
+    await store.applySurvey('e1', { form: none, kns: none, derived, surveyRev: 3 })
+
+    expect(node(store, 'Корзина').enabled).toBe(false)
+    expect(node(store, 'Дробилка').enabled).toBe(false)
+  })
+
   it('без правки связанной цены save() форму не трогает', async () => {
     const est = freshEstimate()
     estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))

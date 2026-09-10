@@ -50,6 +50,7 @@ import {
   sleeveDiameter,
 } from './survey-kns'
 import type { EngineRow, PriceBinding } from './types'
+import { buildBasket, buildGrinder } from './basket-grinder'
 
 // ─── Параметры ОЛ, от которых материализуется шаблон ────────────────────────
 
@@ -119,6 +120,20 @@ export interface KnsSurveyParams {
   /** Теплоизоляция и её глубина, мм. */
   insulationEnabled: boolean
   insulationDepthMm: number
+
+  /**
+   * Корзина и дробилка — поле ОЛ «Наличие дробилки/корзины для мусора»
+   * (лист, E46). Стор выводит оба признака из этого поля всегда; пустыми
+   * они бывают только при прямом вызове движка — тогда узлы собираются
+   * выключенными «призраками».
+   */
+  hasBasket?: boolean
+  hasGrinder?: boolean
+  /**
+   * Глубина залегания подводящего трубопровода А, мм (ОЛ, E41) — от неё
+   * длина цепи и направляющих корзины и дробилки.
+   */
+  inletTrayDepthMm?: number | null
 
   /**
    * Исполнение корпуса (лист КНС, ячейка E14 — «Списки»!AI2/AI3).
@@ -194,7 +209,24 @@ export interface CalcComponent {
   nodeCode?: string
   title: string
   enabled: boolean
+  /**
+   * Что сказал ОЛ — только у узлов, включаемых его тумблером (теплоизоляция,
+   * корзина, арматура на подводящем…). `enabled` — фактическое состояние:
+   * инженер может переключить узел и в расчёте.
+   *
+   * Без этой пометки пересборка не отличала правку ОЛ от ручного
+   * переключения и всегда оставляла прежнее состояние узла — выключенная
+   * в ОЛ теплоизоляция продолжала считаться. Правило теперь такое:
+   * сменился тумблер в ОЛ — узел берёт состояние из ОЛ; не менялся —
+   * остаётся, как его оставил инженер (`stores/calcTree.ts`, reconcileTrees).
+   */
+  enabledCalc?: boolean
   rows: CalcRowNode[]
+}
+
+/** Состояние узла, включаемого тумблером ОЛ: фактическое и то, что сказал ОЛ. */
+export function surveyToggled(on: boolean): Pick<CalcComponent, 'enabled' | 'enabledCalc'> {
+  return { enabled: on, enabledCalc: on }
 }
 
 export interface CalcSection {
@@ -551,7 +583,7 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
     id: nextId('c'),
     nodeCode: 'A6',
     title: `Фланцевый патрубок под задвижку на подводящем DN${s.inletDn}`,
-    enabled: s.valveOnInlet,
+    ...surveyToggled(s.valveOnInlet),
     rows: [
       ...operationWithFot(ctx, {
         category: 'Собственное производство',
@@ -587,7 +619,7 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
     title: 'Теплоизоляция корпуса',
     // Выключённый узел не удаляется: строки остаются «призраками», включение
     // обратно восстанавливает всё, включая overrides (Механика §7.2).
-    enabled: s.insulationEnabled,
+    ...surveyToggled(s.insulationEnabled),
     rows: [
       makeRow(ctx, {
         kind: 'МАТЕРИАЛ',
@@ -620,6 +652,24 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
       }),
     ],
   })
+
+  // D4, D3 — дробилка и корзина. У КНС оба узла живут в «Корпусе» (лист,
+  // строки 74–113): отдельного раздела, как у ёмкости и колодца, нет.
+  components.push(
+    buildGrinder(ctx, {
+      device: 'KNS',
+      trayDepthMm: s.inletTrayDepthMm,
+      inletDn: s.inletDn,
+      enabled: Boolean(s.hasGrinder),
+    }),
+    buildBasket(ctx, {
+      device: 'KNS',
+      dn: s.dn,
+      trayDepthMm: s.inletTrayDepthMm,
+      enabled: Boolean(s.hasBasket),
+      withGrinder: Boolean(s.hasGrinder),
+    }),
+  )
 
   return components
 }
@@ -950,7 +1000,7 @@ export function buildPressurePipe(
       id: nextId('c'),
       nodeCode: 'C2',
       title: 'Аварийный трубопровод',
-      enabled: s.emergencyPipeline,
+      ...surveyToggled(s.emergencyPipeline),
       rows: emergencyRows,
     })
   }

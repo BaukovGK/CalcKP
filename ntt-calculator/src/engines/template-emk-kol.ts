@@ -40,6 +40,7 @@ import {
   makeRow,
   nextId,
   operationWithFot,
+  surveyToggled,
   type CalcComponent,
   type CalcSection,
   type CalcTree,
@@ -55,6 +56,7 @@ import {
   type TankType,
 } from './survey-emk-kol'
 import { pnForWeightLookup, sleeveDiameter } from './survey-kns'
+import { buildBasket, buildGrinder } from './basket-grinder'
 
 // ─── Каркасы разделов ────────────────────────────────────────────────────────
 
@@ -110,6 +112,11 @@ export interface EmkSurveyParams {
   pumpsReserve: number
 
   hasBasket: boolean
+  /**
+   * Глубина залегания H лотка подводящего, мм (ОЛ ёмкости, E51) — от неё
+   * цепь и направляющие корзины. Пусто — эти строки ждут ввода.
+   */
+  inletTrayDepthMm?: number | null
   insulationEnabled: boolean
   insulationDepthMm: number
 
@@ -136,6 +143,13 @@ export interface KolSurveyParams {
   outletCount: number
 
   hasBasket: boolean
+  /**
+   * Дробилка (ОЛ колодца, E48 — то же поле, что у корзины). В листе
+   * колодца её канал и направляющие входят в корпус (строки 67–75).
+   */
+  hasGrinder?: boolean
+  /** Глубина залегания H лотка подводящего, мм (ОЛ колодца, E42). */
+  inletTrayDepthMm?: number | null
   underRoadway: boolean
   insulationEnabled: boolean
   insulationDepthMm: number
@@ -144,55 +158,6 @@ export interface KolSurveyParams {
   pipePriceRub?: number | null
 
   tirage?: number
-}
-
-// ─── Общий узел: корзина сороудерживающая (Библиотека D3) ───────────────────
-
-function buildBasket(ctx: MaterializeContext, enabled: boolean): CalcComponent[] {
-  return [
-    {
-      id: nextId('c'),
-      nodeCode: 'D3',
-      title: 'Корзина сороудерживающая',
-      // Выключенный узел не удаляется: строки остаются «призраками»
-      // (Механика §7.2), включение восстанавливает всё.
-      enabled,
-      rows: [
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Изготовление Сороудерживающей корзины',
-          unit: 'чел. ч',
-          qtyCalc: 8,
-          note: 'ƒ норматив 8 чел.ч · уточните',
-        }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Монтаж Сороудерживающей корзины',
-          unit: 'чел. ч',
-          qtyCalc: 4,
-          note: 'ƒ норматив 4 чел.ч · уточните',
-        }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Изготовление направляющих корзины',
-          unit: 'чел. ч',
-          qtyCalc: 4,
-          note: 'ƒ норматив 4 чел.ч · уточните',
-        }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Монтаж направляющих корзины',
-          unit: 'чел. ч',
-          qtyCalc: 2,
-          note: 'ƒ норматив 2 чел.ч · уточните',
-        }),
-      ],
-    },
-  ]
 }
 
 /** Патрубки с гильзами — общий узел A5 для ёмкости и колодца. */
@@ -252,7 +217,7 @@ function buildInsulation(
     id: nextId('c'),
     nodeCode: 'A9',
     title: 'Теплоизоляция корпуса',
-    enabled,
+    ...surveyToggled(enabled),
     rows: [
       makeRow(ctx, {
         kind: 'МАТЕРИАЛ',
@@ -621,7 +586,11 @@ export function materializeEmk(ctx: MaterializeContext, survey: EmkSurveyParams)
 
   const byCode: Record<string, CalcComponent[]> = {
     '1': buildEmkKorpus(ctx, survey),
-    '2': buildBasket(ctx, survey.hasBasket),
+    // Дробилки в листе ёмкости нет — ни строк, ни формул: тумблер ОЛ у ЕМК
+    // ни на что не влияет, узел добавляется вручную.
+    '2': [
+      buildBasket(ctx, { device: 'EMK', dn: survey.dn, trayDepthMm: survey.inletTrayDepthMm, enabled: survey.hasBasket }),
+    ],
     '3': buildLadder(ctx, { depthMm }),
     '4': buildSlab(ctx, { dn: survey.dn, depthMm }),
     '5': buildVent(ctx),
@@ -657,8 +626,13 @@ export function materializeKol(ctx: MaterializeContext, survey: KolSurveyParams)
   const depthMm = geo.totalDepthMm
 
   const byCode: Record<string, CalcComponent[]> = {
-    '1': buildKolKorpus(ctx, survey),
-    '2': buildBasket(ctx, survey.hasBasket),
+    '1': [
+      ...buildKolKorpus(ctx, survey),
+      buildGrinder(ctx, { device: 'KOL', trayDepthMm: survey.inletTrayDepthMm, enabled: Boolean(survey.hasGrinder) }),
+    ],
+    '2': [
+      buildBasket(ctx, { device: 'KOL', dn: survey.dn, trayDepthMm: survey.inletTrayDepthMm, enabled: survey.hasBasket }),
+    ],
     '3': buildLadder(ctx, { depthMm }),
     '4': buildSlab(ctx, { dn: survey.dn, depthMm }),
     '5': buildVent(ctx),

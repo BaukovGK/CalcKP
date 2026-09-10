@@ -767,3 +767,39 @@ describe('экономика материализованного дерева',
     expect(e.buckets['Труба, муфта']).toBeCloseTo(11.6 * 50000, 6)
   })
 })
+
+describe('раздел 1: корзина и дробилка (D3, D4)', () => {
+  const korpus = (p: Partial<KnsSurveyParams>) =>
+    materializeKns(ctx, { ...OL3487, ...p }).sections.find((s) => s.code === '1')!.components
+  const byTitle = (list: ReturnType<typeof korpus>, t: string) => list.find((c) => c.title.startsWith(t))
+
+  // Раньше у КНС корзины не было вовсе: тумблер ОЛ ни на что не влиял.
+  it('оба узла живут в «Корпусе» и включаются полем ОЛ', () => {
+    const list = korpus({ hasBasket: true, hasGrinder: false, inletTrayDepthMm: 9910 })
+    expect(byTitle(list, 'Корзина сороудерживающая')?.enabled).toBe(true)
+    // Невыбранный узел — «призрак»: строки есть, в итог не входят.
+    const grinder = byTitle(list, 'Дробилка')!
+    expect(grinder.enabled).toBe(false)
+    expect(grinder.rows.length).toBeGreaterThan(0)
+  })
+
+  it('цепь корзины — от глубины лотка подводящего', () => {
+    const basket = byTitle(korpus({ hasBasket: true, inletTrayDepthMm: 9910 }), 'Корзина')!
+    expect(basket.rows.find((r) => r.name.startsWith('Цепь'))?.qtyCalc).toBe(11)
+  })
+
+  it('расчёты без полей корзины собираются с выключенными узлами', () => {
+    const list = korpus({})
+    expect(byTitle(list, 'Корзина')?.enabled).toBe(false)
+    expect(byTitle(list, 'Дробилка')?.enabled).toBe(false)
+  })
+
+  it('узлы, включаемые из ОЛ, помнят его ответ', () => {
+    const list = korpus({ hasBasket: true, valveOnInlet: false, insulationEnabled: true })
+    expect(byTitle(list, 'Корзина')?.enabledCalc).toBe(true)
+    expect(byTitle(list, 'Фланцевый патрубок')?.enabledCalc).toBe(false)
+    expect(byTitle(list, 'Теплоизоляция')?.enabledCalc).toBe(true)
+    // Обечайка от ОЛ не включается — пометки у неё нет.
+    expect(byTitle(list, 'Обечайка')?.enabledCalc).toBeUndefined()
+  })
+})

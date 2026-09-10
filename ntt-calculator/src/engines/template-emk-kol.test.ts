@@ -269,6 +269,21 @@ describe('материализация ЕМК', () => {
     expect(basket.rows.length).toBeGreaterThan(0)
   })
 
+  // Прежде корзина была четырьмя строками работ с нормами «уточните».
+  it('корзина — по листу ёмкости: металл, подвес и работы', () => {
+    const tree = materializeEmk(ctx, { ...EMK, inletTrayDepthMm: 2400 })
+    const basket = tree.sections.find((s) => s.code === '2')!.components[0]!
+    expect(basket.rows).toHaveLength(10)
+    expect(basket.rows.find((r) => r.name.startsWith('Цепь'))?.qtyCalc).toBe(4)
+    expect(basket.rows.some((r) => r.note?.includes('уточните'))).toBe(false)
+  })
+
+  it('у ёмкости узла дробилки нет — в листе его нет тоже', () => {
+    const tree = materializeEmk(ctx, EMK)
+    const titles = tree.sections.flatMap((s) => s.components.map((c) => c.title))
+    expect(titles.some((t) => t.startsWith('Дробилка'))).toBe(false)
+  })
+
   it('труба ёмкости рождается «красной»: цена договорная', () => {
     const pipe = flattenRows(materializeEmk(ctx, EMK)).find((r) => r.name.startsWith('Труба СК'))!
     expect(computeRow(pipe).missingPrice).toBe(true)
@@ -323,6 +338,17 @@ describe('КОЛ: геометрия с горловиной', () => {
 })
 
 describe('материализация КОЛ', () => {
+  it('дробилка колодца — в корпусе и по флагу ОЛ (лист, строки 67–75)', () => {
+    const on = materializeKol(ctx, { ...KOL, hasGrinder: true, inletTrayDepthMm: 2000 })
+    const grinder = on.sections.find((s) => s.code === '1')!.components.find((c) => c.title.startsWith('Дробилка'))!
+    expect(grinder.enabled).toBe(true)
+    expect(grinder.rows.find((r) => r.name.startsWith('Цепь'))?.qtyCalc).toBe(3)
+
+    const off = materializeKol(ctx, KOL)
+    const ghost = off.sections.find((s) => s.code === '1')!.components.find((c) => c.title.startsWith('Дробилка'))!
+    expect(ghost.enabled).toBe(false)
+  })
+
   it('создаётся СЕМЬ разделов — и БЕЗ напорного трубопровода (Реверс §6)', () => {
     const tree = materializeKol(ctx, KOL)
     expect(tree.sections).toHaveLength(7)

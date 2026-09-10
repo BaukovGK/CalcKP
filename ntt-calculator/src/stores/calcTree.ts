@@ -24,6 +24,7 @@ import { refsApi } from '@/api/refs'
 import type { PriceBinding, RowResult } from '@/engines/types'
 import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
+import { hasBasketIn, hasGrinderIn, type Grinder } from '@/types/survey'
 
 /**
  * Стор дерева расчёта (§9, Библиотека §6.3).
@@ -378,6 +379,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       gatesInletManual: tryEvalExpr(String(kns.zadvManual ?? '')),
       gatesPressureManual: tryEvalExpr(String(kns.kranManual ?? '')),
       checkValvesManual: tryEvalExpr(String(kns.klapanManual ?? '')),
+      // Корзина и дробилка — одно поле ОЛ на четыре значения (см. grinderValue).
+      hasBasket: hasBasketIn(kns.drobilka as Grinder),
+      hasGrinder: hasGrinderIn(kns.drobilka as Grinder),
+      // Глубина лотка подводящего — от неё цепь и направляющие обоих узлов.
+      inletTrayDepthMm: tryEvalExpr(String(kns.podvLotok ?? '')),
     }
   }
 
@@ -421,7 +427,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
         const nc = ns.components.find((c) => c.title === oc.title)
         if (!nc) continue
-        nc.enabled = oc.enabled
+        nc.enabled = reconciledEnabled(oc, nc)
 
         const used = new Set<number>()
         for (const or of oc.rows) {
@@ -439,6 +445,25 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
         }
       }
     }
+  }
+
+  /**
+   * Состояние узла после пересборки.
+   *
+   * Узел, включаемый тумблером ОЛ (`enabledCalc`), берёт состояние из ОЛ,
+   * если тумблер там сменился, и остаётся, как оставил инженер, если нет:
+   * выигрывает последняя правка. У остальных узлов ОЛ состоянием не
+   * управляет — оно переносится как есть.
+   *
+   * У деревьев, собранных до появления `enabledCalc`, прежний ответ ОЛ
+   * неизвестен — считаем, что узел в расчёте не переключали. Иначе первая же
+   * правка тумблера в ОЛ потерялась бы, а так теряется лишь ручное
+   * переключение узла, сделанное в расчёте до этой версии.
+   */
+  function reconciledEnabled(oc: CalcComponent, nc: CalcComponent): boolean {
+    if (nc.enabledCalc === undefined) return oc.enabled
+    const before = oc.enabledCalc ?? oc.enabled
+    return before === nc.enabledCalc ? oc.enabled : nc.enabled
   }
 
   // ── Пересчёт ──────────────────────────────────────────────────────────────

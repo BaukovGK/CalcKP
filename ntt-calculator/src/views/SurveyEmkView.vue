@@ -143,7 +143,11 @@
               </label>
               <label class="fld"><span>DN, мм</span><input v-model.lazy="form.podvDn" class="num" list="nozzle-dn" @change="onDnChange('podvDn', $event)" /></label>
               <label class="fld"><span>Кол-во</span><input v-model="form.podvKol" class="num" /></label>
-              <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.podvLotok" class="num" /></label>
+              <!-- От глубины лотка — цепь и направляющие корзины: при
+                   корзине поле обязательное, как в листе завода (E51). -->
+              <label class="fld"><span>Глубина лотка, мм <b v-if="hasBasket" class="req">*</b></span>
+                <input v-model="form.podvLotok" class="num" :class="{ 'is-missing': hasBasket && !form.podvLotok }" />
+              </label>
             </div>
           </div>
           <div class="ol-card">
@@ -197,6 +201,14 @@
         <div class="ol-grid">
           <ToggleYesNo v-model="form.shu" stacked class="fld--3" label="Шкаф управления" />
           <ToggleYesNo v-model="form.datchikiUrov" stacked class="fld--3" label="Датчики уровня" />
+        </div>
+        <div v-if="hasBasket && !form.podvLotok" class="ol-explain">
+          Цепь и направляющие корзины считаются от глубины лотка подводящего —
+          заполните её в разделе «Патрубки».
+        </div>
+        <div v-if="hasGrinder" class="ol-explain">
+          В листе ёмкости узла дробилки нет — в расчёт она не входит, строки
+          добавьте вручную.
         </div>
       </section>
     </template>
@@ -490,6 +502,7 @@ function surveyPayload() {
       pumpsWorking: num(form.value.nRab) ?? 0,
       pumpsReserve: num(form.value.nRez) ?? 0,
       hasBasket: form.value.grinder === 'корзина' || form.value.grinder === 'обе',
+      inletTrayDepthMm: num(form.value.podvLotok),
       insulationEnabled: form.value.insulation,
       insulationDepthMm: num(form.value.tiGlubina) ?? 0,
       // Цена трубы — поле ОЛ, связанное со строкой трубы (priceBinding).

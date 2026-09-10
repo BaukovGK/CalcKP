@@ -153,7 +153,10 @@
               </label>
               <label class="fld"><span>DN, мм</span><input v-model.lazy="form.podvDn" class="num" list="nozzle-dn" @change="onDnChange('podvDn', $event)" /></label>
               <label class="fld"><span>Кол-во</span><input v-model="form.podvKol" class="num" /></label>
-              <label class="fld"><span>Глубина лотка, мм</span><input v-model="form.podvLotok" class="num" /></label>
+              <!-- От глубины лотка — цепь и направляющие корзины и дробилки. -->
+              <label class="fld"><span>Глубина лотка, мм <b v-if="needsTray" class="req">*</b></span>
+                <input v-model="form.podvLotok" class="num" :class="{ 'is-missing': needsTray && !form.podvLotok }" />
+              </label>
             </div>
           </div>
           <div class="ol-card">
@@ -183,6 +186,15 @@
         </div>
         <div class="ol-grid">
           <ToggleYesNo v-model="form.shu" stacked class="fld--3" label="Шкаф управления" />
+        </div>
+        <div v-if="needsTray && !form.podvLotok" class="ol-explain">
+          Цепь и направляющие считаются от глубины лотка подводящего —
+          заполните её в разделе «Патрубки».
+        </div>
+        <div v-if="hasGrinder" class="ol-explain">
+          Канал, площадка и направляющие дробилки считаются по листу колодца.
+          Сам измельчитель подберите по притоку и добавьте в «Оборудование»
+          из каталога.
         </div>
         <p class="ol-live-hint">У колодца нет насосов, поэтому раздела «Напорный трубопровод» в расчёте не будет.</p>
       </section>
@@ -299,6 +311,8 @@ const hasGrinder = computed({
   get: () => hasGrinderIn(form.value.grinder),
   set: (v: boolean) => { form.value.grinder = grinderValue(hasBasket.value, v) },
 })
+/** Корзина и дробилка висят на цепи до лотка подводящего — его глубина нужна обеим. */
+const needsTray = computed(() => hasBasket.value || hasGrinder.value)
 
 const isEdit = computed(() => Boolean(props.estimateId))
 
@@ -393,7 +407,8 @@ const blocks = computed(() => [
   { t: 'Корпус колодца', on: true },
   { t: 'Горловина', on: form.value.hasNeck },
   { t: 'Теплоизоляция', on: form.value.insulation },
-  { t: 'Корзина', on: form.value.grinder === 'корзина' || form.value.grinder === 'обе' },
+  { t: 'Дробилка: канал и направляющие', on: hasGrinder.value },
+  { t: 'Корзина', on: hasBasket.value },
   { t: 'Лестница', on: form.value.hasLadder },
   { t: 'Перекрытие, площадка и несущие балки', on: true },
   { t: 'Вентиляционный стояк', on: true },
@@ -463,6 +478,8 @@ function surveyPayload() {
       outletDn: num(form.value.otvDn) ?? 0,
       outletCount: num(form.value.otvKol) ?? 0,
       hasBasket: form.value.grinder === 'корзина' || form.value.grinder === 'обе',
+      hasGrinder: form.value.grinder === 'дробилка' || form.value.grinder === 'обе',
+      inletTrayDepthMm: num(form.value.podvLotok),
       underRoadway: form.value.underRoadway,
       insulationEnabled: form.value.insulation,
       insulationDepthMm: num(form.value.tiGlubina) ?? 0,
