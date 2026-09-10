@@ -235,6 +235,43 @@ async function seedPumps() {
 
   console.log(`  каталог насосов: ${count} позиций`)
   await seedPumpCurves()
+  await seedPumpPrices()
+}
+
+/**
+ * Цены насосов — позиции прайса, по одной на модель каталога.
+ *
+ * Ключ тот же, по которому строка насоса ищет цену при материализации:
+ * «Насосы, АТМ | Насос <марка> | шт» (`engines/template-kns.ts`, pumpRowName).
+ * Цены в каталоге производителя нет, поэтому позиции заводятся пустыми, а
+ * цифру вносит закупка на экране прайса — как любую другую цену, с историей
+ * правок.
+ *
+ * `skipDuplicates` — не формальность: сид идёт при каждом старте контейнера,
+ * и перезапись затёрла бы внесённые цены пустотой.
+ */
+async function seedPumpPrices() {
+  const pumps = load<PumpSeed[]>('pumps.json')
+  const category = 'Насосы, АТМ'
+  const unit = 'шт'
+
+  const { count } = await prisma.priceItem.createMany({
+    data: pumps.map((p) => {
+      const name = `Насос ${p.name}`
+      return {
+        lookupKey: `${category}:${name}:${unit}`,
+        category,
+        name,
+        unit,
+        priceRub: null,
+        comment: 'Цена насоса по марке каталога — вносит закупка',
+      }
+    }),
+    skipDuplicates: true,
+  })
+
+  const total = await prisma.priceItem.count({ where: { category } })
+  console.log(`  цены насосов: ${total} позиций в прайсе (новых ${count})`)
 }
 
 /**

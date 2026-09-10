@@ -49,7 +49,7 @@ import {
   pressureGateValveCount,
   sleeveDiameter,
 } from './survey-kns'
-import type { EngineRow } from './types'
+import type { EngineRow, PriceBinding } from './types'
 
 // ─── Параметры ОЛ, от которых материализуется шаблон ────────────────────────
 
@@ -122,8 +122,49 @@ export interface KnsSurveyParams {
    */
   pipeExecution?: 'целая' | 'частями'
 
+  /**
+   * Цена трубы корпуса, ₽ за метр погонный — поле ОЛ.
+   *
+   * Цена трубы договорная, в прайсе её нет; раньше она вводилась только в
+   * расчёте, строкой «красной» до ввода. Теперь её дают в ОЛ, и она
+   * связана с ценой строки трубы в обе стороны (`priceBinding`).
+   */
+  pipePriceRub?: number | null
+  /**
+   * Цена насоса, ₽ за штуку — поле ОЛ. Пусто — берётся цена марки из прайса
+   * (категория «Насосы, АТМ»), а если нет и её, строка «красная».
+   */
+  pumpPriceRub?: number | null
+
   /** Кол-во корпусов (тираж). */
   tirage?: number
+}
+
+/**
+ * Цена из поля ОЛ для связанной строки (см. EngineRow.priceBinding).
+ *
+ * Значение поля становится ручной ценой. Пустое, нулевое или нечисловое
+ * поле цену не задаёт: остаётся каталожная, а без неё строка «красная» —
+ * так же, как до появления поля.
+ */
+export function boundPrice(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+/** Категория прайса, в которой живут цены насосов. */
+export const PUMP_PRICE_CATEGORY = 'Насосы, АТМ'
+
+/**
+ * Наименование строки насоса — оно же имя позиции прайса с его ценой.
+ * Одна функция на оба места: разойдись они на символ — цена не нашлась бы.
+ */
+export function pumpRowName(model: string | null | undefined): string {
+  return model ? `Насос ${model}` : 'Насос (марка по подбору)'
+}
+
+/** Связать цену строки с полем ОЛ: пометка связи и цена из поля. */
+export function bindPrice(row: CalcRowNode, binding: PriceBinding, value: number | null | undefined): CalcRowNode {
+  return { ...row, priceBinding: binding, priceManual: boundPrice(value) }
 }
 
 // ─── Материализованное дерево (Библиотека §6.3) ─────────────────────────────
@@ -313,9 +354,12 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
               ? `Вес трубы не найден в справочнике (DN ${s.dn}; PN ${pnPipe}; SN ${s.sn})`
               : `${kgPerM} кг/пм · PN трубы ${pnPipe} (автоподбор)`,
         }),
-        // Цена трубы корпуса договорная — типовое место ручного ввода
-        // (Механика §5.2). Строка рождается «красной» намеренно.
+        // Цена трубы корпуса договорная — в прайсе её нет (Механика §5.2).
+        // Её дают полем ОЛ «Цена трубы, ₽/м.п.»; пустое поле — строка
+        // «красная», как и прежде.
         priceCatalog: null,
+        priceBinding: 'pipePrice',
+        priceManual: boundPrice(s.pipePriceRub),
       },
       makeRow(ctx, {
         kind: 'ОПЕРАЦИЯ',
@@ -346,15 +390,21 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
 
     for (const n of [2, 3]) {
       segmentRows.push(
-        makeRow(ctx, {
-          kind: 'МАТЕРИАЛ',
-          category: 'Собственное производство',
-          name: pipeName,
-          unit: 'м',
-          qtyCalc: null,
-          bucket: 'Труба, муфта',
-          note: `Сегмент ${n} — длину введите вручную, разнеся общие ${lengthM.toLocaleString('ru-RU')} м`,
-        }),
+        // Сегмент — кусок той же трубы: цена за метр у него та же, что у
+        // трубы корпуса, и связана с тем же полем ОЛ.
+        bindPrice(
+          makeRow(ctx, {
+            kind: 'МАТЕРИАЛ',
+            category: 'Собственное производство',
+            name: pipeName,
+            unit: 'м',
+            qtyCalc: null,
+            bucket: 'Труба, муфта',
+            note: `Сегмент ${n} — длину введите вручную, разнеся общие ${lengthM.toLocaleString('ru-RU')} м`,
+          }),
+          'pipePrice',
+          s.pipePriceRub,
+        ),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
@@ -1122,24 +1172,29 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
       title: 'Насосная группа',
       enabled: true,
       rows: [
-        // В категории «Насосы, АТМ» прайс НН НЕ содержит ни одной позиции:
-        // цена насоса договорная. Строка рождается «красной» намеренно — так
-        // же, как труба корпуса (Механика §5.2).
+        // Цена насоса — позиция прайса по марке: «Насосы, АТМ | Насос <марка>
+        // | шт» (заводится на каждую модель каталога, цены вносит закупка).
+        // Поле ОЛ «Цена насоса, ₽/шт» её перекрывает и связано с ценой строки
+        // в обе стороны. Нет ни того, ни другого — строка «красная».
         //
         // Марка приходит из подбора по притоку, напору и числу рабочих
         // насосов (`/api/pump-station/select-pump`, каталог Vandjord VSL) либо
         // вводится вручную в ОЛ. Без неё в КП уходило бы «Насос (марка по
         // подбору)» — строка, по которой заказчику нечего согласовывать.
-        makeRow(ctx, {
-          kind: 'МАТЕРИАЛ',
-          category: 'Насосы, АТМ',
-          name: s.pumpModel ? `Насос ${s.pumpModel}` : 'Насос (марка по подбору)',
-          unit: 'шт',
-          qtyCalc: s.pumpsWorking + s.pumpsReserve,
-          note:
-            `ƒ = раб ${s.pumpsWorking} + рез ${s.pumpsReserve} · цена договорная, в прайсе насосов нет` +
-            (s.pumpModel ? '' : ' · марка не подобрана — уточните в опросном листе'),
-        }),
+        bindPrice(
+          makeRow(ctx, {
+            kind: 'МАТЕРИАЛ',
+            category: PUMP_PRICE_CATEGORY,
+            name: pumpRowName(s.pumpModel),
+            unit: 'шт',
+            qtyCalc: s.pumpsWorking + s.pumpsReserve,
+            note:
+              `ƒ = раб ${s.pumpsWorking} + рез ${s.pumpsReserve}` +
+              (s.pumpModel ? '' : ' · марка не подобрана — уточните в опросном листе'),
+          }),
+          'pumpPrice',
+          s.pumpPriceRub,
+        ),
         makeRow(ctx, {
           kind: 'МАТЕРИАЛ',
           category: 'Выключатели',

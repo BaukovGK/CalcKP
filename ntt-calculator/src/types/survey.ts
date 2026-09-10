@@ -99,6 +99,12 @@ export interface KnsSurveyForm extends SurveyCommonForm {
    * но это свойство того экземпляра, а не правило.
    */
   ispolnenie: PipeExecution
+  /**
+   * Цена трубы корпуса, ₽ за метр погонный. Связана с ценой строки трубы в
+   * расчёте в обе стороны (EngineRow.priceBinding). Пусто — цены нет: труба
+   * договорная, строка «красная» до ввода.
+   */
+  pipePrice: string
 
   // ── Патрубки ──
   podvMat: PipeMaterial
@@ -146,6 +152,11 @@ export interface KnsSurveyForm extends SurveyCommonForm {
   nRez: string
   nZap: string
   marka: string
+  /**
+   * Цена насоса, ₽ за штуку. Пусто — берётся цена марки из прайса. Связана
+   * с ценой строки насоса в расчёте в обе стороны.
+   */
+  pumpPrice: string
   vzryv: boolean
   drobilka: Grinder
 
@@ -188,6 +199,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     tiGlubina: '2000',
     tiManual: false,
     ispolnenie: 'частями',
+    pipePrice: '',
 
     podvMat: 'ПЭ',
     podvDn: '250',
@@ -215,6 +227,7 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     // (`composables/usePumpSelection.ts`). Любое значение по умолчанию
     // навсегда маскировало бы подбор: он считался бы, но никогда не применялся.
     marka: '',
+    pumpPrice: '',
     vzryv: false,
     drobilka: 'корзина',
 

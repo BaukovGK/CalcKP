@@ -595,11 +595,32 @@ describe('раздел 7 «Оборудование» — авторасчёт �
     expect(byName('Насос (марка по подбору)').qtyCalc).toBe(3)
   })
 
-  // В НН категория «Насосы, АТМ» пуста: насос подбирается под проект, цена
-  // договорная. Красная строка — правильное поведение, как у трубы корпуса.
-  it('насос рождается «красным»: в прайсе насосов нет', () => {
+  // Цены нет ни в прайсе, ни в ОЛ — строка «красная», как у трубы корпуса без
+  // цены: выпустить КП с заниженным итогом гейт не даст.
+  it('насос без цены в прайсе и в ОЛ — «красный»', () => {
     expect(computeRow(byName('Насос (марка по подбору)')).missingPrice).toBe(true)
-    expect(byName('Насос (марка по подбору)').note).toContain('в прайсе насосов нет')
+  })
+
+  // Цена марки — позиция прайса «Насосы, АТМ | Насос <марка> | шт»: её вносит
+  // закупка, и строка подхватывает её так же, как любую другую цену.
+  it('цена насоса берётся из прайса по марке', () => {
+    const model = 'Vandjord VSL.80.37.4.5.0D'
+    const priced = { ...ctx, priceOf: (c: string, n: string, u: string) =>
+      c === 'Насосы, АТМ' && n === `Насос ${model}` && u === 'шт' ? 310_000 : ctx.priceOf(c, n, u) }
+    const pump = flattenRows(materializeKns(priced, { ...OL3487, pumpModel: model }))
+      .find((r) => r.name === `Насос ${model}`)!
+    expect(pump.priceCatalog).toBe(310_000)
+    expect(computeRow(pump).missingPrice).toBe(false)
+  })
+
+  // Поле ОЛ «Цена насоса» перекрывает прайс и связано со строкой: правка
+  // цены в расчёте вернётся в ОЛ (stores/calcTree.ts, boundPricesPatch).
+  it('цена насоса из ОЛ становится ручной ценой связанной строки', () => {
+    const pump = flattenRows(materializeKns(ctx, { ...OL3487, pumpPriceRub: 285_000 }))
+      .find((r) => r.name === 'Насос (марка по подбору)')!
+    expect(pump.priceManual).toBe(285_000)
+    expect(pump.priceBinding).toBe('pumpPrice')
+    expect(computeRow(pump).priceOverridden).toBe(true)
   })
 
   // Марка приходит из подбора по притоку и напору (/api/pump-station/select-pump)

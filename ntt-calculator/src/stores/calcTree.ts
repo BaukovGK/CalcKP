@@ -21,7 +21,9 @@ import {
 } from '@/engines/template-emk-kol'
 import { estimatesApi, type EstimateDetail } from '@/api/estimates'
 import { refsApi } from '@/api/refs'
-import type { RowResult } from '@/engines/types'
+import type { PriceBinding, RowResult } from '@/engines/types'
+import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
+import { tryEvalExpr } from '@/engines/expr'
 
 /**
  * Стор дерева расчёта (§9, Библиотека §6.3).
@@ -83,13 +85,6 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   const error = ref<string | null>(null)
 
   /**
-   * Предыдущие расчётные количества — для детекции конфликта «ОЛ изменился
-   * после тюнинга» (Механика §8.3).
-   */
-  const prevQtyCalc = ref<Record<string, number | null>>({})
-  /** Конфликты, разрешённые как «оставить моё». */
-  const conflictsKept = ref<Set<string>>(new Set())
-  /**
    * Ревизия ОЛ, на которой материализовано текущее дерево. Если сохранённый
    * `surveyData.surveyRev` больше — ОЛ правили после материализации, и load()
    * рематериализует дерево с переносом overrides и пометкой конфликтов.
@@ -98,127 +93,221 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
   // ── Загрузка ──────────────────────────────────────────────────────────────
 
+  /**
+   * Контекст материализации — справочники и прайс, собранные в индексы.
+   *
+   * Кешируется на время жизни стора: ОЛ пересчитывает расчёт после каждой
+   * правки, и тянуть 1040 позиций прайса и три справочника на каждое нажатие
+   * клавиши незачем — они меняются сменой версии прайса, а не вводом в ОЛ.
+   */
+  let ctxCache: MaterializeContext | null = null
+
+  async function ensureContext(opts: { fresh?: boolean } = {}): Promise<MaterializeContext> {
+    if (ctxCache && !opts.fresh) return ctxCache
+    const [prices, weights, engineering, priceVersion] = await Promise.all([
+      refsApi.nomenclature(),
+      refsApi.pipeWeights(),
+      refsApi.engineering(),
+      refsApi.priceVersion(),
+    ])
+    // Настоящая версия прайса, а не константа: снапшот фиксирует именно её,
+    // и топбар обязан показывать то же самое (ТЗ §3).
+    priceListVersion.value = priceVersion.version
+
+    // Индексы справочников: поиск по тройке (категория, наименование, ЕИ)
+    // и по (DN; PN_трубы; SN) — ровно как VLOOKUP эталона.
+    const priceIdx = new Map<string, number | null>()
+    const flat: typeof catalog.value = []
+    for (const [category, items] of Object.entries(prices)) {
+      for (const p of items) {
+        priceIdx.set(`${category}|${p.name}|${p.unit}`, p.priceRub)
+        flat.push({ category, name: p.name, unit: p.unit, priceRub: p.priceRub })
+      }
+    }
+    catalog.value = flat
+    const weightIdx = new Map<string, number>()
+    for (const w of weights.grp) weightIdx.set(`${w.dn}|${w.pn}|${w.sn}`, w.kgPerM)
+
+    // Все четыре ставки — позиции прайса (Механика §9): обновление прайса
+    // меняет экономику новых расчётов. Fallback — если позиции в базе нет
+    // (например, БД засеяна до их добавления).
+    rates.value = {
+      fotRub: priceIdx.get('ФОТ|ФОТ|чел. ч') ?? FALLBACK_RATES.fotRub,
+      overheadRub: priceIdx.get('ФОТ|Накладные расходы|чел. ч') ?? FALLBACK_RATES.overheadRub,
+      acetoneRub: priceIdx.get('Прочие материалы|Ацетон|кг') ?? FALLBACK_RATES.acetoneRub,
+      ppeRub: priceIdx.get('Прочие материалы|СИЗ и РМ|ед.') ?? FALLBACK_RATES.ppeRub,
+    }
+
+    // Нормы патрубков — источник массы формовки гильз (лист «Для расчетов»).
+    // Ключ — DN гильзы; сетка дискретна, промахи дают «красную» строку.
+    const normIdx = new Map(engineering.nozzles.map((n) => [n.dn, n]))
+
+    // Мс — масса формованных слоёв на стыке. Таблица приходит целиком
+    // (Dу × PN), а в расчёт идёт минимальное давление каждого диаметра:
+    // изделия безнапорные, ламинация считается минимально возможная.
+    const jointIdx = jointLayerIndex(engineering.jointLayers ?? [])
+
+    ctxCache = {
+      priceOf: (c, n, u) => priceIdx.get(`${c}|${n}|${u}`) ?? null,
+      pipeWeightOf: (dn, pn, sn) => weightIdx.get(`${dn}|${pn}|${sn}`) ?? null,
+      nozzleNormOf: (dn) => normIdx.get(dn) ?? null,
+      jointLayerMassOf: (d) => jointIdx.get(d) ?? null,
+      priceListVersion: priceListVersion.value,
+    }
+    return ctxCache
+  }
+
+  /** Цена позиции прайса — для подсказок ОЛ (например, цена насоса по марке). */
+  function catalogPrice(category: string, name: string, unit: string): number | null {
+    return ctxCache?.priceOf(category, name, unit) ?? null
+  }
+
   async function load(id: string) {
     loading.value = true
     error.value = null
     try {
-      const [est, prices, weights, engineering, priceVersion] = await Promise.all([
-        estimatesApi.get(id),
-        refsApi.nomenclature(),
-        refsApi.pipeWeights(),
-        refsApi.engineering(),
-        refsApi.priceVersion(),
-      ])
+      // Экран расчёта всегда берёт свежий прайс: между визитами его могли
+      // поправить, а кеш нужен только частым пересчётам из ОЛ.
+      const [est, ctx] = await Promise.all([estimatesApi.get(id), ensureContext({ fresh: true })])
       estimate.value = est
-      // Настоящая версия прайса, а не константа: снапшот фиксирует именно её,
-      // и топбар обязан показывать то же самое (ТЗ §3).
-      priceListVersion.value = priceVersion.version
-
-      // Индексы справочников: поиск по тройке (категория, наименование, ЕИ)
-      // и по (DN; PN_трубы; SN) — ровно как VLOOKUP эталона.
-      const priceIdx = new Map<string, number | null>()
-      const flat: typeof catalog.value = []
-      for (const [category, items] of Object.entries(prices)) {
-        for (const p of items) {
-          priceIdx.set(`${category}|${p.name}|${p.unit}`, p.priceRub)
-          flat.push({ category, name: p.name, unit: p.unit, priceRub: p.priceRub })
-        }
-      }
-      catalog.value = flat
-      const weightIdx = new Map<string, number>()
-      for (const w of weights.grp) weightIdx.set(`${w.dn}|${w.pn}|${w.sn}`, w.kgPerM)
-
-      // Все четыре ставки — позиции прайса (Механика §9): обновление прайса
-      // меняет экономику новых расчётов. Fallback — если позиции в базе нет
-      // (например, БД засеяна до их добавления).
-      rates.value = {
-        fotRub: priceIdx.get('ФОТ|ФОТ|чел. ч') ?? FALLBACK_RATES.fotRub,
-        overheadRub: priceIdx.get('ФОТ|Накладные расходы|чел. ч') ?? FALLBACK_RATES.overheadRub,
-        acetoneRub: priceIdx.get('Прочие материалы|Ацетон|кг') ?? FALLBACK_RATES.acetoneRub,
-        ppeRub: priceIdx.get('Прочие материалы|СИЗ и РМ|ед.') ?? FALLBACK_RATES.ppeRub,
-      }
-
-      // Нормы патрубков — источник массы формовки гильз (лист «Для расчетов»).
-      // Ключ — DN гильзы; сетка дискретна, промахи дают «красную» строку.
-      const normIdx = new Map(engineering.nozzles.map((n) => [n.dn, n]))
-
-      // Мс — масса формованных слоёв на стыке. Таблица приходит целиком
-      // (Dу × PN), а в расчёт идёт минимальное давление каждого диаметра:
-      // изделия безнапорные, ламинация считается минимально возможная.
-      const jointIdx = jointLayerIndex(engineering.jointLayers ?? [])
-
-      const ctx: MaterializeContext = {
-        priceOf: (c, n, u) => priceIdx.get(`${c}|${n}|${u}`) ?? null,
-        pipeWeightOf: (dn, pn, sn) => weightIdx.get(`${dn}|${pn}|${sn}`) ?? null,
-        nozzleNormOf: (dn) => normIdx.get(dn) ?? null,
-        jointLayerMassOf: (d) => jointIdx.get(d) ?? null,
-        priceListVersion: priceListVersion.value,
-      }
 
       const saved = est.surveyData as Record<string, unknown>
-      const savedRev = typeof saved.surveyRev === 'number' ? saved.surveyRev : 0
-      const builtRev = typeof saved.treeSurveyRev === 'number' ? saved.treeSurveyRev : 0
-      conflictsKept.value = new Set()
-
-      // Наценка и тираж: save() их пишет, load() раньше не читал — после
-      // переоткрытия расчёт молча возвращался к 0,43 и 1 корпусу, а следующее
-      // сохранение затирало сохранённое. Оба параметра влияют на цену продажи,
-      // поэтому восстанавливаются до первого recalcAll().
-      const savedTotals = (saved.totals ?? {}) as Record<string, unknown>
-      markup.value = typeof savedTotals.markup === 'number' && Number.isFinite(savedTotals.markup)
-        ? savedTotals.markup
-        : DEFAULT_MARKUP
-      tirage.value = typeof savedTotals.tirage === 'number' && Number.isInteger(savedTotals.tirage) && savedTotals.tirage >= 1
-        ? savedTotals.tirage
-        : 1
+      restoreTotals(saved)
 
       const savedTree = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
-
-      if (savedTree && savedRev <= builtRev) {
-        // ОЛ не менялся с последней материализации — поднимаем дерево как
-        // есть: повторная материализация затёрла бы overrides.
-        tree.value = savedTree
-        treeSurveyRev.value = builtRev
-        snapshotQtyCalc()
-      } else if (savedTree) {
-        // ОЛ правили после материализации (surveyRev вырос): строим свежее
-        // дерево из новых параметров и переносим в него ручные правки.
-        // Строки, где override лёг на изменившееся расчётное, вспыхнут
-        // конфликтом «было → стало» (Механика §8.3).
-        const fresh = materializeByDevice(ctx, est.deviceType, saved)
-        if (fresh) {
-          reconcileTrees(savedTree, fresh)
-          tree.value = fresh
-          treeSurveyRev.value = savedRev
-          recalcAll()
-        } else {
-          // Параметры ОЛ пропали — не теряем работу, показываем старое дерево.
-          tree.value = savedTree
-          treeSurveyRev.value = builtRev
-          snapshotQtyCalc()
-        }
-      } else {
-        // Шаблон выбирается по типу изделия: структура разделов у КНС (7),
-        // ЕМК (8) и КОЛ (7 без напорного) РАЗНАЯ — материализовать ёмкость
-        // шаблоном КНС нельзя.
-        const built = materializeByDevice(ctx, est.deviceType, saved)
-        if (!built) {
-          error.value =
-            est.deviceType === 'KNS'
-              ? 'В расчёте нет параметров опросного листа — материализация невозможна'
-              : `В расчёте нет параметров ОЛ для изделия ${est.deviceType} — заполните опросный лист`
-          return
-        }
-        tree.value = built
-        treeSurveyRev.value = savedRev
-        recalcAll()
-        snapshotQtyCalc()
-      }
+      const problem = rebuildTree(ctx, est.deviceType, saved, savedTree, { force: false })
+      if (problem) error.value = problem
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Не удалось загрузить расчёт'
     } finally {
       loading.value = false
     }
+  }
+
+  /**
+   * Наценка и тираж из сохранённых итогов.
+   *
+   * save() их пишет, а load() раньше не читал — после переоткрытия расчёт молча
+   * возвращался к 0,43 и 1 корпусу, а следующее сохранение затирало
+   * сохранённое. Оба параметра влияют на цену продажи, поэтому
+   * восстанавливаются до первого пересчёта.
+   */
+  function restoreTotals(saved: Record<string, unknown>) {
+    const savedTotals = (saved.totals ?? {}) as Record<string, unknown>
+    markup.value = typeof savedTotals.markup === 'number' && Number.isFinite(savedTotals.markup)
+      ? savedTotals.markup
+      : DEFAULT_MARKUP
+    tirage.value = typeof savedTotals.tirage === 'number' && Number.isInteger(savedTotals.tirage) && savedTotals.tirage >= 1
+      ? savedTotals.tirage
+      : 1
+  }
+
+  /**
+   * Дерево из сохранённого ОЛ.
+   *
+   * ОЛ не менялся с последней материализации — дерево поднимается как есть:
+   * повторная материализация затёрла бы overrides. Менялся (surveyRev вырос)
+   * или пересчёт запрошен явно — строится свежее дерево из новых параметров,
+   * и в него переносятся ручные правки. Строки, где override лёг на
+   * изменившееся расчётное, помечаются конфликтом «было → стало»
+   * (Механика §8.3).
+   *
+   * Шаблон выбирается по типу изделия: структура разделов у КНС (7), ЕМК (8)
+   * и КОЛ (7 без напорного) РАЗНАЯ — материализовать ёмкость шаблоном КНС
+   * нельзя.
+   *
+   * @returns текст проблемы, если строить не из чего, иначе `null`
+   */
+  function rebuildTree(
+    ctx: MaterializeContext,
+    deviceType: string,
+    saved: Record<string, unknown>,
+    baseTree: CalcTree | null,
+    opts: { force: boolean },
+  ): string | null {
+    const savedRev = typeof saved.surveyRev === 'number' ? saved.surveyRev : 0
+    const builtRev = typeof saved.treeSurveyRev === 'number' ? saved.treeSurveyRev : 0
+
+    if (baseTree && savedRev <= builtRev && !opts.force) {
+      tree.value = baseTree
+      treeSurveyRev.value = builtRev
+      return null
+    }
+
+    const fresh = materializeByDevice(ctx, deviceType, saved)
+    if (!fresh) {
+      // Параметры ОЛ пропали — не теряем работу, показываем старое дерево.
+      if (baseTree) {
+        tree.value = baseTree
+        treeSurveyRev.value = builtRev
+        return null
+      }
+      return deviceType === 'KNS'
+        ? 'В расчёте нет параметров опросного листа — материализация невозможна'
+        : `В расчёте нет параметров ОЛ для изделия ${deviceType} — заполните опросный лист`
+    }
+
+    if (baseTree) reconcileTrees(baseTree, fresh)
+    tree.value = fresh
+    treeSurveyRev.value = savedRev
+    recalcAll()
+    return null
+  }
+
+  /**
+   * Правка ОЛ → пересчёт расчёта → сохранение. Одним запросом.
+   *
+   * ОЛ — основной экран изделия: расчёт следует за ним сам, без кнопки.
+   * Дерево строится заново из новых параметров, ручные правки переносятся
+   * (reconcileTrees), а конфликты «было → стало» остаются в дереве и
+   * дожидаются экрана расчёта. ОЛ, дерево и итоги уходят одним PATCH: двумя
+   * запросами сервер между ними держал бы ОЛ новее дерева, и открытый в эту
+   * секунду расчёт пересобрался бы ещё раз.
+   *
+   * @param payload поля surveyData, которые пишет ОЛ (form, kns/emk/kol, derived…)
+   * @returns цена продажи после пересчёта, ₽ — её показывает живая панель ОЛ
+   */
+  async function applySurvey(id: string, payload: Record<string, unknown>): Promise<number | null> {
+    const ctx = await ensureContext()
+
+    // Первый пересчёт в сессии ОЛ: поднимаем расчёт с сервера — нужны его
+    // ручные правки, иначе перенести было бы нечего.
+    if (!estimate.value || estimate.value.id !== id) {
+      const est = await estimatesApi.get(id)
+      estimate.value = est
+      const saved = est.surveyData as Record<string, unknown>
+      restoreTotals(saved)
+      tree.value = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
+    }
+
+    const current = estimate.value as EstimateDetail
+    const merged = { ...(current.surveyData as Record<string, unknown>), ...payload }
+    const problem = rebuildTree(ctx, current.deviceType, merged, tree.value, { force: true })
+
+    // Строить не из чего (ОЛ ещё не заполнен до материализации) — сохраняем
+    // сам ОЛ: ввод не должен теряться из-за того, что расчёт пока невозможен.
+    if (problem || !tree.value) {
+      const updated = await estimatesApi.patchSurvey(id, payload)
+      estimate.value = mergeEstimate(current, updated)
+      return null
+    }
+
+    const body = {
+      ...payload,
+      tree: treeForSave(),
+      treeSurveyRev: treeSurveyRev.value,
+      totals: totalsForSave(),
+    }
+    estimate.value = mergeEstimate(current, await estimatesApi.patchSurvey(id, body))
+    return economics.value.salePriceRub
+  }
+
+  /**
+   * Ответ PATCH — голая запись расчёта, без истории снапшотов: подмешиваем её
+   * к загруженной, чтобы не потерять то, чего сервер в этом ответе не шлёт.
+   */
+  function mergeEstimate(current: EstimateDetail, updated: EstimateDetail): EstimateDetail {
+    return { ...current, ...updated, snapshots: updated.snapshots ?? current.snapshots }
   }
 
   /**
@@ -280,6 +369,10 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       // `gaykaGm` — прежнее имя поля (переименовано в тот же день, когда
       // появилось): расчёты, сохранённые между двумя релизами, читаются им.
       emergencyCouplingGm: n(kns.muftaGm ?? kns.gaykaGm) || undefined,
+      // Цены — поля ОЛ, связанные со строками трубы и насоса. Разбираются тем
+      // же парсером, что поля ОЛ: «12 500» с пробелом-разделителем — число.
+      pipePriceRub: tryEvalExpr(String(kns.pipePrice ?? '')),
+      pumpPriceRub: tryEvalExpr(String(kns.pumpPrice ?? '')),
     }
   }
 
@@ -299,12 +392,16 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
    * qtyManual/priceManual/enabled строк, тумблеры разделов и компонентов,
    * компоненты «Добавлено вручную» — целиком.
    *
-   * `prevQtyCalc` заполняется СТАРЫМИ расчётными количествами: если у строки
-   * с override новое qtyCalc отличается — она попадёт в conflictIds.
+   * Две оговорки:
+   *  - цена строки, связанной с полем ОЛ (`priceBinding`), НЕ переносится:
+   *    её уже положила материализация из ОЛ, а ОЛ здесь источник — старая
+   *    цифра из дерева вернула бы то, что инженер только что исправил;
+   *  - если у строки с ручным количеством изменилось расчётное, прежнее
+   *    расчётное запоминается в `qtyCalcPrev` — это конфликт «было → стало».
+   *    Запоминается САМОЕ РАННЕЕ неразрешённое значение: при двух правках ОЛ
+   *    подряд инженер должен увидеть то, поверх чего ставил свою цифру.
    */
   function reconcileTrees(oldTree: CalcTree, fresh: CalcTree) {
-    const prev: Record<string, number | null> = {}
-
     for (const os of oldTree.sections) {
       const ns = fresh.sections.find((s) => s.code === os.code)
       if (!ns) continue
@@ -329,14 +426,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
           if (!nr) continue
           used.add(idx)
           nr.qtyManual = or.qtyManual
-          nr.priceManual = or.priceManual
+          if (!nr.priceBinding) nr.priceManual = or.priceManual
           nr.enabled = or.enabled
-          prev[nr.id] = or.qtyCalc
+
+          const before = or.qtyCalcPrev ?? or.qtyCalc
+          nr.qtyCalcPrev = nr.qtyManual != null && before != null && before !== nr.qtyCalc ? before : undefined
         }
       }
     }
-
-    prevQtyCalc.value = prev
   }
 
   // ── Пересчёт ──────────────────────────────────────────────────────────────
@@ -351,13 +448,6 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
         c.rows = c.rows.map((r) => (byId.get(r.id) as CalcRowNode) ?? r)
       }
     }
-  }
-
-  function snapshotQtyCalc() {
-    if (!tree.value) return
-    const map: Record<string, number | null> = {}
-    for (const r of flattenRows(tree.value)) map[r.id] = r.qtyCalc
-    prevQtyCalc.value = map
   }
 
   // ── Производные ───────────────────────────────────────────────────────────
@@ -402,16 +492,26 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     () => new Set(rows.value.filter((r) => results.value.get(r.id)?.missingPrice).map((r) => r.id)),
   )
 
-  /** Конфликты: override поверх изменившегося расчётного (Механика §8.3). */
+  /**
+   * Конфликты: override поверх изменившегося расчётного (Механика §8.3).
+   *
+   * Читаются из дерева (`qtyCalcPrev`), а не из памяти экрана: ОЛ пересчитывает
+   * расчёт сам, и конфликт, рождённый в ОЛ, иначе не дожил бы до экрана
+   * расчёта.
+   */
   const conflictIds = computed(() => {
     const s = new Set<string>()
     for (const r of rows.value) {
-      if (conflictsKept.value.has(r.id)) continue
-      const prev = prevQtyCalc.value[r.id]
-      if (prev == null || r.qtyCalc == null) continue
-      if (r.qtyManual != null && prev !== r.qtyCalc) s.add(r.id)
+      if (r.qtyManual != null && r.qtyCalcPrev != null && r.qtyCalcPrev !== r.qtyCalc) s.add(r.id)
     }
     return s
+  })
+
+  /** Расчётное «было» у строк в конфликте — для подписи «было → стало». */
+  const prevQtyCalc = computed<Record<string, number | null>>(() => {
+    const m: Record<string, number | null> = {}
+    for (const r of rows.value) if (r.qtyCalcPrev != null) m[r.id] = r.qtyCalcPrev
+    return m
   })
 
   const overrideIds = computed(
@@ -462,14 +562,15 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
   /** «Оставить моё» — гасит конфликт, override сохраняется. */
   function keepOverride(id: string) {
-    conflictsKept.value.add(id)
-    prevQtyCalc.value[id] = rows.value.find((r) => r.id === id)?.qtyCalc ?? null
+    const row = rows.value.find((r) => r.id === id)
+    if (row) row.qtyCalcPrev = undefined
   }
 
   /** «Принять новое» — сбрасывает override к расчётному. */
   function dropOverride(id: string) {
     resetQty(id)
-    prevQtyCalc.value[id] = rows.value.find((r) => r.id === id)?.qtyCalc ?? null
+    const row = rows.value.find((r) => r.id === id)
+    if (row) row.qtyCalcPrev = undefined
   }
 
   /**
@@ -561,27 +662,80 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     }
   }
 
+  /** Итоги расчёта в том виде, в котором их хранит surveyData. */
+  function totalsForSave() {
+    return {
+      costRub: economics.value.costRub,
+      salePriceRub: economics.value.salePriceRub,
+      markup: markup.value,
+      tirage: tirage.value,
+    }
+  }
+
+  /**
+   * Цены связанных строк — обратно в ОЛ (см. EngineRow.priceBinding).
+   *
+   * Цену трубы или насоса можно поправить и в расчёте. Не запиши мы её в ОЛ,
+   * следующая же правка ОЛ пересобрала бы дерево со старой цифрой из поля и
+   * молча откатила бы исправление.
+   *
+   * Поле ОЛ живёт в двух блоках surveyData: форма (`form`, у КНС ещё и её
+   * копия `kns`) — строкой, как её вводят; параметры ЕМК/КОЛ (`emk`/`kol`) —
+   * числом, как их читает материализация.
+   *
+   * @returns изменённые блоки surveyData или `null`, если писать нечего
+   */
+  function boundPricesPatch(): Record<string, unknown> | null {
+    if (!estimate.value || !tree.value) return null
+    const saved = estimate.value.surveyData as Record<string, unknown>
+    const form = saved.form as Record<string, unknown> | undefined
+    if (!form) return null
+
+    const nextForm: Record<string, unknown> = { ...form }
+    const params: Record<string, Record<string, unknown>> = {}
+    for (const key of ['kns', 'emk', 'kol']) {
+      const block = saved[key]
+      if (block && typeof block === 'object') params[key] = { ...(block as Record<string, unknown>) }
+    }
+    let changed = false
+    // У связи может быть несколько строк (труба частями: сегменты — та же
+    // труба), а поле одно: источником служит первая — труба корпуса.
+    const seen = new Set<PriceBinding>()
+
+    for (const r of flattenRows(tree.value)) {
+      if (!r.priceBinding || seen.has(r.priceBinding)) continue
+      seen.add(r.priceBinding)
+      const { formField, paramsField } = PRICE_BINDING_FIELDS[r.priceBinding]
+      const text = r.priceManual == null ? '' : String(r.priceManual)
+      if (String(nextForm[formField] ?? '') === text) continue
+      nextForm[formField] = text
+      // У КНС параметры — копия формы (строки), у ЕМК/КОЛ — числа.
+      if (params.kns) params.kns[formField] = text
+      if (params.emk) params.emk[paramsField] = r.priceManual
+      if (params.kol) params.kol[paramsField] = r.priceManual
+      changed = true
+    }
+
+    return changed ? { form: nextForm, ...params } : null
+  }
+
   async function save() {
     if (!estimate.value || !tree.value) return
-    await estimatesApi.patchSurvey(estimate.value.id, {
+    const current = estimate.value
+    const updated = await estimatesApi.patchSurvey(current.id, {
+      ...boundPricesPatch(),
       tree: treeForSave(),
       // Фиксируем, из какой ревизии ОЛ построено дерево, — чтобы load()
       // не рематериализовал его повторно.
       treeSurveyRev: treeSurveyRev.value,
-      totals: {
-        costRub: economics.value.costRub,
-        salePriceRub: economics.value.salePriceRub,
-        markup: markup.value,
-        tirage: tirage.value,
-      },
+      totals: totalsForSave(),
     })
+    estimate.value = mergeEstimate(current, updated)
   }
 
   function clear() {
     estimate.value = null
     tree.value = null
-    conflictsKept.value = new Set()
-    prevQtyCalc.value = {}
     // Стор — синглтон Pinia: без сброса наценка и тираж предыдущего расчёта
     // перетекали в следующий и молча меняли его цену продажи.
     markup.value = DEFAULT_MARKUP
@@ -597,6 +751,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     priceListVersion,
     rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, enabledFor, prevQtyCalc,
     load, save, clear, recalcAll,
+    // Пересчёт из ОЛ и цены прайса для его подсказок.
+    applySurvey, ensureContext, catalogPrice,
     setQtyManual, setPriceManual, resetQty, resetPrice,
     toggleSection, toggleComponent, keepOverride, dropOverride, fotKOf,
     addRow, removeRow,

@@ -3,7 +3,9 @@
     ref="shell"
     title="Опросный лист — ёмкость"
     :zayavka="form.zayavka || '—'"
-    :draft-time="draftTime"
+    :status="syncLabel"
+    :status-kind="sync.status.value"
+    :status-title="sync.error.value"
     :active-sec="activeSec"
     :sections="steps"
     :back-to="backTarget"
@@ -11,6 +13,12 @@
     @go="goSection"
     @scroll="onScroll"
   >
+    <template #topbar-actions>
+      <RouterLink v-if="estimateId" class="ol-lnk" :to="{ name: 'calculator', params: { id: estimateId } }">
+        → Расчёт
+      </RouterLink>
+    </template>
+
     <!-- ── Форма ── -->
     <template #form>
       <section id="sec-1" class="ol-sec">
@@ -71,6 +79,15 @@
           <div v-if="s.pipeMark.value" class="ol-grade">{{ s.pipeMark.value }}</div>
           <div v-else class="ol-grade ol-grade--empty">— укажите объём и DN</div>
           <div v-if="s.explain.value" class="ol-explain">{{ s.explain.value }}</div>
+
+          <!-- Цена трубы договорная, в прайсе её нет: даётся здесь и связана с
+               ценой строки трубы в расчёте в обе стороны. -->
+          <div class="ol-grid ol-grid--mid">
+            <label class="fld"><span>Цена трубы, ₽/м.п.</span>
+              <input v-model="form.pipePrice" class="num" placeholder="договорная — введите" />
+            </label>
+            <div class="ol-pick ol-pick--bottom" :class="{ 'ol-pick--warn': !pipePriceValue }">{{ pipeCostHint }}</div>
+          </div>
 
           <label class="ol-chk">
             <input v-model="form.pipeManual" type="checkbox" /><span>изменить вручную</span>
@@ -206,8 +223,19 @@
 
       <div class="ol-live-foot">
         <div v-if="!s.canCreate.value" class="ol-hint">Заполните: {{ s.missingRequired.value.join(', ') }}</div>
-        <button class="ol-create" :disabled="!s.canCreate.value" @click="previewOpen = true">
-          {{ isEdit ? 'Сохранить ОЛ →' : 'Создать расчёт →' }}
+        <!-- У существующего изделия сохранять нечего: расчёт следует за ОЛ
+             сам (useSurveySync). Вместо кнопки — итог и путь в расчёт. -->
+        <template v-if="isEdit">
+          <div class="ol-live-price">
+            <span class="ol-live-lbl">Цена продажи</span>
+            <strong>{{ sync.salePriceRub.value != null ? `${fmtInt(sync.salePriceRub.value)} ₽` : '—' }}</strong>
+          </div>
+          <RouterLink class="ol-create ol-create--link" :to="{ name: 'calculator', params: { id: estimateId } }">
+            Открыть расчёт →
+          </RouterLink>
+        </template>
+        <button v-else class="ol-create" :disabled="!s.canCreate.value" @click="previewOpen = true">
+          Создать расчёт →
         </button>
       </div>
     </template>
@@ -223,7 +251,7 @@
       <template #footer>
         <button class="ol-btn" @click="previewOpen = false">Отмена</button>
         <button class="ol-create" :disabled="creating" @click="createEstimate">
-          {{ creating ? 'Сохраняем…' : isEdit ? 'Сохранить ОЛ → конфигуратор' : 'Создать расчёт → конфигуратор' }}
+          {{ creating ? 'Создаём…' : 'Создать расчёт' }}
         </button>
       </template>
     </BaseModal>
@@ -231,8 +259,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import SurveyShell from '@/components/survey/SurveyShell.vue'
 import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
@@ -240,6 +268,8 @@ import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
 import type { DeviceType } from '@/api/estimates'
 import { useEmkSurvey } from '@/composables/useEmkKolSurvey'
 import { toast } from '@/composables/useToast'
+import { useSurveySync } from '@/composables/useSurveySync'
+import { useCalcTreeStore } from '@/stores/calcTree'
 import { tryEvalExpr } from '@/engines/expr'
 import { makeDefaultEmkSurvey, type EmkSurveyForm } from '@/types/survey-emk-kol'
 import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon } from '@/types/survey'
@@ -253,6 +283,10 @@ const props = defineProps<{
   projectId?: string | null
   initial?: Partial<EmkSurveyForm> | null
   surveyRev?: number
+  /** Итог расчёта на момент открытия, ₽ — показывается до первого пересчёта. */
+  totalRub?: number | null
+  /** Сохранённый surveyData — с ним сверяется, есть ли что сохранять. */
+  savedSurvey?: Record<string, unknown> | null
   /** Тип изделия и его переключение — секция 2 листа (владелец — SurveyView). */
   deviceType: DeviceType
   deviceTypes: ReadonlyArray<{ value: DeviceType; label: string }>
@@ -295,7 +329,52 @@ const activeSec = ref(1)
 const previewOpen = ref(false)
 const creating = ref(false)
 const shell = ref<InstanceType<typeof SurveyShell> | null>(null)
-const draftTime = ref(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
+
+// ── Расчёт следует за ОЛ ────────────────────────────────────────────────────
+
+const store = useCalcTreeStore()
+const estimateId = computed(() => props.estimateId ?? null)
+
+/**
+ * Правка ОЛ существующего изделия сама пересобирает и сохраняет расчёт —
+ * как у КНС. У нового листа сохранять некуда: там работает «Создать расчёт».
+ */
+const sync = useSurveySync({
+  estimateId: () => props.estimateId,
+  initialRev: props.surveyRev ?? 0,
+  initialPrice: props.totalRub ?? null,
+  savedPayload: props.savedSurvey ?? null,
+  payload: () => surveyPayload(),
+})
+
+const syncLabel = computed(() => {
+  if (!props.estimateId) return 'новый лист · сохранится при создании расчёта'
+  switch (sync.status.value) {
+    case 'pending': return 'изменения…'
+    case 'saving': return 'сохраняем и пересчитываем…'
+    case 'saved': return `сохранено ${sync.savedAt.value?.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) ?? ''} · расчёт пересчитан`
+    case 'error': return `не сохранено: ${sync.error.value ?? 'ошибка'}`
+    default: return 'сохранено · расчёт актуален'
+  }
+})
+
+// Справочники — сразу: первый пересчёт не будет ждать их загрузки.
+onMounted(() => {
+  store.ensureContext().catch(() => {
+    // Без справочников пересчёт попробует загрузить их сам при первой правке.
+  })
+})
+
+/** Цена трубы корпуса и что она даёт на длину корпуса. */
+const pipePriceValue = computed(() => tryEvalExpr(form.value.pipePrice))
+const pipeCostHint = computed(() => {
+  const price = pipePriceValue.value
+  if (price == null) return 'без цены строка трубы в расчёте «красная» и КП не выпустить'
+  const lengthMm = s.lengthMm.value
+  if (lengthMm == null || lengthMm <= 0) return 'длина трубы станет известна после габаритов'
+  const lengthM = lengthMm / 1000
+  return `× ${lengthM.toLocaleString('ru-RU')} м = ${fmtInt(price * lengthM)} ₽ на корпус`
+})
 
 const fmtInt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
 const fmt = (n: number | null, d = 2) =>
@@ -386,38 +465,42 @@ function surveyPayload() {
       hasBasket: form.value.grinder === 'корзина' || form.value.grinder === 'обе',
       insulationEnabled: form.value.insulation,
       insulationDepthMm: num(form.value.tiGlubina) ?? 0,
+      // Цена трубы — поле ОЛ, связанное со строкой трубы (priceBinding).
+      pipePriceRub: num(form.value.pipePrice),
     },
     form: { ...form.value },
-    surveyRev: (props.surveyRev ?? 0) + 1,
   }
 }
 
+/**
+ * Создание изделия из ОЛ.
+ *
+ * Расчёт строится сразу же (applySurvey), а лист остаётся открытым — уже как
+ * лист существующего изделия (/survey/:id): дальше правки ОЛ сами ведут
+ * расчёт, а в него самого ведёт «Открыть расчёт →».
+ */
 async function createEstimate() {
   creating.value = true
   try {
-    let id: string
-    if (props.estimateId) {
-      await estimatesApi.patchSurvey(props.estimateId, surveyPayload())
-      id = props.estimateId
-      toast('Опросный лист сохранён — расчёт будет пересчитан', 'success')
-    } else {
-      const dto = {
-        title: s.title.value,
-        deviceType: 'EMK' as const,
-        surveyData: {
-          ...surveyPayload(),
-          sections: EMK_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
-        },
-      }
-      const est = props.projectId
-        ? await projectsApi.addEstimate(props.projectId, dto)
-        : await estimatesApi.create(dto)
-      id = est.id
-      toast('Расчёт ёмкости создан', 'success')
+    const dto = {
+      title: s.title.value,
+      deviceType: 'EMK' as const,
+      surveyData: {
+        ...surveyPayload(),
+        surveyRev: 1,
+        sections: EMK_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
+      },
     }
-    await router.push({ name: 'calculator', params: { id } })
+    const est = props.projectId
+      ? await projectsApi.addEstimate(props.projectId, dto)
+      : await estimatesApi.create(dto)
+    await store.applySurvey(est.id, { ...surveyPayload(), surveyRev: 2 })
+    toast('Расчёт ёмкости создан, расчёт собран', 'success')
+    previewOpen.value = false
+    await router.replace({ name: 'survey', params: { id: est.id } })
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error')
+    toast(e instanceof Error ? e.message : 'Не удалось создать расчёт', 'error')
+  } finally {
     creating.value = false
   }
 }

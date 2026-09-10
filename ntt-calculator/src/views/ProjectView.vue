@@ -13,7 +13,7 @@
           <div
             v-for="e in projects.current.estimates" :key="e.id"
             class="pv-unit-link"
-            @click="router.push(`/calculator/${e.id}`)"
+            @click="openUnit(e.id)"
           >
             <span class="pv-unit-badge" :class="`pv-unit-badge--${e.deviceType.toLowerCase()}`">{{ e.deviceType }}</span>
             <span class="pv-unit-name">{{ e.title }}</span>
@@ -86,7 +86,7 @@
             <div
               v-for="e in projects.current.estimates" :key="e.id"
               class="pv-unit-card"
-              @click="router.push(`/calculator/${e.id}`)"
+              @click="openUnit(e.id)"
             >
               <div class="pv-uc-top">
                 <span class="pv-uc-type" :class="`pv-uc-type--${e.deviceType.toLowerCase()}`">{{ e.deviceType }}</span>
@@ -103,7 +103,12 @@
               <div class="pv-uc-params" v-if="techParams(e).length">
                 <span v-for="p in techParams(e)" :key="p" class="pv-uc-param">{{ p }}</span>
               </div>
-              <div v-if="e.totalRub" class="pv-uc-total">{{ fmt(e.totalRub) }} ₽</div>
+              <div class="pv-uc-foot">
+                <!-- Карточка открывает ОЛ; в расчёт — отдельной ссылкой, для
+                     тонкой настройки строк. -->
+                <button class="pv-uc-calc" title="Открыть расчёт" @click.stop="openCalc(e.id)">расчёт →</button>
+                <span v-if="e.totalRub" class="pv-uc-total">{{ fmt(e.totalRub) }} ₽</span>
+              </div>
             </div>
 
             <!-- «Добавить единицу» остаётся на виду и когда единицы уже есть:
@@ -237,6 +242,21 @@ const projectId = String(route.params.id)
  */
 function addUnit() {
   router.push({ name: 'survey', query: { project: projectId } })
+}
+
+/**
+ * Единица открывается опросным листом, а не расчётом.
+ *
+ * Изделие в проекте создаётся и живёт в ОЛ: правка ОЛ сама пересобирает
+ * расчёт, так что в ОЛ инженер видит и параметры, и итог. В расчёт — для
+ * тонкой настройки строк — ведёт отдельная ссылка на карточке и кнопка в ОЛ.
+ */
+function openUnit(id: string) {
+  router.push({ name: 'survey', params: { id } })
+}
+
+function openCalc(id: string) {
+  router.push({ name: 'calculator', params: { id } })
 }
 
 // ── Edit project ────────────────────────────────────────────────────────────
@@ -490,8 +510,15 @@ onMounted(() => projects.fetchOne(projectId))
 }
 .pv-uc-total  {
   font-family: Archivo, system-ui, sans-serif; font-size: 13.2px; font-weight: 700;
-  color: var(--accent); text-align: right;
+  color: var(--accent); text-align: right; margin-left: auto;
 }
+/* Низ карточки: слева путь в расчёт, справа итог. */
+.pv-uc-foot { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
+.pv-uc-calc {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+  font-size: 11.4px; color: var(--tx3); border-bottom: 1px dashed currentColor;
+}
+.pv-uc-calc:hover { color: var(--tx1); border-bottom-style: solid; }
 .dash-state     { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
 .dash-state-txt { font-size: 14.4px; color: var(--tx3); }
 .dash-err       { color: var(--danger); }

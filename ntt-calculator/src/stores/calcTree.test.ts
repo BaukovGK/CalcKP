@@ -217,3 +217,158 @@ describe('стор calcTree: наценка, тираж и версия прай
     expect(store.priceListVersion).toBe(4)
   })
 })
+
+/**
+ * ОЛ — основной экран изделия: правка ОЛ сама пересобирает расчёт
+ * (applySurvey), а цены трубы и насоса связаны с полями ОЛ в обе стороны.
+ */
+describe('стор calcTree: пересчёт из ОЛ и связанные цены', () => {
+  /** ОЛ КНС в той форме, в которой его сохраняет SurveyKnsView. */
+  const kns = (over: Record<string, unknown> = {}) => ({
+    dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
+    nRab: '2', nRez: '1', valveOnInlet: true, emergency: false,
+    insulation: false, tiGlubina: '0', mvk: false, pipePrice: '', pumpPrice: '',
+    ...over,
+  })
+  const derived = { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: null }
+
+  /** Расчёт без дерева: первая же applySurvey его материализует. */
+  function freshEstimate() {
+    const est = savedEstimate()
+    delete (est.surveyData as Record<string, unknown>).tree
+    Object.assign(est.surveyData, { surveyRev: 1, treeSurveyRev: 0, form: kns(), kns: kns(), derived })
+    return est
+  }
+
+  /** PATCH отвечает тем, что ему прислали, поверх сохранённого. */
+  function echoPatch(est: ReturnType<typeof freshEstimate>) {
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return Promise.resolve(JSON.parse(JSON.stringify(est)))
+    })
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  it('правка ОЛ пересобирает расчёт и сохраняет его одним запросом', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+
+    await store.applySurvey('e1', { form: kns({ nRab: '3' }), kns: kns({ nRab: '3' }), derived, surveyRev: 2 })
+
+    expect(patchSurvey).toHaveBeenCalledTimes(1)
+    const [, body] = patchSurvey.mock.calls[0] as [string, Record<string, unknown>]
+    // ОЛ, дерево и итоги — вместе: иначе сервер между запросами держал бы ОЛ новее дерева.
+    expect(body.surveyRev).toBe(2)
+    expect(body.treeSurveyRev).toBe(2)
+    expect(body.tree).toBeTruthy()
+    expect(body.totals).toBeTruthy()
+    const pump = store.rows.find((r) => r.category === 'Насосы, АТМ')
+    expect(pump?.qtyCalc).toBe(4) // раб 3 + рез 1
+  })
+
+  it('ручное количество переживает правку ОЛ, а конфликт остаётся в дереве', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+
+    const pump = store.rows.find((r) => r.category === 'Насосы, АТМ')!
+    store.setQtyManual(pump.id, '5')
+
+    // Правка ОЛ меняет расчётное (3 → 4) под ручной цифрой.
+    await store.applySurvey('e1', { form: kns({ nRab: '3' }), kns: kns({ nRab: '3' }), derived, surveyRev: 3 })
+
+    const after = store.rows.find((r) => r.category === 'Насосы, АТМ')!
+    expect(after.qtyManual).toBe('5')
+    expect(store.conflictIds.has(after.id)).toBe(true)
+    expect(store.prevQtyCalc[after.id]).toBe(3)
+
+    // Конфликт хранится в дереве — значит, доедет до экрана расчёта.
+    const [, body] = patchSurvey.mock.calls[patchSurvey.mock.calls.length - 1] as [string, { tree: { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> } }]
+    const saved = body.tree.sections.flatMap((s) => s.components.flatMap((c) => c.rows)).find((r) => r.category === 'Насосы, АТМ')
+    expect(saved?.qtyCalcPrev).toBe(3)
+  })
+
+  it('«оставить моё» гасит конфликт, не трогая ручную цифру', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    const pump = store.rows.find((r) => r.category === 'Насосы, АТМ')!
+    store.setQtyManual(pump.id, '5')
+    await store.applySurvey('e1', { form: kns({ nRab: '3' }), kns: kns({ nRab: '3' }), derived, surveyRev: 3 })
+
+    const row = store.rows.find((r) => r.category === 'Насосы, АТМ')!
+    store.keepOverride(row.id)
+
+    expect(store.conflictIds.size).toBe(0)
+    expect(row.qtyManual).toBe('5')
+  })
+
+  it('цена трубы из ОЛ становится ценой строки трубы', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+
+    await store.applySurvey('e1', {
+      form: kns({ pipePrice: '48 000' }), kns: kns({ pipePrice: '48 000' }), derived, surveyRev: 2,
+    })
+
+    const pipe = store.rows.find((r) => r.priceBinding === 'pipePrice')!
+    expect(pipe.priceManual).toBe(48_000)
+  })
+
+  it('новая цена из ОЛ побеждает прежнюю цену строки', async () => {
+    // Без этого правило переноса ручных правок вернуло бы старую цифру из
+    // дерева поверх той, что инженер только что ввёл в ОЛ.
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns({ pipePrice: '48000' }), kns: kns({ pipePrice: '48000' }), derived, surveyRev: 2 })
+
+    await store.applySurvey('e1', { form: kns({ pipePrice: '51000' }), kns: kns({ pipePrice: '51000' }), derived, surveyRev: 3 })
+
+    expect(store.rows.find((r) => r.priceBinding === 'pipePrice')?.priceManual).toBe(51_000)
+  })
+
+  it('цена, исправленная в расчёте, возвращается в поле ОЛ', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns({ pipePrice: '48000' }), kns: kns({ pipePrice: '48000' }), derived, surveyRev: 2 })
+
+    const pipe = store.rows.find((r) => r.priceBinding === 'pipePrice')!
+    store.setPriceManual(pipe.id, 52_500)
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[patchSurvey.mock.calls.length - 1] as [string, { form: Record<string, unknown>; kns: Record<string, unknown> }]
+    // Иначе следующая правка ОЛ пересобрала бы дерево со старой цифрой из поля.
+    expect(body.form.pipePrice).toBe('52500')
+    expect(body.kns.pipePrice).toBe('52500')
+  })
+
+  it('без правки связанной цены save() форму не трогает', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns({ pipePrice: '48000' }), kns: kns({ pipePrice: '48000' }), derived, surveyRev: 2 })
+
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[patchSurvey.mock.calls.length - 1] as [string, Record<string, unknown>]
+    expect(body.form).toBeUndefined()
+  })
+})

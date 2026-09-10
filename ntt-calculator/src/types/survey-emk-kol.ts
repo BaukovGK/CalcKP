@@ -68,6 +68,8 @@ export interface EmkSurveyForm extends SurveyCommonForm {
   ventilation: boolean
   insulation: boolean
   tiGlubina: string
+  /** Цена трубы корпуса, ₽/м.п. — связана с ценой строки трубы в расчёте. */
+  pipePrice: string
 }
 
 export function makeDefaultEmkSurvey(): EmkSurveyForm {
@@ -118,6 +120,7 @@ export function makeDefaultEmkSurvey(): EmkSurveyForm {
     ventilation: true,
     insulation: false,
     tiGlubina: '',
+    pipePrice: '',
   }
 }
 
@@ -162,6 +165,8 @@ export interface KolSurveyForm extends SurveyCommonForm {
   datchiki: boolean
   insulation: boolean
   tiGlubina: string
+  /** Цена трубы корпуса, ₽/м.п. — связана с ценой строки трубы в расчёте. */
+  pipePrice: string
 }
 
 export function makeDefaultKolSurvey(): KolSurveyForm {
@@ -206,6 +211,7 @@ export function makeDefaultKolSurvey(): KolSurveyForm {
     datchiki: false,
     insulation: false,
     tiGlubina: '',
+    pipePrice: '',
   }
 }
 

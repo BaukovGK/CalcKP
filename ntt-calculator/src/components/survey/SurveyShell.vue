@@ -8,7 +8,9 @@
         <span class="ol-zayavka">заявка {{ zayavka }} · черновик валиден в любом порядке</span>
       </div>
       <div class="ol-top-r">
-        <span class="ol-draft">сохранено {{ draftTime }}</span>
+        <!-- Статус сохранения — настоящий: раньше здесь стояли часы открытия
+             страницы с подписью «сохранено», хотя не сохранялось ничего. -->
+        <span class="ol-draft" :class="statusKind ? `ol-draft--${statusKind}` : ''" :title="statusTitle ?? ''">{{ status }}</span>
         <slot name="topbar-actions" />
         <button class="ol-btn" title="Переключить тему" @click="toggle">
           {{ theme === 'dark' ? '☾' : '☀' }} тема
@@ -67,7 +69,12 @@ import { useTheme } from '@/composables/useTheme'
 defineProps<{
   title: string
   zayavka: string
-  draftTime: string
+  /** Строка статуса сохранения: «сохранено 10:42 · расчёт пересчитан». */
+  status: string
+  /** Вид статуса — для цвета: ошибка акцентом, идущее сохранение приглушённо. */
+  statusKind?: string
+  /** Подробности к статусу (текст ошибки) — во всплывающей подсказке. */
+  statusTitle?: string | null
   activeSec: number
   sections: ReadonlyArray<{ n: number; title: string; done: boolean }>
   /** Навигация назад (в проект / к списку) — необязательная. */
@@ -96,6 +103,8 @@ defineExpose({ formEl })
 .ol-zayavka { font-size: 13.2px; color: var(--muted); }
 .ol-top-r { display: flex; align-items: center; gap: 10px; flex: none; }
 .ol-draft { font-size: 13.2px; color: var(--faint); }
+.ol-draft--saving, .ol-draft--pending { color: var(--muted); }
+.ol-draft--error { color: var(--acc); }
 
 .ol-body { flex: 1; display: flex; min-height: 0; }
 
@@ -159,6 +168,11 @@ defineExpose({ formEl })
 .ol-create { background: var(--acc); border: 1px solid var(--acc); color: #fff;
   padding: 8px 14px; font-size: 15px; font-weight: 600; font-family: inherit; }
 .ol-create:disabled { opacity: .4; }
+.ol-create--link { display: block; text-align: center; text-decoration: none; }
+/* Итог расчёта над кнопкой «Открыть расчёт»: цифра, ради которой лист и заполняют. */
+.ol-live-price { display: flex; justify-content: space-between; align-items: baseline;
+  border-top: 1px solid var(--line); padding-top: 8px; }
+.ol-live-price strong { font-size: 18px; }
 
 /* Модал-превью */
 .mo-sub { font-size: 13.8px; color: var(--muted); margin: 4px 0 10px; }

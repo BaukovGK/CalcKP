@@ -101,6 +101,12 @@
    становится такой же ячейкой сетки, как поле. */
 .ol-toggles { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
 
+/* Подсказка у поля: марка насоса, расчётный диаметр, во что обходится цена. */
+.ol-pick { font-size: 12px; color: var(--faint); line-height: 1.45; display: block; }
+.ol-pick--warn { color: var(--amber); }
+/* Подсказка рядом с полем, а не под ним: прижата к низу ячейки, на уровень ввода. */
+.ol-pick--bottom { align-self: end; padding-bottom: 7px; }
+
 /* Поле с единицей измерения: ввод и селект вплотную, одной рамкой. */
 .ol-unit { display: flex; }
 .ol-unit input { flex: 1; min-width: 0; }

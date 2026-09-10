@@ -8,9 +8,13 @@
         <span class="ol-zayavka">заявка {{ form.zayavka }} · черновик валиден в любом порядке</span>
       </div>
       <div class="ol-top-r">
-        <span class="ol-draft">сохранено {{ draftTime }}</span>
-        <RouterLink v-if="lastEstimateId" class="ol-lnk" :to="{ name: 'calculator', params: { id: lastEstimateId } }">
-          → Конфигуратор расчёта
+        <!-- Статус — настоящий: раньше здесь стояли часы открытия страницы с
+             подписью «сохранено», хотя не сохранялось ничего. -->
+        <span class="ol-draft" :class="`ol-draft--${sync.status.value}`" :title="sync.error.value ?? ''">
+          {{ syncLabel }}
+        </span>
+        <RouterLink v-if="estimateId" class="ol-lnk" :to="{ name: 'calculator', params: { id: estimateId } }">
+          → Расчёт
         </RouterLink>
         <button class="ol-btn" title="Переключить тему" @click="toggle">
           {{ theme === 'dark' ? '☾' : '☀' }} тема
@@ -87,6 +91,16 @@
             <div v-else class="ol-grade ol-grade--empty">— укажите DN и глубину</div>
             <div v-if="s.snExplain.value" class="ol-explain">{{ s.snExplain.value }}</div>
 
+            <!-- Цена трубы договорная и в прайсе её нет: даётся здесь, на
+                 экране изделия, и связана с ценой строки трубы в расчёте в обе
+                 стороны — правка там вернётся сюда. -->
+            <div class="ol-grid ol-grid--mid">
+              <label class="fld"><span>Цена трубы, ₽/м.п.</span>
+                <input v-model="form.pipePrice" class="num" placeholder="договорная — введите" />
+              </label>
+              <div class="ol-pick ol-pick--bottom" :class="{ 'ol-pick--warn': !pipePriceValue }">{{ pipeCostHint }}</div>
+            </div>
+
             <label class="ol-chk">
               <input v-model="form.pipeManual" type="checkbox" />
               <span>изменить вручную</span>
@@ -159,7 +173,7 @@
           </div>
 
           <div class="ol-grid">
-            <label class="fld fld--12"><span>Марка насосов</span>
+            <label class="fld fld--8"><span>Марка насосов</span>
               <!-- Выбор из подобранных: по умолчанию оптимальный, но инженер
                    может взять другой — в том числе отсечённый по запасу. -->
               <select v-if="hasPumpChoices" :value="pumpChoice" @change="onPumpChoice">
@@ -194,6 +208,13 @@
                 >вернуть подобранную</button>
               </span>
               <span v-if="p.alternativesExplain.value" class="ol-pick">{{ p.alternativesExplain.value }}</span>
+            </label>
+            <!-- Цена насоса: по умолчанию — позиция прайса по марке (её вносит
+                 закупка), поле её перекрывает. Связано с ценой строки насоса в
+                 расчёте в обе стороны. -->
+            <label class="fld fld--4"><span>Цена насоса, ₽/шт</span>
+              <input v-model="form.pumpPrice" class="num" :placeholder="pumpCatalogPrice != null ? fmtInt(pumpCatalogPrice) : 'нет в прайсе'" />
+              <span class="ol-pick" :class="{ 'ol-pick--warn': pumpPriceMissing }">{{ pumpPriceHint }}</span>
             </label>
           </div>
 
@@ -392,8 +413,19 @@
           <div v-if="!s.canCreate.value" class="ol-hint">
             Заполните: {{ s.missingRequired.value.join(', ') }}
           </div>
-          <button class="ol-create" :disabled="!s.canCreate.value" @click="previewOpen = true">
-            {{ isEdit ? 'Сохранить ОЛ →' : 'Создать расчёт →' }}
+          <!-- У существующего изделия сохранять нечего: расчёт следует за ОЛ
+               сам (useSurveySync). Вместо кнопки — итог и путь в расчёт. -->
+          <template v-if="isEdit">
+            <div class="ol-live-price">
+              <span class="ol-live-lbl">Цена продажи</span>
+              <strong>{{ sync.salePriceRub.value != null ? `${fmtInt(sync.salePriceRub.value)} ₽` : '—' }}</strong>
+            </div>
+            <RouterLink class="ol-create ol-create--link" :to="{ name: 'calculator', params: { id: estimateId } }">
+              Открыть расчёт →
+            </RouterLink>
+          </template>
+          <button v-else class="ol-create" :disabled="!s.canCreate.value" @click="previewOpen = true">
+            Создать расчёт →
           </button>
         </div>
       </aside>
@@ -415,7 +447,7 @@
       <template #footer>
         <button class="ol-btn" @click="previewOpen = false">Отмена</button>
         <button class="ol-create" :disabled="creating" @click="createEstimate">
-          {{ creating ? 'Сохраняем…' : isEdit ? 'Сохранить ОЛ → конфигуратор' : 'Создать расчёт → конфигуратор' }}
+          {{ creating ? 'Создаём…' : 'Создать расчёт' }}
         </button>
       </template>
     </BaseModal>
@@ -425,7 +457,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ToggleYesNo from '@/components/survey/ToggleYesNo.vue'
@@ -437,6 +469,9 @@ import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { usePumpSelection } from '@/composables/usePumpSelection'
 import { useTheme } from '@/composables/useTheme'
+import { useSurveySync } from '@/composables/useSurveySync'
+import { useCalcTreeStore } from '@/stores/calcTree'
+import { pipeLengthM } from '@/engines/formulas'
 import { toast } from '@/composables/useToast'
 import {
   grinderValue,
@@ -451,7 +486,7 @@ import { tryEvalExpr } from '@/engines/expr'
 import { COUPLING_SIZES } from '@/engines/pressure-pipe-kit'
 import { estimatesApi } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
-import { KNS_SECTIONS } from '@/engines/template-kns'
+import { KNS_SECTIONS, PUMP_PRICE_CATEGORY, pumpRowName } from '@/engines/template-kns'
 
 /**
  * Ветка КНС единого опросного листа (SurveyView).
@@ -459,15 +494,20 @@ import { KNS_SECTIONS } from '@/engines/template-kns'
  * Три режима — по props:
  *  - создание вне проекта (без props),
  *  - создание в проекте (`projectId`),
- *  - редактирование ОЛ существующего расчёта (`estimateId` + `initial`):
- *    сохранение поднимает `surveyRev`, и конфигуратор рематериализует дерево
- *    с пометкой конфликтов (Механика §8.3).
+ *  - изделие уже есть (`estimateId` + `initial`): ОЛ — основной экран
+ *    изделия, каждая правка сама пересобирает и сохраняет расчёт
+ *    (useSurveySync → applySurvey стора), ручные правки расчёта переносятся,
+ *    конфликты «было → стало» ждут экрана расчёта (Механика §8.3).
  */
 const props = defineProps<{
   estimateId?: string | null
   projectId?: string | null
   initial?: Partial<KnsSurveyForm> | null
   surveyRev?: number
+  /** Итог расчёта на момент открытия, ₽ — показывается до первого пересчёта. */
+  totalRub?: number | null
+  /** Сохранённый surveyData — с ним сверяется, есть ли что сохранять. */
+  savedSurvey?: Record<string, unknown> | null
   /** Тип изделия и его переключение — секция 2 листа (владелец — SurveyView). */
   deviceType: DeviceType
   deviceTypes: ReadonlyArray<{ value: DeviceType; label: string }>
@@ -484,6 +524,70 @@ const form = ref<KnsSurveyForm>({ ...makeDefaultKnsSurvey(), ...props.initial })
 const s = useKnsSurvey(form)
 /** Подбор насоса и диаметра напорного — считает сервер (`/api/pump-station`). */
 const p = usePumpSelection(form)
+
+// ── Расчёт следует за ОЛ ────────────────────────────────────────────────────
+
+const store = useCalcTreeStore()
+const estimateId = computed(() => props.estimateId ?? null)
+
+/**
+ * Правка ОЛ существующего изделия сама пересобирает и сохраняет расчёт.
+ * У нового листа (ещё без id) сохранять некуда — там работает «Создать расчёт».
+ */
+const sync = useSurveySync({
+  estimateId: () => props.estimateId,
+  initialRev: props.surveyRev ?? 0,
+  initialPrice: props.totalRub ?? null,
+  savedPayload: props.savedSurvey ?? null,
+  payload: () => surveyPayload(),
+})
+
+const syncLabel = computed(() => {
+  if (!props.estimateId) return 'новый лист · сохранится при создании расчёта'
+  switch (sync.status.value) {
+    case 'pending': return 'изменения…'
+    case 'saving': return 'сохраняем и пересчитываем…'
+    case 'saved': return `сохранено ${sync.savedAt.value?.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) ?? ''} · расчёт пересчитан`
+    case 'error': return `не сохранено: ${sync.error.value ?? 'ошибка'}`
+    default: return 'сохранено · расчёт актуален'
+  }
+})
+
+// Прайс нужен сразу: из него плейсхолдер цены насоса, и первый пересчёт не
+// будет ждать загрузки справочников.
+onMounted(() => {
+  store.ensureContext().catch(() => {
+    // Без прайса подсказка цены просто не появится — ОЛ от этого не ломается.
+  })
+})
+
+/** Цена марки насоса из прайса (позиция «Насосы, АТМ | Насос <марка> | шт»). */
+const pumpCatalogPrice = computed<number | null>(() => {
+  const name = pumpRowName(p.pumpModel.value)
+  const item = store.catalog.find((c) => c.category === PUMP_PRICE_CATEGORY && c.name === name && c.unit === 'шт')
+  return item?.priceRub ?? null
+})
+const pumpPriceValue = computed(() => tryEvalExpr(form.value.pumpPrice))
+const pumpPriceMissing = computed(() => pumpPriceValue.value == null && pumpCatalogPrice.value == null)
+const pumpPriceHint = computed(() => {
+  if (pumpPriceValue.value != null) {
+    return pumpCatalogPrice.value != null
+      ? `своя цена · в прайсе ${fmtInt(pumpCatalogPrice.value)} ₽`
+      : 'своя цена — в прайсе этой марки нет'
+  }
+  if (pumpCatalogPrice.value != null) return 'из прайса по марке'
+  return 'в прайсе марки нет — введите, иначе строка насоса без цены'
+})
+
+/** Цена трубы корпуса и что она даёт на длину корпуса. */
+const pipePriceValue = computed(() => tryEvalExpr(form.value.pipePrice))
+const pipeCostHint = computed(() => {
+  const price = pipePriceValue.value
+  if (price == null) return 'без цены строка трубы в расчёте «красная» и КП не выпустить'
+  if (s.depthMm.value == null) return 'длина корпуса станет известна после глубины'
+  const lengthM = pipeLengthM(s.depthMm.value)
+  return `× ${lengthM.toLocaleString('ru-RU')} м = ${fmtInt(price * lengthM)} ₽ на корпус`
+})
 
 /** Есть ли из чего выбирать: пока подбор не пришёл, показываем обычное поле. */
 const hasPumpChoices = computed(
@@ -560,7 +664,6 @@ const formEl = ref<HTMLElement | null>(null)
 const previewOpen = ref(false)
 const creating = ref(false)
 const accepted = ref(false)
-const draftTime = ref(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
 
 const fmt = (n: number | null, d = 2) =>
   n == null ? '—' : n.toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -599,8 +702,6 @@ const blocks = computed(() => [
 
 const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)
 
-/** Расчёт, созданный в этой сессии или редактируемый — для ссылки «→ Конфигуратор расчёта». */
-const lastEstimateId = ref<string | null>(props.estimateId ?? null)
 
 /**
  * Секция заполнена: все её обязательные поля непусты.
@@ -714,40 +815,40 @@ function surveyPayload() {
       /** Диаметр напорного по гидравлике — справочно, DN берётся из поля ОЛ. */
       dischargePipeDiameterMm: p.pipe.value?.diameterMm ?? null,
     },
-    surveyRev: (props.surveyRev ?? 0) + 1,
   }
 }
 
+/**
+ * Создание изделия из ОЛ.
+ *
+ * Расчёт строится сразу же (applySurvey), а лист остаётся открытым — уже как
+ * лист существующего изделия (/survey/:id): дальше правки ОЛ сами ведут
+ * расчёт, а в него самого ведёт «Открыть расчёт →».
+ */
 async function createEstimate() {
   creating.value = true
   try {
-    let id: string
-    if (props.estimateId) {
-      // Редактирование ОЛ существующего расчёта — НЕ создаём дубль.
-      await estimatesApi.patchSurvey(props.estimateId, surveyPayload())
-      id = props.estimateId
-      toast('Опросный лист сохранён — расчёт будет пересчитан')
-    } else {
-      const dto = {
-        title: s.title.value,
-        deviceType: 'KNS' as const,
-        surveyData: {
-          ...surveyPayload(),
-          sections: KNS_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
-        },
-      }
-      // Внутри проекта расчёт создаётся привязанным к нему (projectId),
-      // иначе он невидим в UI: Dashboard показывает только проекты.
-      const est = props.projectId
-        ? await projectsApi.addEstimate(props.projectId, dto)
-        : await estimatesApi.create(dto)
-      id = est.id
-      toast('Расчёт создан')
+    const dto = {
+      title: s.title.value,
+      deviceType: 'KNS' as const,
+      surveyData: {
+        ...surveyPayload(),
+        surveyRev: 1,
+        sections: KNS_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
+      },
     }
-    lastEstimateId.value = id
-    await router.push({ name: 'calculator', params: { id } })
+    // Внутри проекта расчёт создаётся привязанным к нему (projectId),
+    // иначе он невидим в UI: Dashboard показывает только проекты.
+    const est = props.projectId
+      ? await projectsApi.addEstimate(props.projectId, dto)
+      : await estimatesApi.create(dto)
+    await store.applySurvey(est.id, { ...surveyPayload(), surveyRev: 2 })
+    toast('Изделие создано, расчёт собран', 'success')
+    previewOpen.value = false
+    await router.replace({ name: 'survey', params: { id: est.id } })
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error')
+    toast(e instanceof Error ? e.message : 'Не удалось создать расчёт', 'error')
+  } finally {
     creating.value = false
   }
 }
@@ -764,6 +865,10 @@ async function createEstimate() {
 .ol-zayavka { font-size: 13.8px; color: var(--muted); }
 .ol-top-r { display: flex; align-items: center; gap: 10px; }
 .ol-draft { font-size: 13.2px; color: var(--faint); }
+/* Статус автосохранения: ошибка — акцентом, чтобы не прошла мимо; идущее
+   сохранение — приглушённо, оно штатное. */
+.ol-draft--saving, .ol-draft--pending { color: var(--muted); }
+.ol-draft--error { color: var(--acc); }
 
 .ol-body { flex: 1; display: flex; min-height: 0; }
 
@@ -785,9 +890,6 @@ async function createEstimate() {
 .ol-form { flex: 1; overflow-y: auto; padding: 16px 20px; min-width: 0; }
 .ol-tail { height: 40vh; }
 
-/* Подсказка подбора под полем: марка насоса, расчётный диаметр напорного. */
-.ol-pick { font-size: 12px; color: var(--faint); line-height: 1.45; display: block; }
-.ol-pick--warn { color: var(--amber); }
 .ol-pick-btn {
   font: inherit; font-size: 12px; margin-left: 6px; padding: 0;
   background: none; border: none; border-bottom: 1px dashed currentColor;
@@ -824,6 +926,11 @@ async function createEstimate() {
 .ol-create { background: var(--acc); border: 1px solid var(--acc); color: #fff;
   padding: 8px 14px; font-size: 15px; font-weight: 600; }
 .ol-create:disabled { opacity: .4; }
+.ol-create--link { display: block; text-align: center; text-decoration: none; }
+/* Итог расчёта над кнопкой «Открыть расчёт»: цифра, ради которой лист и заполняют. */
+.ol-live-price { display: flex; justify-content: space-between; align-items: baseline;
+  border-top: 1px solid var(--line); padding-top: 8px; }
+.ol-live-price strong { font-size: 18px; }
 
 /* Модал */
 .mo-h { font-size: 18px; font-weight: 700; }

@@ -14,6 +14,8 @@
       :project-id="projectId"
       :initial="initialKns"
       :survey-rev="surveyRev"
+      :total-rub="totalRub"
+      :saved-survey="savedSurvey"
       :device-type="deviceType"
       :device-types="DEVICE_TYPES"
       :can-change-type="!estimateId"
@@ -26,6 +28,8 @@
       :project-id="projectId"
       :initial="initialEmk"
       :survey-rev="surveyRev"
+      :total-rub="totalRub"
+      :saved-survey="savedSurvey"
       :device-type="deviceType"
       :device-types="DEVICE_TYPES"
       :can-change-type="!estimateId"
@@ -38,6 +42,8 @@
       :project-id="projectId"
       :initial="initialKol"
       :survey-rev="surveyRev"
+      :total-rub="totalRub"
+      :saved-survey="savedSurvey"
       :device-type="deviceType"
       :device-types="DEVICE_TYPES"
       :can-change-type="!estimateId"
@@ -48,13 +54,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SurveyKnsView from '@/views/SurveyKnsView.vue'
 import SurveyEmkView from '@/views/SurveyEmkView.vue'
 import SurveyKolView from '@/views/SurveyKolView.vue'
 import { estimatesApi, type DeviceType } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
+import { boundPricesFromTree } from '@/engines/price-binding'
 import type { KnsSurveyForm } from '@/types/survey'
 import type { EmkSurveyForm, KolSurveyForm } from '@/types/survey-emk-kol'
 
@@ -63,9 +70,8 @@ import type { EmkSurveyForm, KolSurveyForm } from '@/types/survey-emk-kol'
  *
  * - без `:id` — создание нового ОЛ: тип выбирается переключателем,
  *   `?type=` задаёт стартовую вкладку, `?project=` привязывает расчёт к проекту;
- * - с `:id` — редактирование ОЛ существующего расчёта: форма предзаполняется
- *   сохранёнными данными, сохранение поднимает `surveyRev` и запускает
- *   рематериализацию в конфигураторе.
+ * - с `:id` — ОЛ существующего изделия: форма предзаполняется сохранёнными
+ *   данными, каждая правка сама пересобирает и сохраняет расчёт (useSurveySync).
  */
 
 const route = useRoute()
@@ -97,6 +103,10 @@ const loadError = ref<string | null>(null)
 const projectTitle = ref<string | null>(null)
 
 const surveyRev = ref(0)
+/** Итог расчёта на момент открытия — живая панель ОЛ показывает его до первого пересчёта. */
+const totalRub = ref<number | null>(null)
+/** Сохранённый surveyData — с ним ОЛ сверяет, есть ли что сохранять. */
+const savedSurvey = ref<Record<string, unknown> | null>(null)
 const initialKns = ref<Partial<KnsSurveyForm> | null>(null)
 const initialEmk = ref<Partial<EmkSurveyForm> | null>(null)
 const initialKol = ref<Partial<KolSurveyForm> | null>(null)
@@ -107,14 +117,24 @@ const DEVICE_TYPES = [
   { value: 'KOL' as DeviceType, label: 'Колодец' },
 ]
 
-onMounted(async () => {
+/**
+ * Загрузка листа под текущий маршрут.
+ *
+ * Зовётся и при монтировании, и при смене id в маршруте: после «Создать
+ * расчёт» лист переходит с /survey на /survey/:id, а роутер переиспользует
+ * тот же экземпляр компонента — без повторной загрузки ветка осталась бы в
+ * режиме создания и не знала бы, куда сохранять.
+ */
+async function loadSurvey() {
   if (estimateId.value) {
     loading.value = true
     try {
       const est = await estimatesApi.get(estimateId.value)
       deviceType.value = est.deviceType
       estimateProjectId.value = est.projectId
+      totalRub.value = est.totalRub
       const sd = est.surveyData as Record<string, unknown>
+      savedSurvey.value = sd
       surveyRev.value = typeof sd.surveyRev === 'number' ? sd.surveyRev : 0
 
       // Полная форма лежит в `form` (единый контракт). Для старых расчётов КНС
@@ -126,9 +146,16 @@ onMounted(async () => {
         (est.deviceType === 'KNS' && (sd.kns as Record<string, unknown> | undefined)?.zayavka != null
           ? (sd.kns as Record<string, unknown>)
           : null)
-      if (est.deviceType === 'KNS') initialKns.value = full as Partial<KnsSurveyForm> | null
-      else if (est.deviceType === 'EMK') initialEmk.value = full as Partial<EmkSurveyForm> | null
-      else initialKol.value = full as Partial<KolSurveyForm> | null
+      // Цены трубы и насоса, введённые в самом расчёте до появления полей
+      // ОЛ, переезжают в поля: иначе первый же пересчёт из ОЛ собрал бы дерево
+      // с пустыми полями, и цена бы пропала. Заполненное поле не трогаем.
+      const prices = boundPricesFromTree(sd.tree)
+      const blank = (k: string) => !String((full as Record<string, unknown> | null)?.[k] ?? '').trim()
+      const inherited = Object.fromEntries(Object.entries(prices).filter(([k]) => blank(k)))
+      const withPrices = full || Object.keys(inherited).length ? { ...full, ...inherited } : null
+      if (est.deviceType === 'KNS') initialKns.value = withPrices as Partial<KnsSurveyForm> | null
+      else if (est.deviceType === 'EMK') initialEmk.value = withPrices as Partial<EmkSurveyForm> | null
+      else initialKol.value = withPrices as Partial<KolSurveyForm> | null
     } catch (e) {
       loadError.value = e instanceof Error ? e.message : 'Не удалось загрузить расчёт'
     } finally {
@@ -156,6 +183,11 @@ onMounted(async () => {
       loading.value = false
     }
   }
+}
+
+onMounted(loadSurvey)
+watch(estimateId, (next, prev) => {
+  if (next && next !== prev) void loadSurvey()
 })
 </script>
 

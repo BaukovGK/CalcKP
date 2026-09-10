@@ -36,6 +36,7 @@ import {
   buildPressurePipe,
   buildSlab,
   buildVent,
+  boundPrice,
   makeRow,
   nextId,
   operationWithFot,
@@ -112,6 +113,9 @@ export interface EmkSurveyParams {
   insulationEnabled: boolean
   insulationDepthMm: number
 
+  /** Цена трубы корпуса, ₽/м.п. — поле ОЛ, связано с ценой строки трубы. */
+  pipePriceRub?: number | null
+
   tirage?: number
 }
 
@@ -135,6 +139,9 @@ export interface KolSurveyParams {
   underRoadway: boolean
   insulationEnabled: boolean
   insulationDepthMm: number
+
+  /** Цена трубы корпуса, ₽/м.п. — поле ОЛ, связано с ценой строки трубы. */
+  pipePriceRub?: number | null
 
   tirage?: number
 }
@@ -311,8 +318,11 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
                 ? `Вес трубы не найден (DN ${s.dn}; PN ${pnPipe}; SN ${sn}) · длина = CEILING(4V/(π·D²)) = ${lengthMm} мм`
                 : `${kgPerM} кг/пм · длина из объёма ${s.volumeM3} м³ = ${lengthMm} мм`,
           }),
-          // Цена трубы договорная — как у КНС (Механика §5.2).
+          // Цена трубы договорная — как у КНС (Механика §5.2): её дают полем
+          // ОЛ «Цена трубы, ₽/м.п.», связанным с этой строкой.
           priceCatalog: null,
+          priceBinding: 'pipePrice',
+          priceManual: boundPrice(s.pipePriceRub),
         },
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
@@ -484,7 +494,10 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
                 ? `Вес трубы не найден (DN ${s.dn}; PN ${pnPipe}; SN ${sn})`
                 : `${kgPerM} кг/пм · глубина ${geo.totalDepthMm} мм${s.hasNeck ? ' (с горловиной)' : ''}`,
           }),
+          // Цена договорная — поле ОЛ «Цена трубы, ₽/м.п.», связанное со строкой.
           priceCatalog: null,
+          priceBinding: 'pipePrice',
+          priceManual: boundPrice(s.pipePriceRub),
         },
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
