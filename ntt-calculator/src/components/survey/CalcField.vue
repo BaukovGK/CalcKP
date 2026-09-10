@@ -3,8 +3,11 @@
     <span class="cf-l">{{ label }}</span>
 
     <div class="cf-row">
+      <!-- data-numeric: поле числовое, текст в него не пропускается
+           (utils/numeric-input.ts). -->
       <input
         class="cf-i"
+        data-numeric
         :class="{ 'is-ovr': overridden }"
         :value="displayValue"
         :placeholder="String(calc)"

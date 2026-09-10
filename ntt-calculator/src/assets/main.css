@@ -396,3 +396,15 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 /* ── CALCULATOR: back-link ── */
 .back-link { background: transparent; border: none; color: var(--tx3); font-size: 10.8px; font-family: Archivo, system-ui, sans-serif; cursor: pointer; padding: 0 0 4px; letter-spacing: .03em; transition: color .12s; }
 .back-link:hover { color: var(--am); }
+
+/* ── Числовое поле, которое не разобралось как число ──
+   Правило одно на всё приложение (utils/numeric-input.ts): текст в числовые
+   поля не пропускается, а то, что и после очистки не число («2**3», «(»),
+   подсвечивается. !important — намеренно: у ячеек расчёта и полей ОЛ свои
+   цвета состояний (ручное значение, нет цены), и ошибка ввода должна
+   перекрывать их все, пока её не исправят. */
+input.is-invalid {
+  border-color: var(--acc) !important;
+  background: var(--acc-bg) !important;
+  outline-color: var(--acc);
+}

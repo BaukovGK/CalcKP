@@ -547,6 +547,7 @@ const syncLabel = computed(() => {
   switch (sync.status.value) {
     case 'pending': return 'изменения…'
     case 'saving': return 'сохраняем и пересчитываем…'
+    case 'invalid': return 'не сохранено: исправьте поля, выделенные красным'
     case 'saved': return `сохранено ${sync.savedAt.value?.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) ?? ''} · расчёт пересчитан`
     case 'error': return `не сохранено: ${sync.error.value ?? 'ошибка'}`
     default: return 'сохранено · расчёт актуален'
@@ -876,7 +877,7 @@ async function createEstimate() {
 /* Статус автосохранения: ошибка — акцентом, чтобы не прошла мимо; идущее
    сохранение — приглушённо, оно штатное. */
 .ol-draft--saving, .ol-draft--pending { color: var(--muted); }
-.ol-draft--error { color: var(--acc); }
+.ol-draft--error, .ol-draft--invalid { color: var(--acc); }
 
 .ol-body { flex: 1; display: flex; min-height: 0; }
 

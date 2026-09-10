@@ -104,7 +104,7 @@ defineExpose({ formEl })
 .ol-top-r { display: flex; align-items: center; gap: 10px; flex: none; }
 .ol-draft { font-size: 13.2px; color: var(--faint); }
 .ol-draft--saving, .ol-draft--pending { color: var(--muted); }
-.ol-draft--error { color: var(--acc); }
+.ol-draft--error, .ol-draft--invalid { color: var(--acc); }
 
 .ol-body { flex: 1; display: flex; min-height: 0; }
 

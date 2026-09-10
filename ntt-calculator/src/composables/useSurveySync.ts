@@ -1,8 +1,12 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useCalcTreeStore } from '@/stores/calcTree'
+import { hasInvalidNumericField } from '@/utils/numeric-input'
 
-/** Где сейчас правка ОЛ: ждёт паузы в вводе, уходит на сервер, сохранена, упала. */
-export type SyncStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
+/**
+ * Где сейчас правка ОЛ: ждёт паузы в вводе, уходит на сервер, сохранена, упала
+ * или ждёт исправления числового поля, которое не разобралось.
+ */
+export type SyncStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'invalid'
 
 /**
  * Пауза после последней правки, мс. Меньше — запрос на каждую букву в поле
@@ -59,7 +63,13 @@ export function useSurveySync(opts: {
   savedPayload?: Record<string, unknown> | null
   /** Полезная нагрузка ОЛ без ревизии: form, kns/emk/kol, derived… */
   payload: () => Record<string, unknown>
+  /**
+   * Можно ли сохранять. По умолчанию — нет, пока на экране есть числовое поле,
+   * которое не разобралось («2**3»): оно ушло бы в расчёт пустым.
+   */
+  canSave?: () => boolean
 }) {
+  const canSave = opts.canSave ?? (() => !hasInvalidNumericField())
   const store = useCalcTreeStore()
 
   const status = ref<SyncStatus>('idle')
@@ -100,6 +110,12 @@ export function useSurveySync(opts: {
     const payload = opts.payload()
     if (isUnchanged(payload)) {
       if (status.value === 'pending') status.value = savedAt.value ? 'saved' : 'idle'
+      return
+    }
+    // Поле с неразобранным числом — ждём исправления: исправление изменит
+    // нагрузку, и сохранение запустится само.
+    if (!canSave()) {
+      status.value = 'invalid'
       return
     }
     inFlight = true
