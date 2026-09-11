@@ -699,7 +699,9 @@ describe('патрубки под стеклокомпозитную трубу'
     expect(bolt.note).toContain('не найдена')
   })
 
-  it('колодец: гильза и «Муфта-2» по DN трубы, ламинируется проходная муфта', () => {
+  // У колодца стеклопластиковый патрубок — муфта: она ставится вместо гильзы
+  // и ламинируется к корпусу (уточнение завода 11.09.2026).
+  it('колодец: «Муфта-2» по DN трубы вместо гильзы, ламинируется к корпусу', () => {
     const [inlet, outlet] = nozzles(
       materializeKol(ctx, {
         ...KOL,
@@ -710,22 +712,27 @@ describe('патрубки под стеклокомпозитную трубу'
         outletMaterial: 'стеклокомпозит',
       }),
     )
-    // DN250 → гильза Ø400 формуется: Мф 1,1 кг.
     expect(inlet!.title).toBe('Патрубок подводящий стеклопластиковый DN250 ×1')
-    expect(inlet!.rows.find((r) => r.name === 'Формовка гильз')!.qtyCalc).toBeCloseTo(1.1, 9)
+    // Гильзы нет — ни формованной, ни из трубы: муфта, её ламинирование и прорезка.
+    expect(inlet!.rows.map((r) => r.name)).toEqual([
+      'Муфта-2 СК/НПС-К 250-1',
+      'Ламинирование проходной муфты к корпусу',
+      'ФОТ',
+      'Прорезка отверстия патрубка в корпусе',
+    ])
     // «Муфта-2» — та же «Муфта-1», только без центрального ограничителя.
-    const coupling = inlet!.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')!
+    const coupling = inlet!.rows[0]!
     expect(coupling.qtyCalc).toBe(1)
     expect(coupling.unit).toBe('шт')
     // Муфты в прайсе нет — цена договорная, строка «красная», как у «Муфты-1».
     expect(coupling.priceCatalog).toBeNull()
-    const lam = inlet!.rows.find((r) => r.name === 'Ламинирование проходной муфты к корпусу')!
+    // Норма ламинирования и прорезка — по Ø гильзы, как в листе: Мф(Ø400) 1,1 × 3/10.
+    const lam = inlet!.rows[1]!
     expect(lam.qtyCalc).toBeCloseTo(0.33, 9)
     expect(lam.fotK).toBe(1)
-    expect(inlet!.rows.some((r) => r.name === 'Ламинирование патрубка к корпусу' || r.name.includes('фланца'))).toBe(false)
-    // DN400 → гильза Ø500 — отрезок трубы 0,5 м × 2, муфт две.
-    expect(outlet!.rows.find((r) => r.name === 'Труба СК/НПС-К 500-0,1-2500')!.qtyCalc).toBeCloseTo(1, 9)
+    // DN400 ×2: муфт две, трубы гильзы и товарного вида нет.
     expect(outlet!.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 400-1')!.qtyCalc).toBe(2)
+    expect(outlet!.rows.some((r) => r.name.startsWith('Труба СК') || r.name === 'Придание изделию товарного вида')).toBe(false)
     expect(outlet!.rows.find((r) => r.name === 'Ламинирование проходной муфты к корпусу')!.qtyCalc).toBeCloseTo(1.9 * 0.3 * 2, 9)
   })
 

@@ -574,26 +574,30 @@ describe('раздел 1 «Корпус»', () => {
   })
 
   // Трубы заводятся внутрь станции через гильзу или — стеклокомпозитная —
-  // через муфту (уточнение завода 11.09.2026); фланцы стоят уже внутри.
-  it('стеклокомпозитные трубы — через «Муфту-2»: гильза до DN 300 формуется', () => {
+  // через муфту: она ставится вместо гильзы и ламинируется к корпусу
+  // (уточнения завода 11.09.2026); фланцы стоят уже внутри.
+  it('стеклокомпозитные трубы — через «Муфту-2» вместо гильзы', () => {
     const a5 = materializeKns(ctx, { ...OL3487, inletMaterial: 'стеклокомпозит', outletMaterial: 'стеклокомпозит' })
       .sections.find((s) => s.code === '1')!
       .components.filter((c) => c.nodeCode === 'A5')
     expect(a5.map((c) => c.title)).toEqual(['Патрубок подводящий стеклопластиковый DN250 ×1', 'Патрубок напорный стеклопластиковый DN150 ×2'])
     const [inlet, outlet] = a5.map((c) => c.rows)
-    // Подводящий DN250 → гильза Ø400: формовка 1,1 кг, муфта по DN трубы.
-    expect(inlet!.find((r) => r.name === 'Формовка гильз')!.qtyCalc).toBeCloseTo(1.1, 9)
-    const coupling = inlet!.find((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')!
+    expect(inlet!.map((r) => r.name)).toEqual([
+      'Муфта-2 СК/НПС-К 250-1',
+      'Ламинирование проходной муфты к корпусу',
+      'ФОТ',
+      'Прорезка отверстия под гильзу входящего патрубка',
+    ])
+    const coupling = inlet![0]!
     expect(coupling.qtyCalc).toBe(1)
     expect(coupling.priceCatalog).toBeNull()
     expect(coupling.note).toContain('та же «Муфта-1»')
-    expect(inlet!.find((r) => r.name === 'Ламинирование проходной муфты к корпусу')!.qtyCalc).toBeCloseTo(0.33, 9)
-    expect(inlet!.some((r) => r.name.startsWith('Труба СК') || r.name.includes('фланца'))).toBe(false)
-    // Напорные DN150 ×2: гильза Ø250 формуется 0,6 × 2, муфт две.
-    const formed = outlet!.find((r) => r.name === 'Формовка гильз')!
-    expect(formed.qtyCalc).toBeCloseTo(1.2, 9)
-    expect(formed.note).toContain('стеклопластиковый патрубок')
+    // Норма ламинирования — по Ø гильзы, как в листе: Мф(Ø400) 1,1 × 3/10.
+    expect(inlet![1]!.qtyCalc).toBeCloseTo(0.33, 9)
+    // Напорные DN150 ×2: муфт две, гильзы под протяжку нет.
     expect(outlet!.find((r) => r.name === 'Муфта-2 СК/НПС-К 150-1')!.qtyCalc).toBe(2)
+    expect(outlet!.some((r) => r.name === 'Формовка гильз')).toBe(false)
+    expect(outlet!.find((r) => r.name === 'Ламинирование проходной муфты к корпусу')!.qtyCalc).toBeCloseTo(0.36, 9)
   })
 
   // Малый подводящий идёт по листу: ручная формовка 0,5 кг на патрубок.
