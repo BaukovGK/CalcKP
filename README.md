@@ -203,7 +203,7 @@ npm run db:seed                      # → в базу
 ## Тесты
 
 ```powershell
-cd ntt-calculator; npm test     # 741 тест в 38 файлах
+cd ntt-calculator; npm test     # 743 теста в 38 файлах
 cd backend;        npm test     # 223 теста в 12 файлах
 ```
 

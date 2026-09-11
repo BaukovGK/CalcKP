@@ -470,12 +470,25 @@ export function ownPipeRow(ctx: MaterializeContext, name: string, qtyCalc: numbe
   }
 }
 
+/**
+ * Ниже этого DN гильза напорного патрубка КНС формуется — «Формовка гильз»
+ * по норме Мф: через формованную гильзу протягивается напорная труба малого
+ * диаметра (уточнение 11.09.2026). Лист КНС здесь ставит ручную формовку
+ * 0,5 кг (меньше DN 200) или отрезок трубы (DN 200–299).
+ */
+export const PRESSURE_SLEEVE_FORMED_BELOW_DN = 300
+
 /** Патрубок изделия: заголовок узла, DN и число, наименование прорезки по прайсу. */
 export interface SleeveNozzle {
   title: string
   dn: number
   count: number
   cutoutName: string
+  /**
+   * Ниже этого DN гильза не режется из трубы, а формуется: «Формовка гильз»,
+   * масса — норма Мф по Ø гильзы × кол-во. Нет — модель листа.
+   */
+  formedSleeveBelowDn?: number
 }
 
 /**
@@ -492,8 +505,11 @@ export interface SleeveNozzle {
  *   своё — у КНС «под гильзу входящего / напорного патрубка», у ёмкости и
  *   колодца «патрубка в корпусе».
  *
- * Прежде КНС строила «Формовку гильз» — Мф × кол-во: трубы гильзы не было,
- * а масса формовки и ФОТ выходили втрое больше ламинирования по листу.
+ * Исключение — `formedSleeveBelowDn`: у напорных патрубков КНС меньше DN 300
+ * гильза формуется («Формовка гильз», Мф × кол-во, ФОТ k = 1) — через неё
+ * протягивается напорная труба малого диаметра. Ламинирование к корпусу и
+ * прорезка у такой гильзы те же.
+ *
  * Материал патрубка «Труба стеклокомпозитная» (в листе — «Муфта-2» и порог
  * DN 300) в расчёт не передаётся: разборы КНС и ЕМК/КОЛ.
  */
@@ -505,9 +521,23 @@ export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzl
     const norm = ctx.nozzleNormOf?.(sleeve) ?? null
     const lamination = norm ? laminationMassKg(norm.moldingMassKg) * n.count : null
     const sleeveM = SLEEVE_PIPE_M * n.count
-    const fromPipe = n.dn >= SLEEVE_PIPE_FROM_DN
+    const formed = n.formedSleeveBelowDn != null && n.dn < n.formedSleeveBelowDn
+    const fromPipe = !formed && n.dn >= SLEEVE_PIPE_FROM_DN
+    const formedMass = norm ? norm.moldingMassKg * n.count : null
 
-    const sleeveRows: CalcRowNode[] = fromPipe
+    const sleeveRows: CalcRowNode[] = formed
+      ? operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Формовка гильз',
+          unit: 'кг',
+          qtyCalc: formedMass,
+          fotK: FOT_K_MANUAL,
+          note:
+            formedMass == null
+              ? `Гильза Ø${sleeve} × ${n.count} · нормы формовки для Ø${sleeve} в «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф(Ø${sleeve}) ${fmtNum(norm!.moldingMassKg)} кг × ${n.count} = ${fmtNum(formedMass)} кг — гильза под протяжку напорной трубы меньше DN ${n.formedSleeveBelowDn}`,
+        })
+      : fromPipe
       ? [
           ownPipeRow(
             ctx,
@@ -729,8 +759,9 @@ export function buildKnsBottom(ctx: MaterializeContext, s: Pick<KnsSurveyParams,
 }
 
 /**
- * A5 — патрубки КНС: подводящие и напорные, каждый со своей гильзой из трубы
- * (`buildSleeveNozzles`; лист КНС, строки 26–30, 40–44, 87–88).
+ * A5 — патрубки КНС: подводящие и напорные, каждый со своей гильзой
+ * (`buildSleeveNozzles`; лист КНС, строки 26–30, 40–44, 87–88). У напорных
+ * меньше DN 300 гильза формуется — «Формовка гильз» по норме Мф.
  */
 export function buildKnsNozzles(
   ctx: MaterializeContext,
@@ -750,6 +781,8 @@ export function buildKnsNozzles(
       dn: s.outletDn,
       count: s.outletCount,
       cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)',
+      // Гильза под протяжку напорной трубы малого диаметра формуется.
+      formedSleeveBelowDn: PRESSURE_SLEEVE_FORMED_BELOW_DN,
     },
   ])
 }

@@ -515,10 +515,11 @@ describe('раздел 1 «Корпус»', () => {
     expect(rows.filter((r) => r.name === PIPE_NAME)).toHaveLength(1)
   })
 
-  // Гильза — отрезок трубы Ø гильзы 0,5 м на патрубок (лист КНС, строки
-  // 27–28); меньше DN 200 — ручная формовка 0,5 кг на патрубок (строка 41).
-  // Прежде — «Формовка гильз» Мф × кол-во, которой в листе нет.
-  it('гильзы: подводящий DN250 — труба Ø400 0,5 м, напорные DN150 — ручная формовка', () => {
+  // Гильза подводящего — отрезок трубы Ø гильзы 0,5 м на патрубок (лист КНС,
+  // строки 27–28). У напорных меньше DN 300 гильза формуется: через неё
+  // протягивается напорная труба малого диаметра — «Формовка гильз» по норме
+  // Мф (уточнение 11.09.2026; лист здесь ставит ручную формовку 0,5 кг).
+  it('гильзы: подводящий DN250 — труба Ø400 0,5 м, напорные DN150 — «Формовка гильз» по норме', () => {
     const a5 = korpus.components.filter((c) => c.nodeCode === 'A5')
     expect(a5.map((c) => c.title)).toEqual(['Патрубок подводящий DN250 ×1', 'Патрубок напорный DN150 ×2'])
     const inlet = a5[0]!.rows
@@ -528,9 +529,34 @@ describe('раздел 1 «Корпус»', () => {
     expect(pipe.priceCatalog).toBeNull()
     expect(inlet.find((r) => r.name === 'Придание изделию товарного вида')!.qtyCalc).toBeCloseTo((400 / 1300) * 0.5, 9)
     const outlet = a5[1]!.rows
-    expect(outlet.find((r) => r.name === 'Ручная формовка патрубка')!.qtyCalc).toBe(1)
-    expect(outlet.some((r) => r.name.startsWith('Труба СК'))).toBe(false)
-    expect(rows.some((r) => r.name === 'Формовка гильз')).toBe(false)
+    // Напорный DN150 → гильза Ø250 → Мф 0,6 кг × 2 патрубка.
+    const formed = outlet.find((r) => r.name === 'Формовка гильз')!
+    expect(formed.qtyCalc).toBeCloseTo(1.2, 9)
+    expect(formed.fotK).toBe(1)
+    expect(formed.priceCatalog).toBe(310.2)
+    expect(outlet.some((r) => r.name.startsWith('Труба СК') || r.name === 'Ручная формовка патрубка')).toBe(false)
+  })
+
+  it('напорные DN 200–299 — тоже «Формовка гильз», от DN 300 — отрезок трубы', () => {
+    const nozzle = (outletDn: number) =>
+      materializeKns(ctx, { ...OL3487, outletDn })
+        .sections.find((s) => s.code === '1')!
+        .components.find((c) => c.title.startsWith('Патрубок напорный'))!.rows
+    // DN250 → гильза Ø400 → Мф 1,1 × 2.
+    expect(nozzle(250).find((r) => r.name === 'Формовка гильз')!.qtyCalc).toBeCloseTo(2.2, 9)
+    expect(nozzle(250).some((r) => r.name.startsWith('Труба СК'))).toBe(false)
+    const big = nozzle(300)
+    expect(big.find((r) => r.name === 'Труба СК/НПС-К 400-0,1-2500')!.qtyCalc).toBeCloseTo(1, 9)
+    expect(big.some((r) => r.name === 'Формовка гильз')).toBe(false)
+  })
+
+  // Малый подводящий идёт по листу: ручная формовка 0,5 кг на патрубок.
+  it('подводящий меньше DN 200 — ручная формовка патрубка, как в листе', () => {
+    const inlet = materializeKns(ctx, { ...OL3487, inletDn: 150 })
+      .sections.find((s) => s.code === '1')!
+      .components.find((c) => c.title.startsWith('Патрубок подводящий'))!.rows
+    expect(inlet.find((r) => r.name === 'Ручная формовка патрубка')!.qtyCalc).toBe(0.5)
+    expect(inlet.some((r) => r.name === 'Формовка гильз')).toBe(false)
   })
 
   // Ламинирование гильзы к корпусу — Мф по диаметру ГИЛЬЗЫ × 3/10 × кол-во,
@@ -978,12 +1004,13 @@ describe('сверка с образцом эталона «Калькулято
     expect(qty('Монтаж Шкафа управления')).toBe(6)
   })
 
-  // Патрубки (строки 26–44, 87–88): подводящий DN400 — гильза Ø500, напорные
-  // DN150 ×2 — ручная формовка; фланцевый патрубок под задвижку — один на
+  // Патрубки (строки 26–44, 87–88): подводящий DN400 — гильза Ø500; напорные
+  // DN150 ×2 — формованная гильза по норме (в листе ручная формовка 1 кг,
+  // уточнение 11.09.2026); фланцевый патрубок под задвижку — один на
   // подводящий, а не два, как в листе (указание завода).
-  it('патрубки: гильзы 0,5 м и 1 кг, ламинирование 0,57 · 0,36 · 0,33 с ФОТ 0,6 · 0,4 · 0,4, прорезки 0,8 · 0,8', () => {
+  it('патрубки: гильзы 0,5 м и 1,2 кг, ламинирование 0,57 · 0,36 · 0,33 с ФОТ 0,6 · 0,4 · 0,4, прорезки 0,8 · 0,8', () => {
     expect(rows.filter((r) => r.name === 'Труба СК/НПС-К 500-0,1-2500').map((r) => r.qtyCalc)).toEqual([0.5, 0.3])
-    expect(qty('Ручная формовка патрубка')).toBe(1)
+    expect(qty('Формовка гильз')).toBeCloseTo(1.2, 9)
     const all = recalcFotSatellites(rows)
     const lam = all.filter((r) => r.name === 'Ламинирование патрубка к корпусу')
     expect(lam.map((r) => +computeRow(r).qty.toFixed(2))).toEqual([0.57, 0.36, 0.33])
