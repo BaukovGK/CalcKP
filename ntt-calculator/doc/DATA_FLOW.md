@@ -27,12 +27,8 @@ App.vue → RouterView
 │   ├── NodeCatalogEditor         узлы каталога: параметры, строки, формулы
 │   └── + вкладки справочников материализации (нормы, веса, Мс, матрицы)
 └── AdminView                     /admin
-ui/: BaseModal, ThemeToggle, ToastHost
+ui/: BaseModal, HintLayer, ThemeToggle, ToastHost, UserMenu, ChangePasswordModal
 ```
-
-`components/ui/ContextMenu.vue` в это дерево не входит: он не импортируется
-ни одним экраном (как и `dashboard/EstimateCard.vue` — ROADMAP, «Технический
-долг»).
 
 ## 2. Сквозной поток данных
 
@@ -122,7 +118,8 @@ load(id):
   фронт держал версию захардкоженной единицей, и топбар расходился со
   снапшотом
 
-Отдельный контур — `POST /api/pump-station/*` (габарит НС, SN, диаметр
-напорного, подбор насоса): чистые функции бэка плюс каталог `Pump` в БД.
-Фронт их пока не вызывает, в `surveyData` результаты не попадают
-(ARCHITECTURE §4).
+Подбор насосной станции — `POST /api/pump-station/*` (габарит НС, SN,
+диаметр напорного, напорный узел, подбор насоса): чистые функции бэка плюс
+каталог `Pump` в БД. Опросный лист КНС вызывает подбор насоса, диаметр
+напорного и напорный узел (`composables/usePumpSelection.ts`); марка насоса
+уходит в `surveyData.derived.pumpModel` и дальше в строку насоса расчёта.
