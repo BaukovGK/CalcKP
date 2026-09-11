@@ -94,7 +94,7 @@ cd ntt-calculator; npm run dev    # :5173
 | `technolog@ntt.local` | `technolog123` | TECHNOLOG — шаблоны (`/templates`) |
 | `viewer@ntt.local` | `viewer123` | VIEWER — только просмотр (вкладка Битрикс24) |
 
-Список — `backend/prisma/seed.ts:80`. Шестая роль схемы, `BUYER` (импорт
+Список — `DEMO_USERS` в `backend/prisma/seed.ts`. Шестая роль схемы, `BUYER` (импорт
 прайса), учётки в сиде не имеет — проверяйте `/prices` под `admin@ntt.local`.
 
 ---
@@ -150,7 +150,8 @@ docker compose --profile tools run --rm restore --yes latest  # восстано
 check:lint` — проверяющий вариант без `--fix`) и тесты фронта; на бэке —
 `prisma migrate deploy` и сид против сервисного Postgres, затем сборка
 (`npm run build`) и тесты бэка (числа — в «Тестах» ниже). Ловит расхождение
-схемы и миграций до деплоя.
+схемы и миграций до деплоя. Третья задача — документы: ссылки на код в них
+только по имени, без номеров строк (`node tools/check-doc-refs.mjs`).
 Линта у бэкенда нет.
 
 **Деплой** (автоматически при push в `master` после зелёного CI): GitHub
@@ -191,13 +192,13 @@ npm run db:seed                      # → в базу
 Экстрактор падает при расхождении контрольных чисел — лучше упасть, чем
 засеять мусор: 162 GRP-трубы, 26 ПЭ, 16 категорий, ставка ФОТ по тройному
 ключу «ФОТ / ФОТ / чел. ч», вес DN3000 = 970,2 кг/пм, инженерные матрицы
-(`backend/tools/extract-refs.ts:362-409`). Прайс проверяется мягко — порогом
-`prices.length < 900` (`extract-refs.ts:361`): точного контрольного числа у
+(блок «Проверки целостности» в `main`, `backend/tools/extract-refs.ts`). Прайс проверяется мягко — порогом
+`prices.length < 900` (`extract-refs.ts`): точного контрольного числа у
 него нет, сейчас извлекается 1043 позиции.
 
 Каталог насосов из шаблона **не извлекается**: `prisma/seed-data/pumps.json`
 (61 модель Vandjord VSL) лежит в репозитории готовым и грузится сидом в
-таблицу `Pump` (`backend/prisma/seed.ts:170`).
+таблицу `Pump` (`seedPumps` в `backend/prisma/seed.ts`).
 
 Прайс версионируется целиком: импорт через UI (`/prices`, роли ADMIN и BUYER)
 и правка цены на том же экране создают новую версию и пишут `PriceHistory`.
@@ -212,6 +213,7 @@ npm run db:seed                      # → в базу
 ```powershell
 cd ntt-calculator; npm test     # 903 теста в 51 файле
 cd backend;        npm test     # 312 тестов в 22 файлах
+node tools/check-doc-refs.mjs   # из корня: ссылки на код в документах — без номеров строк
 ```
 
 **Упал тест «сборка совпадает с последней редакцией»** (`engines/builtin-revisions.test.ts`)

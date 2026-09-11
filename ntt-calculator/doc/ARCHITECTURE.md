@@ -142,28 +142,34 @@
 ## 4. Где считается расчёт (ключевое решение)
 
 **Вся математика СМЕТЫ — на клиенте** (`ntt-calculator/src/engines/*`).
-Сервер смету НЕ считает: он хранит `surveyData` (JSON) и валидирует инвариант
-на единственном гейте — строки без цены блокируют выпуск КП
-(`backend/src/utils/estimate-tree.ts:91` → `routes/estimates.routes.ts:304`).
+Сервер смету НЕ считает: он хранит `surveyData` (JSON) и проверяет дерево
+только на выпуске КП (`POST /api/estimates/:id/kp` в `routes/estimates.routes.ts`):
+строки без цены (`rowsWithoutPrice` в `backend/src/utils/estimate-tree.ts`),
+отрицательные строки (`rowsWithNegativeSum`, 422 `NEGATIVE_ROWS`) и ставки
+экономики не из прайса (`treeRateFallbacks`, 422 `RATES_NOT_IN_PRICE`).
 Переход дерева в спецификацию печатной формы — там же
-(`estimate-tree.ts:129`, `extractSpecification`).
+(`estimate-tree.ts`, `extractSpecification`).
 
 Обоснование: формулы итеративно сверяются с эталонными Excel; один движок
-на TypeScript с юнит-тестами (264 шт.) проще держать верным, чем два.
+на TypeScript с юнит-тестами (их число — в README, «Тесты») проще держать
+верным, чем два.
 Плата — итог (`totalRub`) приходит с клиента и фиксируется на сервере при
 сохранении; целостность обеспечивают снапшоты и аудит.
 
 **Исключение — подбор насосной станции.** Габарит корпуса, кольцевая
-жёсткость, диаметр напорного трубопровода и марка насоса считаются НА
-СЕРВЕРЕ: `backend/src/utils/pump-station-dimensions.ts:199`,
-`ring-stiffness.ts:36`, `pipe-hydraulics.ts:68`, `pump-selection.ts:161`
+жёсткость, диаметр напорного трубопровода, диаметры напорного узла и марка
+насоса считаются НА СЕРВЕРЕ: `calcPumpStationDimensions`
+(`backend/src/utils/pump-station-dimensions.ts`), `ringStiffnessPa`
+(`ring-stiffness.ts`), `calcDischargePipeDiameterMm` и `selectPressurePiping`
+(`pipe-hydraulics.ts`), `selectPump` (`pump-selection.ts`)
 (эндпоинты — §8). Причина: подбор насоса ходит в каталог `Pump` в БД, а
-значит нужен серверу. Между собой четыре функции не связаны — каждый
+значит нужен серверу. Между собой пять функций не связаны — каждый
 эндпоинт независим, `selectPump` результатов остальных не принимает
-(`backend/src/utils/pump-selection.ts:161`). Два из четырёх подключены к
+(`backend/src/utils/pump-selection.ts`). Три из пяти подключены к
 опросному листу КНС (`src/composables/usePumpSelection.ts`): марка насоса
 уходит в `derived.pumpModel` и дальше в наименование строки расчёта, диаметр
-напорного показывается подсказкой. Габарит станции и кольцевую жёсткость фронт
+напорного и напорный узел (стояк насоса, коллектор, отводящий патрубок)
+показываются подсказками. Габарит станции и кольцевую жёсткость фронт
 по-прежнему считает своей копией арифметики (`engines/survey-kns.ts`,
 `computeDepth` и `snByDepth`) — общего пакета у фронта и бэка нет. Правило SN
 в обеих копиях одно (с 11.09.2026), его держат общие примеры
@@ -273,8 +279,9 @@ ROUNDUP до 100 ₽ → рентабельность. ПЗР входит в «
 
 Расчёт после выпуска КП НЕ замораживается — правка продолжается, это
 следующий шаг процесса. Поэтому печатная форма строится из снапшота, а не из
-текущего дерева, а удаление расчёта, по которому есть снапшоты, отклоняется:
-422 `ESTIMATE_HAS_SNAPSHOTS` (`routes/estimates.routes.ts:223`) — снапшот
+текущего дерева, а удаление расчёта, по которому есть снапшоты выпуска КП или
+ручной фиксации, отклоняется:
+422 `ESTIMATE_HAS_SNAPSHOTS` (`DELETE /api/estimates/:id` в `routes/estimates.routes.ts`) — снапшот
 подтверждает цену, ушедшую заказчику.
 
 ## 7. Роли и доступ
@@ -340,8 +347,11 @@ POST   /api/templates/products/:device/publish|activate  (version: null —
 
 Подбор насосной станции (любая авторизованная роль, §4):
 POST   /api/pump-station/dimensions              габарит корпуса (DN, Нподз)
-POST   /api/pump-station/ring-stiffness          SN по глубине + признаку ТТ МВК
+POST   /api/pump-station/ring-stiffness          SN по глубине и «под проезжей
+                                                 частью»; ТТ МВК — обозначение
 POST   /api/pump-station/discharge-pipe-diameter диаметр напорного по расходу
+POST   /api/pump-station/pressure-piping         напорный узел: стояк насоса,
+                                                 коллектор, отводящий патрубок
 POST   /api/pump-station/select-pump             марка насоса по рабочей точке
 
 GET    /api/admin/users               POST/PATCH пользователи

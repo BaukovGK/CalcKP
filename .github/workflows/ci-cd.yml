@@ -1,8 +1,9 @@
 # CI + деплой по SSH.
 #
-# Тесты (frontend, backend) — на каждый push и pull request.
+# Тесты (frontend, backend) и проверка ссылок на код в документах — на каждый
+# push и pull request.
 # Деплой — только при push в master и ТОЛЬКО после зелёных тестов:
-#   на сервере git pull + docker compose up -d --build (стек проверен, см.
+#   на сервере git fetch + reset --hard + docker compose up -d --build (стек проверен, см.
 #   docker-compose.yml), и деплой ждёт, пока бэкенд станет healthy.
 #   Требуемые секреты репозитория перечислены в job deploy.
 
@@ -104,9 +105,22 @@ jobs:
       # Юнит-тесты чистых модулей (vitest) — не требуют БД.
       - run: npm test
 
+  # Документы ссылаются на код по имени, а не по номеру строки: номера гниют
+  # молча (doc/План_устранения.md, 4.2). Зависимостей у проверки нет — npm ci
+  # не нужен.
+  docs:
+    name: Документы — ссылки на код без номеров строк
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node tools/check-doc-refs.mjs
+
   deploy:
     name: Деплой на сервер (SSH)
-    needs: [frontend, backend]
+    needs: [frontend, backend, docs]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
