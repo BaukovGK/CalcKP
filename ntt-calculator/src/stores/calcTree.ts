@@ -27,6 +27,7 @@ import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
 import { hasBasketIn, hasGrinderIn, type Grinder } from '@/types/survey'
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
+import { hasPriceDelta, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
 
 /** Ключ цены — тройка в каноническом виде (engines/price-name.ts). */
 const priceKey = (category: string, name: string, unit: string): string =>
@@ -528,6 +529,11 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
           const before = or.qtyCalcPrev ?? or.qtyCalc
           nr.qtyCalcPrev = nr.qtyManual != null && before != null && before !== nr.qtyCalc ? before : undefined
+
+          // Свежее дерево берёт цены из действующего прайса. Сдвинулся он под
+          // строкой — отметка «было → стало», как у количества; непринятая
+          // прежняя отметка переносится (engines/reprice.ts).
+          nr.priceCatalogPrev = priceMarkAfter(or, nr.priceCatalog)
         }
       }
     }
@@ -662,6 +668,43 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       ),
   )
 
+  // ── Версия прайса (Механика §5.2) ─────────────────────────────────────────
+
+  /**
+   * Цены строк посчитаны по прайсу старше действующего.
+   *
+   * Материализация фиксирует цены вместе с версией прайса, и после импорта
+   * нового прайса старый расчёт продолжал показывать прежние — ничего об этом
+   * не говоря. Теперь экран предлагает пересчёт, а выпуск КП спрашивает, по
+   * какой версии его выпускать.
+   */
+  const priceOutdated = computed(() => !!tree.value && (tree.value.priceListVersion ?? 1) < priceListVersion.value)
+
+  /**
+   * Что даст пересчёт по действующему прайсу — до того, как его сделать:
+   * сколько строк сменит цену и как сдвинутся себестоимость и цена продажи.
+   */
+  const repricePreview = computed(() => {
+    const ctx = ctxCache
+    if (!priceOutdated.value || !tree.value || !ctx) return null
+    const { tree: next, summary } = repriceTree(tree.value, ctx.priceOf, priceListVersion.value)
+    const after = computeEconomics(
+      aggregateRows(flattenRows(next), { sectionEnabled: sectionEnabledFor(next), tirage: tirage.value }),
+      rates.value,
+      { markup: markup.value },
+    )
+    return {
+      summary,
+      costBefore: economics.value.costRub,
+      costAfter: after.costRub,
+      saleBefore: economics.value.salePriceRub,
+      saleAfter: after.salePriceRub,
+    }
+  })
+
+  /** Строки с непринятой отметкой «цена прайса изменилась». */
+  const priceDeltaIds = computed(() => new Set(rows.value.filter(hasPriceDelta).map((r) => r.id)))
+
   // ── Действия ──────────────────────────────────────────────────────────────
 
   function setQtyManual(id: string, expr: string) {
@@ -707,6 +750,48 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     resetQty(id)
     const row = rows.value.find((r) => r.id === id)
     if (row) row.qtyCalcPrev = undefined
+  }
+
+  /**
+   * Пересчитать цены строк по действующему прайсу (engines/reprice.ts).
+   *
+   * Берётся прайс, загруженный с расчётом (экран расчёта читает его свежим).
+   * Строки со сменившейся ценой получают отметку «было → стало»; версия
+   * прайса дерева становится действующей.
+   *
+   * @returns сводка пересчёта; `null` — пересчитывать нечего
+   */
+  function repriceToCurrent(): RepriceSummary | null {
+    const ctx = ctxCache
+    if (!tree.value || !ctx) return null
+    const { tree: next, summary } = repriceTree(tree.value, ctx.priceOf, priceListVersion.value)
+    tree.value = next
+    return summary
+  }
+
+  /** Принять новую цену прайса — снять отметку. */
+  function acceptPriceDelta(id: string) {
+    const row = rows.value.find((r) => r.id === id)
+    if (row) row.priceCatalogPrev = undefined
+  }
+
+  /** Принять новые цены у всех строк разом. */
+  function acceptAllPriceDeltas() {
+    for (const r of rows.value) if (r.priceCatalogPrev !== undefined) r.priceCatalogPrev = undefined
+  }
+
+  /**
+   * Оставить прежнюю цену: она становится ручной, отметка снимается.
+   *
+   * Нужно, когда цена согласована с заказчиком раньше, чем её сдвинул прайс.
+   * У строки, где и так стоит ручная цена, менять нечего — её отметка только
+   * принимается.
+   */
+  function keepPrevPrice(id: string) {
+    const row = rows.value.find((r) => r.id === id)
+    if (!row) return
+    if (row.priceManual == null && row.priceCatalogPrev != null) row.priceManual = row.priceCatalogPrev
+    row.priceCatalogPrev = undefined
   }
 
   /**
@@ -901,6 +986,9 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     // показывает именно её.
     priceListVersion,
     rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, enabledFor, prevQtyCalc,
+    // Пересчёт цен по действующему прайсу и отметки «было → стало» у цены.
+    priceOutdated, repricePreview, priceDeltaIds,
+    repriceToCurrent, acceptPriceDelta, acceptAllPriceDeltas, keepPrevPrice,
     load, save, clear, recalcAll, settled,
     // Пересчёт из ОЛ и цены прайса для его подсказок.
     applySurvey, ensureContext, catalogPrice,

@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { isStaleTreeWrite, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
-import { rowsWithoutPrice } from '../utils/estimate-tree'
+import { rowsWithoutPrice, treePriceListVersion } from '../utils/estimate-tree'
 import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
@@ -199,13 +199,15 @@ async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub
           orderBy: { version: 'desc' },
           select: { version: true },
         })
+        // Версия — та, по которой посчитаны цены дерева, а не действующая:
+        // расчёт мог остаться на прежнем прайсе (treePriceListVersion).
         const priceList = await tx.priceListVersion.findFirst({ orderBy: { version: 'desc' } })
 
         return tx.estimateSnapshot.create({
           data: {
             estimateId,
             version: (last?.version ?? 0) + 1,
-            priceListVersion: priceList?.version ?? 1,
+            priceListVersion: treePriceListVersion(bundlesJson) ?? priceList?.version ?? 1,
             totalRub,
             bundlesJson: bundlesJson as never,
             reason,

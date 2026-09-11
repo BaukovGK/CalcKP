@@ -79,6 +79,25 @@ export function extractRows(surveyData: unknown): TreeRow[] {
   return rows
 }
 
+/**
+ * Версия прайса, по которой посчитаны цены строк сохранённого дерева
+ * (`tree.priceListVersion`).
+ *
+ * Снапшот фиксирует, из цен какой версии родилась цифра КП (ТЗ §3). Раньше
+ * он брал действующую версию — и расчёт, собранный по прайсу v2 и не
+ * пересчитанный после импорта v5, уходил в КП с подписью «прайс v5» при
+ * ценах v2. Версию знает само дерево: её ставит материализация и пересчёт
+ * по действующему прайсу (фронт, engines/reprice.ts).
+ *
+ * @returns версия или `null`, если у дерева её нет (устаревшая форма
+ *   хранения) — тогда берётся действующая
+ */
+export function treePriceListVersion(surveyData: unknown): number | null {
+  if (!isObj(surveyData) || !isObj(surveyData.tree)) return null
+  const v = surveyData.tree.priceListVersion
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : null
+}
+
 const num = (v: unknown): number | null => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
   if (typeof v === 'string' && v.trim() !== '') {

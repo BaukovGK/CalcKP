@@ -26,7 +26,9 @@
         >
           {{ problemsText }}
         </button>
-        <span v-hint.plain="PRICE_LIST_HINT" class="tb-pl">прайс {{ priceListLabel }}</span>
+        <span v-hint.plain="PRICE_LIST_HINT" class="tb-pl" :class="{ old: st.priceOutdated }">
+          прайс {{ priceListLabel }}<template v-if="st.priceOutdated"> · действует v{{ st.priceListVersion }}</template>
+        </span>
         <template v-if="!readOnly">
           <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
           <button v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
@@ -50,9 +52,33 @@
       <button v-hint="FILTER_HINTS.override" class="chip-f chip-blue" :class="{ on: filters.override }" @click="filters.override = !filters.override">
         override · {{ st.overrideIds.size }}
       </button>
+      <template v-if="st.priceDeltaIds.size">
+        <button v-hint="FILTER_HINTS.repriced" class="chip-f chip-amber" :class="{ on: filters.repriced }" @click="filters.repriced = !filters.repriced">
+          ₽ цены изменились · {{ st.priceDeltaIds.size }}
+        </button>
+        <button
+          v-if="!readOnly"
+          v-hint="'Принять новые цены прайса у всех строк — снять отметки «было … ₽»'"
+          class="fl-clear"
+          @click="st.acceptAllPriceDeltas()"
+        >принять все</button>
+      </template>
       <button v-if="anyFilter" class="fl-clear" @click="clearFilters">сбросить ✕</button>
       <label class="fl-chk"><input v-model="filters.ghosts" type="checkbox" /><span v-hint="FILTER_HINTS.ghosts">выключенные</span></label>
       <span class="fl-cnt">показано {{ shownCount }} из {{ st.rows.length }}</span>
+    </div>
+
+    <!-- Прайс обновился после сборки расчёта: цены строк — прежней версии. -->
+    <div v-if="!st.loading && st.priceOutdated" class="pbar">
+      <span class="pbar-t">Цены строк — из прайса НН v{{ treePriceVersion }}, а действует v{{ st.priceListVersion }}.</span>
+      <span class="pbar-d">{{ repriceText }}</span>
+      <button
+        v-if="!readOnly"
+        v-hint="REPRICE_HINT"
+        class="btn btn-acc"
+        :disabled="repricing"
+        @click="onReprice"
+      >{{ repricing ? 'Пересчитываем…' : `Пересчитать по прайсу v${st.priceListVersion}` }}</button>
     </div>
 
     <div v-if="st.loading" class="state">Загрузка расчёта…</div>
@@ -110,12 +136,16 @@
               :tirage="st.tirage"
               :disabled="!sec.enabled || !c.enabled"
               :readonly="readOnly"
+              :price-delta="st.priceDeltaIds.has(row.id)"
+              :price-prev="row.priceCatalogPrev ?? null"
               @qty="st.setQtyManual"
               @price="st.setPriceManual"
               @reset-qty="st.resetQty"
               @reset-price="st.resetPrice"
               @keep="st.keepOverride"
               @drop="st.dropOverride"
+              @accept-price="st.acceptPriceDelta"
+              @keep-price="st.keepPrevPrice"
               @nav="onNav"
               @remove="st.removeRow"
             />
@@ -216,6 +246,20 @@
       </div>
     </BaseModal>
 
+    <!-- ── Выпуск КП по прайсу старше действующего ── -->
+    <BaseModal :show="kpAsk" title="Прайс обновился" :close-on-backdrop="true" @close="kpAsk = false">
+      <p class="kpa-t">
+        Цены строк расчёта — из прайса НН v{{ treePriceVersion }}, а действует v{{ st.priceListVersion }}.
+        {{ repriceText }}
+      </p>
+      <p class="kpa-t">КП зафиксирует цены той версии прайса, по которой они посчитаны.</p>
+      <template #footer>
+        <button class="btn" @click="kpAsk = false">Отмена</button>
+        <button class="btn" @click="kpIssueAsIs">Выпустить по v{{ treePriceVersion }}</button>
+        <button class="btn btn-acc" @click="kpRepriceAndIssue">Пересчитать и выпустить</button>
+      </template>
+    </BaseModal>
+
     <!-- ── Модал «История версий» (ТЗ §7) ── -->
     <BaseModal
       :show="versionsOpen"
@@ -287,6 +331,7 @@ import { BUCKET_HINTS, FILTER_HINTS, TOTAL_HINTS } from '@/hints/calc'
 import type { Hint } from '@/directives/hint'
 import { tryEvalExpr } from '@/engines/expr'
 import { handleCellNav } from '@/utils/cell-nav'
+import { repricedToastText, repriceSummaryText } from '@/utils/reprice-text'
 import type { CalcComponent, CalcRowNode } from '@/engines/template-kns'
 import { estimatesApi, type EstimateSnapshotInfo, type SnapshotReason } from '@/api/estimates'
 
@@ -305,6 +350,9 @@ const readOnly = computed(() => auth.role === 'VIEWER')
 
 const saving = ref(false)
 const kpBusy = ref(false)
+/** Выпуск КП ждёт ответа: пересчитать цены по действующему прайсу или нет. */
+const kpAsk = ref(false)
+const repricing = ref(false)
 /** Какая печатная форма качается прямо сейчас: «<версия>:<формат>». */
 const kpDownload = ref<string | null>(null)
 
@@ -354,7 +402,7 @@ async function onManualSnapshot() {
 const activeSec = ref('1')
 const tableEl = ref<HTMLElement | null>(null)
 
-const filters = reactive({ q: '', missing: false, conflict: false, override: false, ghosts: false, problems: false })
+const filters = reactive({ q: '', missing: false, conflict: false, override: false, repriced: false, ghosts: false, problems: false })
 
 const markupText = ref('0,43')
 const tirageText = ref('1')
@@ -377,8 +425,15 @@ const STATUS_HINT: Hint = {
 const PRICE_LIST_HINT: Hint = {
   title: 'Версия прайса',
   text: [
-    'Цены строк и ставки — ФОТ, накладные, ацетон, СИЗ — берутся из этого прайса.',
-    'Ставки пересчитываются по живому прайсу при каждом открытии; сохранить цифры неизменными — зафиксировать версию расчёта.',
+    'Цены строк фиксируются при сборке расчёта вместе с версией прайса; ставки — ФОТ, накладные, ацетон, СИЗ — берутся из действующего прайса при каждом открытии.',
+    'Импортировали новый прайс — цены строк остаются прежними, пока расчёт не пересчитают по нему: кнопкой под фильтрами или правкой опросного листа.',
+  ],
+}
+const REPRICE_HINT: Hint = {
+  title: 'Пересчитать по действующему прайсу',
+  text: [
+    'Цена каждой строки берётся заново из действующего прайса. Строки, у которых она сменилась, получают отметку «было … ₽» и янтарную рамку цены: ✓ принимает новую, ↶ оставляет прежнюю ручной.',
+    'Ручные цены остаются ручными. Договорная труба и позиции, которых в новом прайсе нет, не меняются. Расчёт сохраняется сразу.',
   ],
 }
 const VERSIONS_HINT: Hint = {
@@ -398,7 +453,9 @@ const rentColor = computed(() => {
   return p >= 25 ? 'var(--green)' : p >= 15 ? 'var(--amber)' : 'var(--acc)'
 })
 
-const anyFilter = computed(() => filters.q !== '' || filters.missing || filters.conflict || filters.override)
+const anyFilter = computed(
+  () => filters.q !== '' || filters.missing || filters.conflict || filters.override || filters.repriced,
+)
 
 // ── Навигация назад: в проект расчёта, а без проекта — к списку проектов ──
 const backTarget = computed(() =>
@@ -434,6 +491,12 @@ const priceListLabel = computed(() => {
   return d ? `НН v${v} от ${d}` : `НН v${v}`
 })
 
+/** Версия прайса, по которой посчитаны цены строк. */
+const treePriceVersion = computed(() => st.tree?.priceListVersion ?? 1)
+
+/** Что даст пересчёт по действующему прайсу — словами (utils/reprice-text.ts). */
+const repriceText = computed(() => (st.repricePreview ? repriceSummaryText(st.repricePreview) : ''))
+
 /** Счётчик проблем — кнопка появляется только когда есть что показывать. */
 const hasProblems = computed(() => st.missingPriceIds.size > 0 || st.conflictIds.size > 0)
 const problemsText = computed(() => {
@@ -445,7 +508,7 @@ const problemsText = computed(() => {
 
 function clearFilters() {
   filters.q = ''
-  filters.missing = filters.conflict = filters.override = filters.problems = false
+  filters.missing = filters.conflict = filters.override = filters.repriced = filters.problems = false
 }
 function toggleProblems() {
   filters.problems = !filters.problems
@@ -460,12 +523,13 @@ function visibleRows(c: CalcComponent): CalcRowNode[] {
     if (!filters.ghosts && res.qty === 0 && !st.enabledFor(r)) return false
     if (filters.q && !r.name.toLowerCase().includes(filters.q.toLowerCase())) return false
 
-    const chips = filters.missing || filters.conflict || filters.override
+    const chips = filters.missing || filters.conflict || filters.override || filters.repriced
     if (!chips) return true
     return (
       (filters.missing && st.missingPriceIds.has(r.id)) ||
       (filters.conflict && st.conflictIds.has(r.id)) ||
-      (filters.override && st.overrideIds.has(r.id))
+      (filters.override && st.overrideIds.has(r.id)) ||
+      (filters.repriced && st.priceDeltaIds.has(r.id))
     )
   })
 }
@@ -591,6 +655,26 @@ async function onExport() {
   await router.push({ name: 'purchase-request', params: { id: st.estimate.id } })
 }
 
+/**
+ * Пересчитать цены по действующему прайсу и сразу сохранить: это массовая
+ * правка, и потерять её уходом с экрана было бы обидно. Изменившиеся строки
+ * показываются фильтром — их и проверять.
+ */
+async function onReprice() {
+  const summary = st.repriceToCurrent()
+  if (!summary) return
+  if (summary.changed) filters.repriced = true
+  repricing.value = true
+  try {
+    await st.save()
+    toast(repricedToastText(summary.changed, st.priceListVersion), 'success')
+  } catch (err) {
+    toast(err instanceof Error ? err.message : 'Цены пересчитаны, но сохранить расчёт не удалось', 'error')
+  } finally {
+    repricing.value = false
+  }
+}
+
 async function onSave() {
   saving.value = true
   try {
@@ -639,6 +723,29 @@ async function downloadKp(version: number, format: 'docx' | 'pdf') {
  */
 async function onKp() {
   if (!st.estimate) return
+  // Прайс обновился после сборки расчёта — КП по старым ценам выпускается
+  // только осознанно: окно предлагает пересчитать.
+  if (st.priceOutdated) {
+    kpAsk.value = true
+    return
+  }
+  await issueKp()
+}
+
+async function kpRepriceAndIssue() {
+  kpAsk.value = false
+  const summary = st.repriceToCurrent()
+  if (summary?.changed) filters.repriced = true
+  await issueKp()
+}
+
+async function kpIssueAsIs() {
+  kpAsk.value = false
+  await issueKp()
+}
+
+async function issueKp() {
+  if (!st.estimate) return
   kpBusy.value = true
   try {
     await st.save()
@@ -658,6 +765,10 @@ async function onKp() {
 }
 
 watch(() => st.markup, (v) => { markupText.value = String(v).replace('.', ',') }, { immediate: true })
+
+// Отметок о новых ценах не осталось — фильтр по ним снимается вместе с его
+// кнопкой, иначе таблица осталась бы пустой без видимой причины.
+watch(() => st.priceDeltaIds.size, (n) => { if (!n) filters.repriced = false })
 
 onMounted(() => {
   const id = route.params.id
@@ -680,6 +791,7 @@ onMounted(() => {
 .tb-prob { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 13.2px; padding: 4px 9px; }
 .tb-prob.on { border-color: var(--amber); color: var(--amber); }
 .tb-pl { font-size: 12.6px; color: var(--faint); }
+.tb-pl.old { color: var(--amber); }
 .btn { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 13.8px; padding: 4px 10px; }
 .btn:hover:not(:disabled) { color: var(--text); }
 .btn:disabled { opacity: .4; }
@@ -695,6 +807,13 @@ onMounted(() => {
 .fl-clear { background: transparent; border: none; color: var(--blue); font-size: 13.2px; text-decoration: underline; }
 .fl-chk { display: flex; align-items: center; gap: 4px; font-size: 13.2px; color: var(--muted); }
 .fl-cnt { margin-left: auto; font-size: 12.6px; color: var(--faint); }
+
+/* Прайс обновился после сборки расчёта */
+.pbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 7px 12px;
+  border-bottom: 1px solid var(--amber); background: var(--amber-bg); font-size: 13.2px; flex: none; }
+.pbar-t { color: var(--amber); font-weight: 600; }
+.pbar-d { color: var(--muted); flex: 1 1 320px; min-width: 0; }
+.kpa-t { font-size: 14.4px; color: var(--text); line-height: 1.5; margin: 0 0 10px; }
 
 .state { padding: 24px; color: var(--muted); font-size: 14.4px; }
 .state-err { color: var(--acc); }

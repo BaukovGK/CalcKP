@@ -94,3 +94,26 @@ describe('сноска строки расчёта', () => {
     expect(all(h)).toContain('в итог не входит')
   })
 })
+
+describe('сноска строки: цена сдвинулась при пересчёте по новому прайсу', () => {
+  it('говорит, какая цена была и какая стала, и что делают ✓ и ↶', () => {
+    const h = calcRowHint(row({ priceCatalog: 230, priceCatalogPrev: 214.4 }), res({ price: 230, sum: 392 * 230 }), ctx({ priceDelta: true, pricePrev: 214.4 }))
+    expect(all(h)).toContain('было 214,4 ₽, стало 230 ₽')
+    expect(all(h)).toContain('↶ — оставить прежнюю')
+    expect(h.tone).toBe('warn')
+  })
+
+  it('под ручной ценой — что применяется ручная', () => {
+    const h = calcRowHint(
+      row({ priceCatalog: 230, priceManual: 200 }),
+      res({ price: 200, sum: 392 * 200, priceOverridden: true }),
+      ctx({ priceDelta: true, pricePrev: 214.4 }),
+    )
+    expect(all(h)).toContain('Применяется ручная — 200 ₽')
+  })
+
+  it('раньше цены в прайсе не было — так и сказано', () => {
+    const h = calcRowHint(row({ priceCatalog: 230 }), res({ price: 230 }), ctx({ priceDelta: true, pricePrev: null }))
+    expect(all(h)).toContain('цены в прайсе не было, стало 230 ₽')
+  })
+})

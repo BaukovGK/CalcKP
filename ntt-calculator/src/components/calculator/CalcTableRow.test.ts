@@ -139,3 +139,60 @@ describe('CalcTableRow — ячейка количества (регрессия
     expect(value(qtyCell(w).element)).toBe('8,86')
   })
 })
+
+/**
+ * Отметка «цена была» — пересчёт по новой версии прайса сдвинул цену строки
+ * (engines/reprice.ts). Инженер принимает новую цену или оставляет прежнюю.
+ */
+describe('CalcTableRow — цена сдвинулась при пересчёте по новому прайсу', () => {
+  function mountDelta(over: Partial<Record<string, unknown>> = {}, props: Record<string, unknown> = {}) {
+    const row = makeRow({ priceCatalog: 120, priceCatalogPrev: 100, ...over })
+    return mount(CalcTableRow, {
+      props: {
+        row: row as never,
+        res: computeRow(row as never),
+        conflict: false,
+        prevCalc: null,
+        fotK: null,
+        disabled: false,
+        priceDelta: true,
+        pricePrev: 100,
+        ...props,
+      },
+    })
+  }
+  const button = (w: ReturnType<typeof mountDelta>, label: string) => w.find(`button[aria-label="${label}"]`)
+
+  it('показывает прежнюю цену; ✓ принимает новую, ↶ оставляет прежнюю', async () => {
+    const w = mountDelta()
+    expect(w.text()).toContain('было 100 ₽')
+    expect(priceCell(w as never).classes()).toContain('is-repriced')
+
+    await button(w, 'Принять новую цену').trigger('click')
+    await button(w, 'Оставить прежнюю цену').trigger('click')
+
+    expect(w.emitted('acceptPrice')).toEqual([['r1']])
+    expect(w.emitted('keepPrice')).toEqual([['r1']])
+  })
+
+  it('при ручной цене оставлять прежнюю нечего — только принять отметку', () => {
+    const w = mountDelta({ priceManual: 90 })
+    expect(button(w, 'Принять новую цену').exists()).toBe(true)
+    expect(button(w, 'Оставить прежнюю цену').exists()).toBe(false)
+    // Применяется ручная цена — ячейка синяя, а не отмеченная.
+    expect(priceCell(w as never).classes()).toContain('is-ovr')
+    expect(priceCell(w as never).classes()).not.toContain('is-repriced')
+  })
+
+  it('раньше цены не было — «было» без числа и без «оставить прежнюю»', () => {
+    const w = mountDelta({ priceCatalogPrev: null }, { pricePrev: null })
+    expect(w.text()).toContain('было —')
+    expect(button(w, 'Оставить прежнюю цену').exists()).toBe(false)
+  })
+
+  it('наблюдателю видна отметка, но не действия', () => {
+    const w = mountDelta({}, { readonly: true })
+    expect(w.text()).toContain('было 100 ₽')
+    expect(button(w, 'Принять новую цену').exists()).toBe(false)
+  })
+})

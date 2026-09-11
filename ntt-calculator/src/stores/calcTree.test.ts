@@ -21,6 +21,10 @@ const estimatesGet = vi.fn()
 const priceVersion = vi.fn()
 const patchSurvey = vi.fn()
 const engineering = vi.fn(() => Promise.resolve({ shell: [], ellipticBottom: [] as unknown[], nozzles: [] }))
+/** Прайс: категория → позиции. По умолчанию пуст; тесты пересчёта цен подставляют свой. */
+const nomenclature = vi.fn((): Promise<Record<string, Array<{ name: string; unit: string; priceRub: number | null }>>> =>
+  Promise.resolve({}),
+)
 
 vi.mock('@/api/estimates', () => ({
   estimatesApi: {
@@ -31,7 +35,7 @@ vi.mock('@/api/estimates', () => ({
 
 vi.mock('@/api/refs', () => ({
   refsApi: {
-    nomenclature: () => Promise.resolve({}),
+    nomenclature: () => nomenclature(),
     pipeWeights: () => Promise.resolve({ grp: [], pe: [] }),
     engineering: () => engineering(),
     priceVersion: (...a: unknown[]) => priceVersion(...a),
@@ -475,6 +479,32 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(node(store, 'Насосная группа').rows[0]!.qtyCalc).toBe(4)
   })
 
+  // Правка ОЛ пересобирает дерево по действующему прайсу. Раньше это молча
+  // меняло цены строк; теперь сдвиг виден отметкой «цена была».
+  it('пересборка по ОЛ после импорта нового прайса отмечает сдвинувшиеся цены', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const WORK = { name: 'Придание изделию товарного вида', unit: 'чел. ч' }
+    nomenclature.mockResolvedValueOnce({ 'Собственное производство': [{ ...WORK, priceRub: 1207.8 }] })
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    const work = () => store.rows.find((r) => r.name === WORK.name)!
+    expect(work().priceCatalog).toBe(1207.8)
+    expect(work().priceCatalogPrev).toBeUndefined()
+
+    // Импортирован прайс v6 со своей ставкой.
+    nomenclature.mockResolvedValueOnce({ 'Собственное производство': [{ ...WORK, priceRub: 1300 }] })
+    priceVersion.mockResolvedValueOnce({ version: 6, label: 'НН v6', createdAt: null })
+    await store.ensureContext({ fresh: true })
+    const next = kns({ nRab: '3' })
+    await store.applySurvey('e1', { form: next, kns: next, derived, surveyRev: 3 })
+
+    expect(work()).toMatchObject({ priceCatalog: 1300, priceCatalogPrev: 1207.8 })
+    expect(store.tree!.priceListVersion).toBe(6)
+    expect(store.priceDeltaIds.has(work().id)).toBe(true)
+  })
+
   // Шкаф управления — договорная позиция: цены в прайсе нет, её вводят в
   // расчёте. Введённая цена должна сразу снимать строку из «без цены».
   it('цена шкафа управления, введённая в расчёте, снимает строку из «без цены»', async () => {
@@ -749,5 +779,143 @@ describe('стор calcTree: ёмкость', () => {
     await store.applySurvey('e1', { form: {}, emk: emk({ placement: 'горизонтальное' }), surveyRev: 2 })
     const row = store.rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
     expect(row.qtyCalc).toBe(2 * 196)
+  })
+})
+
+/**
+ * Пересчёт по новой версии прайса (Механика §5.2).
+ *
+ * Материализация фиксирует цены строк вместе с версией прайса. После импорта
+ * нового прайса старый расчёт показывал прежние цены и ничего об этом не
+ * говорил — КП уходил по устаревшей себестоимости.
+ */
+describe('стор calcTree: пересчёт по новой версии прайса', () => {
+  /** Расчёт, собранный по прайсу v2. */
+  function oldEstimate() {
+    const est = savedEstimate()
+    est.surveyData.tree.priceListVersion = 2
+    est.surveyData.tree.sections = [
+      {
+        id: 's1', code: '1', title: 'Корпус', enabled: true,
+        components: [
+          {
+            id: 'c1', title: 'Узел', enabled: true,
+            rows: [
+              { id: 'r1', kind: 'МАТЕРИАЛ', category: 'Металлопрокат', name: 'Полоса', unit: 'м', qtyCalc: 4, qtyManual: null, priceCatalog: 100, priceManual: null },
+              { id: 'r2', kind: 'МАТЕРИАЛ', category: 'Металлопрокат', name: 'Лист', unit: 'шт', qtyCalc: 6, qtyManual: null, priceCatalog: 200, priceManual: null },
+              { id: 'r3', kind: 'МАТЕРИАЛ', category: 'Металлопрокат', name: 'Уголок', unit: 'м', qtyCalc: 2, qtyManual: null, priceCatalog: 50, priceManual: 70 },
+              { id: 'r4', kind: 'МАТЕРИАЛ', category: 'Собственное производство', name: 'Труба СК/НПС-К 3000-0,1-10000', unit: 'м', qtyCalc: 11.6, qtyManual: null, priceCatalog: null, priceManual: 30000, priceBinding: 'pipePrice' },
+              { id: 'r5', kind: 'МАТЕРИАЛ', category: 'Метизы', name: 'Снятая позиция', unit: 'шт', qtyCalc: 1, qtyManual: null, priceCatalog: 10, priceManual: null },
+            ],
+          },
+        ],
+      },
+    ]
+    return est
+  }
+
+  /** Прайс v5: полоса подорожала, уголок тоже, «снятой позиции» нет. */
+  const PRICES_V5 = {
+    Металлопрокат: [
+      { name: 'Полоса', unit: 'м', priceRub: 120 },
+      { name: 'Лист', unit: 'шт', priceRub: 200 },
+      { name: 'Уголок', unit: 'м', priceRub: 55 },
+    ],
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    nomenclature.mockResolvedValue(PRICES_V5)
+    priceVersion.mockResolvedValue({ version: 5, label: 'НН v5', createdAt: null })
+  })
+
+  it('открытый старый расчёт знает, что прайс обновился, и что даст пересчёт', async () => {
+    estimatesGet.mockResolvedValue(oldEstimate())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    expect(store.priceOutdated).toBe(true)
+    const p = store.repricePreview!
+    expect(p.summary).toMatchObject({ changed: 2, changedUnderManual: 1, notFound: 1 })
+    // Полоса +20 ₽ × 4 м; у уголка ручная цена — применённая не меняется.
+    expect(p.costAfter).toBeGreaterThan(p.costBefore)
+    // Предпросмотр дерево не трогает.
+    expect(store.rows.find((r) => r.id === 'r1')!.priceCatalog).toBe(100)
+  })
+
+  it('пересчёт берёт цены нового прайса и ставит отметки «было → стало»', async () => {
+    estimatesGet.mockResolvedValue(oldEstimate())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    const summary = store.repriceToCurrent()!
+    const r = (id: string) => store.rows.find((x) => x.id === id)!
+
+    expect(summary.changed).toBe(2)
+    expect(r('r1')).toMatchObject({ priceCatalog: 120, priceCatalogPrev: 100 })
+    expect(store.results.get('r1')!.sum).toBe(480)
+    expect(r('r2').priceCatalogPrev).toBeUndefined()
+    expect(r('r3')).toMatchObject({ priceCatalog: 55, priceManual: 70, priceCatalogPrev: 50 })
+    // Договорная труба и снятая из прайса позиция — как были.
+    expect(r('r4')).toMatchObject({ priceCatalog: null, priceManual: 30000 })
+    expect(r('r5').priceCatalog).toBe(10)
+    expect(store.tree!.priceListVersion).toBe(5)
+    expect(store.priceOutdated).toBe(false)
+    expect([...store.priceDeltaIds].sort()).toEqual(['r1', 'r3'])
+  })
+
+  it('отметку можно принять или оставить прежнюю цену ручной', async () => {
+    estimatesGet.mockResolvedValue(oldEstimate())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    store.repriceToCurrent()
+    const r = (id: string) => store.rows.find((x) => x.id === id)!
+
+    store.keepPrevPrice('r1')
+    expect(r('r1')).toMatchObject({ priceCatalog: 120, priceManual: 100 })
+    expect(store.results.get('r1')!.price).toBe(100)
+    // У строки с ручной ценой менять нечего — отметка только снимается.
+    store.keepPrevPrice('r3')
+    expect(r('r3').priceManual).toBe(70)
+    expect(store.priceDeltaIds.size).toBe(0)
+  })
+
+  it('«принять все» снимает все отметки, новые цены остаются', async () => {
+    estimatesGet.mockResolvedValue(oldEstimate())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    store.repriceToCurrent()
+
+    store.acceptAllPriceDeltas()
+
+    expect(store.priceDeltaIds.size).toBe(0)
+    expect(store.rows.find((x) => x.id === 'r1')!.priceCatalog).toBe(120)
+  })
+
+  it('сохранение уносит новые цены, отметки и версию прайса в дерево', async () => {
+    const est = oldEstimate()
+    estimatesGet.mockResolvedValue(est)
+    patchSurvey.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    store.repriceToCurrent()
+
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: { priceListVersion: number; sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> } }]
+    expect(body.tree.priceListVersion).toBe(5)
+    expect(body.tree.sections[0]!.components[0]!.rows[0]).toMatchObject({ priceCatalog: 120, priceCatalogPrev: 100 })
+  })
+
+  it('расчёт на действующем прайсе пересчёта не предлагает', async () => {
+    const est = oldEstimate()
+    est.surveyData.tree.priceListVersion = 5
+    estimatesGet.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    expect(store.priceOutdated).toBe(false)
+    expect(store.repricePreview).toBeNull()
   })
 })

@@ -52,6 +52,10 @@ export interface RowHintContext {
   /** Раздел или узел выключен. */
   disabled: boolean
   tirage: number
+  /** Цена прайса сдвинулась при пересчёте, отметка не принята. */
+  priceDelta?: boolean
+  /** Прежняя цена прайса; `null` — её не было. */
+  pricePrev?: number | null
 }
 
 /**
@@ -111,6 +115,15 @@ export function calcRowHint(row: CalcRowNode, res: RowResult, ctx: RowHintContex
     text.push(`Цена введена вручную: ${fmt(res.price)} ₽. В прайсе — ${fmt(row.priceCatalog)} ₽, ↺ вернёт её.`)
   } else {
     text.push(`Цена — из прайса по категории «${row.category}», наименованию и ЕИ: ${fmt(res.price)} ₽ за ${row.unit}.`)
+  }
+  if (ctx.priceDelta) {
+    tone ??= 'warn'
+    const was = ctx.pricePrev == null ? 'цены в прайсе не было' : `было ${fmt(ctx.pricePrev)} ₽`
+    text.push(
+      res.priceOverridden
+        ? `Прайс под ручной ценой сдвинулся при пересчёте: ${was}, стало ${fmt(row.priceCatalog)} ₽. Применяется ручная — ${fmt(res.price)} ₽; ✓ снимет отметку.`
+        : `Цена прайса изменилась при пересчёте по новой версии: ${was}, стало ${fmt(row.priceCatalog)} ₽. ✓ — принять новую, ↶ — оставить прежнюю ручной ценой.`,
+    )
   }
   if (!res.missingPrice && res.qty) formula.push(`сумма = ${fmt(res.qty)} × ${fmt(res.price)} = ${fmt(res.sum)} ₽`)
 
@@ -224,6 +237,11 @@ export const FILTER_HINTS = {
     title: 'Ручной ввод',
     text: 'Строки, где количество или цена введены вручную (синие). ↺ в ячейке возвращает расчётное.',
     tone: 'ovr',
+  },
+  repriced: {
+    title: 'Цены изменились',
+    text: 'Строки, у которых пересчёт по новой версии прайса сдвинул цену. В строке ✓ принимает новую цену, ↶ оставляет прежнюю ручной.',
+    tone: 'warn',
   },
   ghosts: {
     title: 'Выключенные',

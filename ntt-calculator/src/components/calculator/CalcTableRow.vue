@@ -45,7 +45,7 @@
       >↺</button>
       <input
         class="cell num"
-        :class="{ 'is-ovr': res.priceOverridden, 'is-missing': res.missingPrice }"
+        :class="{ 'is-ovr': res.priceOverridden, 'is-missing': res.missingPrice, 'is-repriced': priceDelta && !res.priceOverridden }"
         :value="priceText"
         :disabled="disabled || readonly"
         :placeholder="res.missingPrice ? 'цена?' : ''"
@@ -66,6 +66,25 @@
         <template v-if="!readonly">
           <button class="btn-amber" @click="$emit('keep', row.id)">Оставить моё</button>
           <button class="btn-plain" @click="$emit('drop', row.id)">Принять новое</button>
+        </template>
+      </template>
+      <!-- Цена прайса сдвинулась при пересчёте по новой версии прайса. -->
+      <template v-else-if="priceDelta">
+        <span class="was">было {{ pricePrev == null ? '—' : `${fmt(pricePrev)} ₽` }}</span>
+        <template v-if="!readonly">
+          <button
+            v-hint="'Принять новую цену прайса — снять отметку'"
+            class="btn-plain"
+            aria-label="Принять новую цену"
+            @click="$emit('acceptPrice', row.id)"
+          >✓</button>
+          <button
+            v-if="row.priceManual == null && pricePrev != null"
+            v-hint="'Оставить прежнюю цену — она станет ручной'"
+            class="btn-amber"
+            aria-label="Оставить прежнюю цену"
+            @click="$emit('keepPrice', row.id)"
+          >↶</button>
         </template>
       </template>
       <span v-else-if="unpriced" class="note-red">указать цену</span>
@@ -94,10 +113,12 @@ import type { RowResult } from '@/engines/types'
 /**
  * Строка таблицы расчёта — главный дизайн-контракт (README хендоффа).
  *
- * Шесть состояний ячейки:
+ * Семь состояний ячейки:
  *   расчётное · override (синий + ↺) · нет цены (красная подложка, «цена?»)
  *   конфликт (янтарь + разрешение) · ФОТ-спутник (отступ, пунктир, метка)
  *   выключено (призрак, ввод disabled)
+ *   цена сдвинулась при пересчёте по новому прайсу (янтарная рамка цены,
+ *   «было … ₽», ✓ принять / ↶ оставить прежнюю — engines/reprice.ts)
  */
 const props = defineProps<{
   row: CalcRowNode
@@ -112,6 +133,12 @@ const props = defineProps<{
   parent?: CalcRowNode | null
   /** Тираж — сноска говорит, что количество на все корпуса. */
   tirage?: number
+  /**
+   * Цена прайса сдвинулась при пересчёте по новой версии прайса и отметка
+   * не принята; `pricePrev` — прежняя цена (`null` — её не было).
+   */
+  priceDelta?: boolean
+  pricePrev?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -121,6 +148,8 @@ const emit = defineEmits<{
   resetPrice: [id: string]
   keep: [id: string]
   drop: [id: string]
+  acceptPrice: [id: string]
+  keepPrice: [id: string]
   nav: [e: KeyboardEvent, id: string, col: 'qty' | 'price']
   remove: [id: string]
 }>()
@@ -162,6 +191,8 @@ const hint = computed(() =>
     parent: props.parent ?? null,
     disabled: props.disabled,
     tirage: props.tirage ?? 1,
+    priceDelta: props.priceDelta ?? false,
+    pricePrev: props.pricePrev ?? null,
   }),
 )
 
@@ -247,6 +278,8 @@ function onPrice(e: Event) {
 .cell.is-missing::placeholder { color: var(--acc); opacity: .8; }
 /* Конфликт */
 .cell.is-conflict { border-color: var(--amber); background: var(--amber-bg); }
+/* Цена прайса сдвинулась при пересчёте — отметка не принята */
+.cell.is-repriced { border-color: var(--amber); }
 
 /* ФОТ-спутник: пунктирные ячейки */
 .is-sat-row .cell { border-style: dashed; border-color: var(--line2); }
