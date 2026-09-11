@@ -47,7 +47,6 @@ const baseCtx: MaterializeContext = {
 
 const withTemplate = (t: ProductTemplate): MaterializeContext => ({ ...baseCtx, templateOf: (d) => (d === t.deviceType ? t : null) })
 
-const titles = (tree: CalcTree) => tree.sections.map((s) => [s.code, s.title, s.components.map((c) => c.title)])
 const rowKeys = (tree: CalcTree) => flattenRows(tree).map((r) => `${r.kind}|${r.name}|${r.unit}|${r.qtyCalc}`).sort()
 
 beforeEach(() => __resetIds())
