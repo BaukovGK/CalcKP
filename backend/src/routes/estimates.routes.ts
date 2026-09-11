@@ -5,7 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
-import { isStaleTreeWrite, SURVEY_CHANGED } from '../utils/survey-write'
+import { ESTIMATE_CHANGED, isStaleTreeWrite, isSurveyRevRegression, isVersionConflict, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
 import {
   RATE_LABELS,
@@ -623,6 +623,11 @@ const surveyPatchSchema = z
     treeSurveyRev: z.number().int().min(0).optional(),
     /** Ревизия ОЛ. Растёт при каждом сохранении опросного листа. */
     surveyRev: z.number().int().min(0).optional(),
+    /**
+     * Версия расчёта, с которой работал клиент (План_устранения 3.1). В
+     * surveyData не пишется.
+     */
+    baseVersion: z.number().int().min(0).optional(),
     totals: z
       .object({
         costRub: z.number().finite().min(0).optional(),
@@ -662,9 +667,24 @@ estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
       return
     }
 
+    const { baseVersion, ...patch } = req.body as Record<string, unknown>
+
+    // Расчёт правили после того, как клиент его прочитал, — в другой вкладке
+    // или другой пользователь (План_устранения 3.1): запись поверх чужой
+    // правки отклоняется, клиент перечитывает расчёт. Сюда же — ОЛ из
+    // устаревшей вкладки: его ревизия ниже сохранённой.
+    if (isVersionConflict(estimate.version, baseVersion) || isSurveyRevRegression(estimate.surveyData, patch)) {
+      res.status(409).json({
+        message: 'Расчёт изменился после того, как был открыт: его правили в другой вкладке или другой пользователь',
+        code: ESTIMATE_CHANGED,
+        version: estimate.version,
+      })
+      return
+    }
+
     // Дерево из старой ревизии ОЛ (расчёт открыт в другой вкладке, ОЛ за это
     // время поправили) не записываем: оно откатило бы и дерево, и цены ОЛ.
-    if (isStaleTreeWrite(estimate.surveyData, req.body as Record<string, unknown>)) {
+    if (isStaleTreeWrite(estimate.surveyData, patch)) {
       res.status(409).json({
         message: 'Опросный лист изменился после того, как был открыт расчёт. Сохранение отменено — расчёт нужно перечитать',
         code: SURVEY_CHANGED,
@@ -672,25 +692,39 @@ estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
       return
     }
 
-    const merged = { ...(estimate.surveyData as object ?? {}), ...req.body }
+    const merged = { ...(estimate.surveyData as object ?? {}), ...patch }
 
     // Итог расчёта дублируется в колонку totalRub: карточки проекта и
     // снапшоты читают её, а не разбирают JSON дерева. Раньше колонка не
     // обновлялась никогда — суммы в списках всегда были пустыми.
-    const salePrice = (req.body?.totals as { salePriceRub?: unknown } | undefined)?.salePriceRub
+    const salePrice = (patch.totals as { salePriceRub?: unknown } | undefined)?.salePriceRub
     const totalRub = typeof salePrice === 'number' && Number.isFinite(salePrice) ? salePrice : undefined
 
-    const updated = await prisma.estimate.update({
-      where: { id },
-      data: {
-        surveyData: merged,
-        ...(totalRub != null ? { totalRub } : {}),
-        // DRAFT → CALC при первом сохранении — легальный переход (§4.3);
-        // из REVIEW статус не трогаем, иначе правка молча откатывала бы
-        // расчёт с проверки.
-        ...(estimate.status === 'DRAFT' ? { status: 'CALC' as const } : {}),
-      },
-    })
+    // Запись — только если версия не сменилась между чтением и записью:
+    // иначе две одновременные записи прошли бы обе проверки выше.
+    let updated
+    try {
+      updated = await prisma.estimate.update({
+        where: { id, version: estimate.version },
+        data: {
+          // JSON-документ ОЛ и дерева; состав проверен схемой выше.
+          surveyData: merged as never,
+          version: { increment: 1 },
+          ...(totalRub != null ? { totalRub } : {}),
+          // DRAFT → CALC при первом сохранении — легальный переход (§4.3);
+          // из REVIEW статус не трогаем, иначе правка молча откатывала бы
+          // расчёт с проверки.
+          ...(estimate.status === 'DRAFT' ? { status: 'CALC' as const } : {}),
+        },
+      })
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'P2025') throw e
+      res.status(409).json({
+        message: 'Расчёт изменился одновременно с этой записью — его правили в другой вкладке или другой пользователь',
+        code: ESTIMATE_CHANGED,
+      })
+      return
+    }
     res.json(updated)
   } catch (e) { next(e) }
 })

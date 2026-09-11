@@ -19,6 +19,11 @@ export interface EstimateListItem {
   updatedAt: string
   surveyData: SurveyMeta & Record<string, unknown>
   author: { name: string }
+  /**
+   * Версия расчёта: растёт с каждой записью ОЛ и дерева. Запись шлёт версию,
+   * с которой работала; не совпала — 409 ESTIMATE_CHANGED (План_устранения 3.1).
+   */
+  version?: number
 }
 
 export interface EstimateDetail extends EstimateListItem {

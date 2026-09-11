@@ -1652,3 +1652,121 @@ describe('стор calcTree: перенос правок при смене па�
     expect(line2.c.slot).toBe('kns.pressurePipe#line')
   })
 })
+
+/**
+ * Запись поверх чужой правки (План_устранения 3.1). Долго открытый ОЛ
+ * перезаписывал ручные правки, сохранённые с экрана расчёта в другой вкладке:
+ * сервер склеивал surveyData, не сверяя версию.
+ */
+describe('стор calcTree: запись поверх чужой правки', () => {
+  const kns = (over: Record<string, unknown> = {}) => ({
+    dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
+    nRab: '2', nRez: '1', emergency: false,
+    insulation: false, tiGlubina: '0', mvk: false, pipePrice: '', pumpPrice: '',
+    ...over,
+  })
+  const derived = { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: null }
+  const conflict = () =>
+    Object.assign(new Error('Request failed with status code 409'), { response: { status: 409, data: { code: 'ESTIMATE_CHANGED' } } })
+  const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  /** Расчёт на сервере с собранным деревом: ОЛ ревизии 2. */
+  async function builtEstimate() {
+    const est = savedEstimate() as ReturnType<typeof savedEstimate> & { version?: number }
+    delete (est.surveyData as Record<string, unknown>).tree
+    Object.assign(est.surveyData, { surveyRev: 1, treeSurveyRev: 0, form: kns(), kns: kns(), derived })
+    estimatesGet.mockResolvedValue(clone(est))
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      const { baseVersion: _v, ...rest } = body
+      est.surveyData = { ...est.surveyData, ...rest } as typeof est.surveyData
+      return Promise.resolve(clone(est))
+    })
+    await useCalcTreeStore().applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+    return est
+  }
+
+  it('сохранение с экрана расчёта шлёт версию, с которой работали', async () => {
+    const est = { ...savedEstimate(), version: 7 }
+    estimatesGet.mockResolvedValue(est)
+    patchSurvey.mockResolvedValue({ ...est, version: 8 })
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[0] as [string, Record<string, unknown>]
+    expect(body.baseVersion).toBe(7)
+    expect(store.estimate!.version).toBe(8)
+  })
+
+  it('расчёт изменили в другой вкладке — своё не записывается, расчёт перечитан', async () => {
+    estimatesGet.mockResolvedValue({ ...savedEstimate(), version: 7 })
+    patchSurvey.mockRejectedValue(conflict())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    estimatesGet.mockResolvedValue({ ...savedEstimate(), version: 9 })
+
+    await expect(store.save()).rejects.toThrow('Расчёт изменили в другой вкладке или другой пользователь. Расчёт перечитан — повторите правку')
+    expect(patchSurvey).toHaveBeenCalledTimes(1)
+    expect(store.estimate!.version).toBe(9)
+  })
+
+  it('ОЛ на конфликт перечитывает расчёт и пересобирает поверх чужих правок — один раз', async () => {
+    // Другая вкладка: ручное количество у первой строки, ревизия ОЛ 5, версия 4.
+    const newer = clone(await builtEstimate())
+    newer.version = 4
+    const tree = newer.surveyData.tree as { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> }
+    const row = tree.sections[0]!.components[0]!.rows[0]!
+    row.qtyManual = '77'
+    Object.assign(newer.surveyData, { surveyRev: 5, treeSurveyRev: 5 })
+
+    // Этот лист прочитал расчёт раньше: версия 3.
+    const older = clone(newer)
+    older.version = 3
+    delete (older.surveyData.tree as { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> })
+      .sections[0]!.components[0]!.rows[0]!.qtyManual
+    Object.assign(older.surveyData, { surveyRev: 2, treeSurveyRev: 2 })
+    estimatesGet.mockResolvedValueOnce(clone(older)).mockResolvedValueOnce(clone(newer))
+    patchSurvey.mockRejectedValueOnce(conflict()).mockImplementationOnce((_id: string, body: Record<string, unknown>) =>
+      Promise.resolve({ ...clone(newer), version: 5, surveyData: { ...newer.surveyData, ...body } }),
+    )
+    const store = useCalcTreeStore()
+
+    await store.applySurvey('e1', { form: kns({ napKol: '3' }), kns: kns({ napKol: '3' }), derived, surveyRev: 3 })
+
+    expect(patchSurvey).toHaveBeenCalledTimes(2)
+    const [, first] = patchSurvey.mock.calls[0] as [string, Record<string, unknown>]
+    const [, retry] = patchSurvey.mock.calls[1] as [string, Record<string, unknown>]
+    expect(first.baseVersion).toBe(3)
+    expect(retry.baseVersion).toBe(4)
+    // Ревизия ОЛ не уменьшается: выше сохранённой.
+    expect(retry.surveyRev).toBe(6)
+    // Ручная правка другой вкладки перенесена в пересобранное дерево.
+    const rows = (retry.tree as { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> }).sections
+      .flatMap((sec) => sec.components.flatMap((c) => c.rows))
+    expect(rows.find((r) => r.name === row.name && r.unit === row.unit)?.qtyManual).toBe('77')
+    expect(store.estimate!.version).toBe(5)
+  })
+
+  it('второй конфликт подряд — ошибка наверх, без бесконечных повторов', async () => {
+    const est = clone(await builtEstimate())
+    est.version = 3
+    estimatesGet.mockResolvedValue(clone(est))
+    patchSurvey.mockRejectedValue(conflict())
+    const store = useCalcTreeStore()
+
+    await expect(store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 3 })).rejects.toMatchObject({
+      response: { status: 409 },
+    })
+    expect(patchSurvey).toHaveBeenCalledTimes(2)
+  })
+})

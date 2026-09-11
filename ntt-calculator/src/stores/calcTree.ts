@@ -309,22 +309,43 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
     // Первый пересчёт в сессии ОЛ: поднимаем расчёт с сервера — нужны его
     // ручные правки, иначе перенести было бы нечего.
-    if (!estimate.value || estimate.value.id !== id) {
-      const est = await estimatesApi.get(id)
-      estimate.value = est
-      const saved = est.surveyData as Record<string, unknown>
-      restoreTotals(saved)
-      tree.value = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
-    }
+    if (!estimate.value || estimate.value.id !== id) await loadForSurvey(id)
 
+    try {
+      return await writeSurvey(id, ctx, payload)
+    } catch (e) {
+      if (!isEstimateChanged(e)) throw e
+      // Расчёт правили после того, как лист его прочитал, — в другой вкладке
+      // или другой пользователь (План_устранения 3.1). Перечитываем и
+      // пересобираем по своему ОЛ поверх чужих правок — один раз; ревизия
+      // ОЛ — выше сохранённой, она не уменьшается.
+      await loadForSurvey(id)
+      const storedRev = surveyRevOf(estimate.value?.surveyData)
+      const rev = typeof payload.surveyRev === 'number' ? payload.surveyRev : null
+      return await writeSurvey(id, ctx, rev != null && rev <= storedRev ? { ...payload, surveyRev: storedRev + 1 } : payload)
+    }
+  }
+
+  /** Поднять расчёт с сервера для пересчёта из ОЛ: ручные правки, итоги, версия. */
+  async function loadForSurvey(id: string) {
+    const est = await estimatesApi.get(id)
+    estimate.value = est
+    const saved = est.surveyData as Record<string, unknown>
+    restoreTotals(saved)
+    tree.value = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
+  }
+
+  /** Пересобрать дерево по ОЛ и записать — с версией, с которой работали. */
+  async function writeSurvey(id: string, ctx: MaterializeContext, payload: Record<string, unknown>): Promise<number | null> {
     const current = estimate.value as EstimateDetail
     const merged = { ...(current.surveyData as Record<string, unknown>), ...payload }
     const problem = rebuildTree(ctx, current.deviceType, merged, tree.value, { force: true })
+    const version = baseVersionOf(current)
 
     // Строить не из чего (ОЛ ещё не заполнен до материализации) — сохраняем
     // сам ОЛ: ввод не должен теряться из-за того, что расчёт пока невозможен.
     if (problem || !tree.value) {
-      const updated = await estimatesApi.patchSurvey(id, payload)
+      const updated = await estimatesApi.patchSurvey(id, { ...payload, ...version })
       estimate.value = mergeEstimate(current, updated)
       return null
     }
@@ -334,9 +355,27 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       tree: treeForSave(),
       treeSurveyRev: treeSurveyRev.value,
       totals: totalsForSave(),
+      ...version,
     }
     estimate.value = mergeEstimate(current, await estimatesApi.patchSurvey(id, body))
     return economics.value.salePriceRub
+  }
+
+  /** Версия расчёта для записи; у расчёта до её появления — ничего. */
+  function baseVersionOf(est: EstimateDetail): { baseVersion?: number } {
+    return typeof est.version === 'number' ? { baseVersion: est.version } : {}
+  }
+
+  /** Ревизия ОЛ, сохранённая в расчёте. */
+  function surveyRevOf(surveyData: unknown): number {
+    const rev = surveyData && typeof surveyData === 'object' ? (surveyData as Record<string, unknown>).surveyRev : null
+    return typeof rev === 'number' ? rev : 0
+  }
+
+  /** 409: расчёт изменился после того, как его прочитали (План_устранения 3.1). */
+  function isEstimateChanged(e: unknown): boolean {
+    const r = (e as { response?: { status?: number; data?: { code?: string } } }).response
+    return r?.status === 409 && r.data?.code === 'ESTIMATE_CHANGED'
   }
 
   /**
@@ -1287,14 +1326,25 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
         // ОЛ с тех пор поправили (backend/src/utils/survey-write.ts).
         treeSurveyRev: treeSurveyRev.value,
         totals: totalsForSave(),
+        // Версия, с которой работали: расчёт с тех пор правили — 409
+        // (План_устранения 3.1).
+        ...baseVersionOf(current),
       })
     } catch (e) {
       const code = (e as { response?: { data?: { code?: string } } }).response?.data?.code
-      if (code !== 'SURVEY_CHANGED') throw e
-      // ОЛ поправили в другой вкладке: в базе дерево новее нашего. Своё не
-      // пишем — оно откатило бы ОЛ, — а поднимаем свежее.
-      await fetchEstimate(current.id)
-      throw new Error('Опросный лист изменился после того, как был открыт расчёт. Расчёт перечитан — повторите правку')
+      if (code === 'SURVEY_CHANGED') {
+        // ОЛ поправили в другой вкладке: в базе дерево новее нашего. Своё не
+        // пишем — оно откатило бы ОЛ, — а поднимаем свежее.
+        await fetchEstimate(current.id)
+        throw new Error('Опросный лист изменился после того, как был открыт расчёт. Расчёт перечитан — повторите правку')
+      }
+      if (code === 'ESTIMATE_CHANGED') {
+        // Расчёт сохранили в другой вкладке или другой пользователь: записать
+        // своё — значит стереть его правки молча. Поднимаем свежее.
+        await fetchEstimate(current.id)
+        throw new Error('Расчёт изменили в другой вкладке или другой пользователь. Расчёт перечитан — повторите правку')
+      }
+      throw e
     }
     estimate.value = mergeEstimate(current, updated)
   }

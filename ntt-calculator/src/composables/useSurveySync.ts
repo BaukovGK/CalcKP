@@ -139,6 +139,10 @@ export function useSurveySync(opts: {
       // монотонность, а повтор с тем же номером сервер принял бы за старую.
       rev += 1
       salePriceRub.value = await store.applySurvey(id, { ...payload, surveyRev: rev })
+      // Повтор после конфликта (План_устранения 3.1) поднимает ревизию выше
+      // сохранённой — счёт листа идёт от неё.
+      const storedRev = (store.estimate?.surveyData as Record<string, unknown> | undefined)?.surveyRev
+      if (typeof storedRev === 'number' && storedRev > rev) rev = storedRev
       lastSaved = stableStringify(payload)
       savedAt.value = new Date()
       error.value = null
