@@ -78,8 +78,9 @@ export function resolvePrice(row: EngineRow): { price: number | null; overridden
 /**
  * Вычисляет строку целиком.
  *
- * Строка без цены даёт сумму 0 и помечается `missingPrice` — она блокирует
- * переход CALC → REVIEW (Механика §10) и подсвечивается красным.
+ * Строка без цены даёт сумму 0 и помечается `missingPrice` — она не даёт
+ * выпустить КП (гейт `POST /api/estimates/:id/kp`, Механика §10) и
+ * подсвечивается красным.
  */
 export function computeRow(
   row: EngineRow,

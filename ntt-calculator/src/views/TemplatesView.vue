@@ -264,7 +264,7 @@ const TABS: Array<{ k: Tab; label: string; hint?: Hint }> = [
 /**
  * Строка, которую читает расчёт, — с МИНИМАЛЬНЫМ давлением для этого диаметра
  * (изделия безнапорные, ламинация считается минимально возможная; см.
- * `jointLayerIndex` в stores/calcTree.ts). Ищется, а не задаётся числом,
+ * `jointLayerIndex` в utils/materialize-context.ts). Ищется, а не задаётся числом,
  * чтобы пометка не разошлась с расчётом, если таблицу пополнят снизу.
  */
 const usedJointPn = computed(() => Math.min(...shownJoints.value.map((r) => r.pn)))

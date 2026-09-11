@@ -242,7 +242,8 @@ export function buildPumpMounting(ctx: MaterializeContext, p: PumpMountingParams
     ? [
         material(ctx, I.liftChainKns, chain, chainNote),
         // В листе скоб и колец столько же, сколько метров цепи (I196 =
-        // ROUNDUP(I195), I197 = I195) — так и переносим; вопрос заводу.
+        // ROUNDUP(I195), I197 = I195) — так и переносим; вопрос заводу —
+        // doc/Вопросы_заводу.md, §6з.
         material(ctx, I.liftShackleKns, chain, 'ƒ по эталону — столько же, сколько метров цепи'),
         material(ctx, I.liftRingKns, chain, 'ƒ по эталону — столько же, сколько метров цепи'),
       ]

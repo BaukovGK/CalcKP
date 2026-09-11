@@ -245,7 +245,7 @@ export function rowsWithNegativeSum(surveyData: unknown): TreeRow[] {
   return extractRows(surveyData).filter(isRowNegative)
 }
 
-/** Строки без цены — они блокируют переход CALC → REVIEW (Механика §10). */
+/** Строки без цены — они не дают выпустить КП (гейт `POST /:id/kp`, Механика §10). */
 export function rowsWithoutPrice(surveyData: unknown): TreeRow[] {
   return extractRows(surveyData).filter(isRowWithoutPrice)
 }
