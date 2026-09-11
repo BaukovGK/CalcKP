@@ -85,9 +85,29 @@ export const useAuthStore = defineStore('auth', () => {
    * `response.data` (`WRONG_PASSWORD`, `SAME_PASSWORD`, `utils/password-form.ts`).
    */
   async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await api.post('/auth/password', { currentPassword, newPassword })
+    const { data } = await api.post<{ accessToken?: string; refreshToken?: string } | undefined>(
+      '/auth/password',
+      { currentPassword, newPassword },
+    )
+    // Смена пароля отзывает все сессии (План_устранения 2.3) — эта
+    // продолжается с новыми токенами из ответа.
+    const token = data?.accessToken ?? accessToken.value
+    if (data?.refreshToken) localStorage.setItem(SESSION_KEYS.refresh, data.refreshToken)
     // Пароль теперь свой — экран смены больше не держит.
-    if (user.value?.mustChangePassword) _persist({ ...user.value, mustChangePassword: false }, accessToken.value)
+    _persist(user.value ? { ...user.value, mustChangePassword: false } : null, token)
+  }
+
+  // ── Выход на всех устройствах ─────────────────────────────────────────────
+  /**
+   * Отозвать все сессии пользователя, включая эту (План_устранения 2.3):
+   * сервер поднимает версию токенов. Сеть недоступна — ошибка уходит
+   * наверх, а сессия остаётся: молча «выйти» здесь, не выйдя на других
+   * устройствах, значило бы обмануть.
+   */
+  async function logoutAll(): Promise<void> {
+    await api.post('/auth/logout-all')
+    clearSession()
+    _persist(null, null)
   }
 
   // ── Refresh ───────────────────────────────────────────────────────────────
@@ -122,5 +142,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, accessToken, isLoggedIn, role, mustChangePassword, login, loginDemo, logout, changePassword, refresh, checkAuth }
+  return { user, accessToken, isLoggedIn, role, mustChangePassword, login, loginDemo, logout, logoutAll, changePassword, refresh, checkAuth }
 })

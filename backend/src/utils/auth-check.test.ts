@@ -13,7 +13,7 @@ function users(...list: AuthUser[]): FindAuthUser {
 
 describe('authenticate', () => {
   it('действующий токен доступа и активный пользователь — пропуск', async () => {
-    const token = await signAccess({ userId: 'u1', role: 'ENGINEER' })
+    const token = await signAccess({ userId: 'u1', role: 'ENGINEER', tokenVersion: 0 })
     await expect(authenticate(token, users({ id: 'u1', role: 'ENGINEER', isActive: true }))).resolves.toEqual({
       userId: 'u1',
       role: 'ENGINEER',
@@ -23,20 +23,20 @@ describe('authenticate', () => {
   // План_реализации §4.2 №3: роль бралась из токена, и её отзыв не действовал,
   // пока токен не истечёт (15 минут).
   it('роль — из БД, а не из токена', async () => {
-    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN', tokenVersion: 0 })
     const who = await authenticate(token, users({ id: 'u1', role: 'VIEWER', isActive: true }))
     expect(who.role).toBe('VIEWER')
   })
 
   it('заблокированный или удалённый пользователь — отказ сразу', async () => {
-    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN', tokenVersion: 0 })
     await expect(authenticate(token, users({ id: 'u1', role: 'ADMIN', isActive: false }))).rejects.toBeInstanceOf(AuthError)
     await expect(authenticate(token, users())).rejects.toBeInstanceOf(AuthError)
   })
 
   // §4.2 №2: refresh-токен в заголовке запроса больше не открывает API.
   it('refresh-токен вместо токена доступа — отказ', async () => {
-    const token = await signRefresh({ userId: 'u1', role: 'ADMIN' })
+    const token = await signRefresh({ userId: 'u1', role: 'ADMIN', tokenVersion: 0 })
     await expect(authenticate(token, users({ id: 'u1', role: 'ADMIN', isActive: true }))).rejects.toBeInstanceOf(AuthError)
   })
 
@@ -45,7 +45,7 @@ describe('authenticate', () => {
   })
 
   it('сбой БД — не отказ по токену: ошибка уходит дальше', async () => {
-    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN', tokenVersion: 0 })
     const broken: FindAuthUser = async () => {
       throw new Error('БД недоступна')
     }
@@ -61,19 +61,52 @@ describe('обязательная смена пароля', () => {
   const pending = { id: 'u1', role: 'ADMIN', isActive: true, mustChangePassword: true }
 
   it('обычный маршрут — отказ «смените пароль», а не 401', async () => {
-    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN', tokenVersion: 0 })
     await expect(authenticate(token, users(pending))).rejects.toBeInstanceOf(PasswordChangeRequired)
   })
 
   it('маршруты смены пароля пропускают', async () => {
-    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN', tokenVersion: 0 })
     await expect(authenticate(token, users(pending), { allowPasswordChange: true })).resolves.toEqual({ userId: 'u1', role: 'ADMIN' })
   })
 
   it('заблокированный — отказ 401, даже на смене пароля', async () => {
-    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN', tokenVersion: 0 })
     await expect(
       authenticate(token, users({ ...pending, isActive: false }), { allowPasswordChange: true }),
     ).rejects.toBeInstanceOf(AuthError)
+  })
+})
+
+// План_устранения 2.3: смена и сброс пароля, блокировка и «Выйти на всех
+// устройствах» поднимают версию токенов пользователя — выданные прежде не
+// принимаются, а не живут до своего срока.
+describe('отзыв токенов', () => {
+  it('версия токена совпадает с версией пользователя — пропуск', async () => {
+    const token = await signAccess({ userId: 'u1', role: 'ENGINEER', tokenVersion: 3 })
+    await expect(authenticate(token, users({ id: 'u1', role: 'ENGINEER', isActive: true, tokenVersion: 3 }))).resolves.toEqual({
+      userId: 'u1',
+      role: 'ENGINEER',
+    })
+  })
+
+  it('версия выросла — токен отозван, и на смене пароля тоже', async () => {
+    const token = await signAccess({ userId: 'u1', role: 'ENGINEER', tokenVersion: 3 })
+    const user = { id: 'u1', role: 'ENGINEER', isActive: true, tokenVersion: 4 }
+    await expect(authenticate(token, users(user))).rejects.toBeInstanceOf(AuthError)
+    await expect(authenticate(token, users(user), { allowPasswordChange: true })).rejects.toBeInstanceOf(AuthError)
+  })
+
+  it('токен, выпущенный до версий, — версия 0: проходит, пока версия пользователя не выросла', async () => {
+    const { SignJWT } = await import('jose')
+    const legacy = await new SignJWT({ userId: 'u1', role: 'ENGINEER', typ: 'access' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setIssuer('ntt-calculator')
+      .setAudience('ntt-calculator-api')
+      .setExpirationTime('15m')
+      .sign(new TextEncoder().encode(process.env.JWT_SECRET!))
+    await expect(authenticate(legacy, users({ id: 'u1', role: 'ENGINEER', isActive: true, tokenVersion: 0 }))).resolves.toBeTruthy()
+    await expect(authenticate(legacy, users({ id: 'u1', role: 'ENGINEER', isActive: true, tokenVersion: 1 }))).rejects.toBeInstanceOf(AuthError)
   })
 })

@@ -24,17 +24,23 @@ export interface TokenPayload extends JWTPayload {
   userId: string
   role: string
   typ?: TokenType
+  /**
+   * Версия токенов пользователя на момент выпуска (`User.tokenVersion`,
+   * План_устранения 2.3). Выросла с тех пор — смена или сброс пароля,
+   * блокировка, «Выйти на всех устройствах» — токен не принимается. Нет
+   * поля — токен выпущен до версий и считается версией 0.
+   */
+  tv?: number
 }
 
-type Claims = Pick<TokenPayload, 'userId' | 'role'>
+type Claims = Pick<TokenPayload, 'userId' | 'role'> & { tokenVersion: number }
 
 function sign(claims: Claims, typ: TokenType, expires: string) {
-  return new SignJWT({ userId: claims.userId, role: claims.role, typ })
+  return new SignJWT({ userId: claims.userId, role: claims.role, typ, tv: claims.tokenVersion })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setIssuer(TOKEN_ISSUER)
     .setAudience(TOKEN_AUDIENCE)
-    // jti — задел под отзыв токенов (blacklist при выходе и смене пароля).
     .setJti(randomUUID())
     .setExpirationTime(expires)
     .sign(getSecret())
@@ -78,6 +84,11 @@ async function verifyAs(token: string, expected: TokenType): Promise<TokenPayloa
   if (tokenType(p) !== expected) throw new Error(`Нужен ${expected}-токен`)
   if (typeof p.userId !== 'string' || p.userId === '') throw new Error('В токене нет пользователя')
   return p
+}
+
+/** Версия токенов, с которой выпущен токен; нет поля — 0 (выпущен до версий). */
+export function tokenVersionOf(p: Pick<TokenPayload, 'tv'>): number {
+  return typeof p.tv === 'number' && Number.isInteger(p.tv) ? p.tv : 0
 }
 
 /** Токен доступа к API; refresh-токен не проходит. */

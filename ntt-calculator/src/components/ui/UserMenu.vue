@@ -10,6 +10,14 @@
       Сменить пароль
     </button>
     <button v-hint="ACCOUNT_HINTS.logout" class="btn btn-g" :class="{ 'btn-full': !inline }" @click="logout">Выйти</button>
+    <button
+      v-if="!isDemo"
+      v-hint="ACCOUNT_HINTS.logoutAll"
+      class="btn btn-g"
+      :class="{ 'btn-full': !inline }"
+      :disabled="leavingAll"
+      @click="logoutAll"
+    >Выйти везде</button>
     <ChangePasswordModal :show="passwordOpen" @close="passwordOpen = false" />
   </div>
 </template>
@@ -21,6 +29,7 @@ import ChangePasswordModal from '@/components/ui/ChangePasswordModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectsStore } from '@/stores/projects'
 import { ACCOUNT_HINTS } from '@/hints/account'
+import { toast } from '@/composables/useToast'
 
 /**
  * Блок пользователя: смена своего пароля и выход — на каждом основном экране.
@@ -38,6 +47,7 @@ const auth = useAuthStore()
 const projects = useProjectsStore()
 const router = useRouter()
 const passwordOpen = ref(false)
+const leavingAll = ref(false)
 
 /** Демо-вход работает без сервера — пароля у него нет. */
 const isDemo = computed(() => auth.accessToken === 'demo-token')
@@ -46,6 +56,20 @@ async function logout() {
   await auth.logout()
   projects.clear()
   await router.push('/login')
+}
+
+/** Выйти на всех устройствах — все сессии отозваны, эта тоже (2.3). */
+async function logoutAll() {
+  leavingAll.value = true
+  try {
+    await auth.logoutAll()
+    projects.clear()
+    await router.push('/login')
+  } catch {
+    toast('Не удалось выйти на всех устройствах — сервер недоступен, попробуйте ещё раз', 'error')
+  } finally {
+    leavingAll.value = false
+  }
 }
 </script>
 

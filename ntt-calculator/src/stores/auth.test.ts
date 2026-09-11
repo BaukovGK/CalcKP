@@ -162,3 +162,44 @@ describe('стор авторизации: обязательная смена �
     expect(JSON.parse(localStorage.getItem(SESSION_KEYS.user)!).mustChangePassword).toBe(false)
   })
 })
+
+// План_устранения 2.3: смена пароля отзывает все сессии — эта продолжается с
+// новыми токенами; «выйти везде» отзывает и её.
+describe('стор авторизации: отзыв сессий', () => {
+  it('смена пароля — новые токены из ответа', async () => {
+    post.mockResolvedValueOnce({ data: { accessToken: 'a1', refreshToken: 'r1', user: ENGINEER } })
+    const auth = useAuthStore()
+    await auth.login('eng@ntt.local', 'старый-пароль')
+    post.mockResolvedValueOnce({ data: { accessToken: 'a2', refreshToken: 'r2' } })
+
+    await auth.changePassword('старый-пароль', 'новый-пароль-1')
+
+    expect(auth.accessToken).toBe('a2')
+    expect(localStorage.getItem(SESSION_KEYS.access)).toBe('a2')
+    expect(localStorage.getItem(SESSION_KEYS.refresh)).toBe('r2')
+    expect(auth.isLoggedIn).toBe(true)
+  })
+
+  it('выйти везде — запрос серверу, сессия стёрта', async () => {
+    post.mockResolvedValueOnce({ data: { accessToken: 'a1', refreshToken: 'r1', user: ENGINEER } })
+    const auth = useAuthStore()
+    await auth.login('eng@ntt.local', 'пароль-инженера')
+    post.mockResolvedValueOnce({ data: undefined })
+
+    await auth.logoutAll()
+
+    expect(post).toHaveBeenLastCalledWith('/auth/logout-all')
+    expect(auth.isLoggedIn).toBe(false)
+    expect(localStorage.getItem(SESSION_KEYS.refresh)).toBeNull()
+  })
+
+  it('сервер недоступен — ошибка наверх, сессия цела: «выйти везде» молча не делается', async () => {
+    post.mockResolvedValueOnce({ data: { accessToken: 'a1', refreshToken: 'r1', user: ENGINEER } })
+    const auth = useAuthStore()
+    await auth.login('eng@ntt.local', 'пароль-инженера')
+    post.mockRejectedValueOnce(new Error('Network Error'))
+
+    await expect(auth.logoutAll()).rejects.toThrow('Network Error')
+    expect(auth.isLoggedIn).toBe(true)
+  })
+})

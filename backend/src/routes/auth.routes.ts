@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../utils/prisma'
-import { signAccess, signRefresh, verifyRefresh } from '../utils/jwt'
+import { signAccess, signRefresh, tokenVersionOf, verifyRefresh } from '../utils/jwt'
 import { validate } from '../middleware/validate'
 import { requireAuthForPasswordChange, type AuthRequest } from '../middleware/auth'
 import { audit } from '../utils/audit'
@@ -28,7 +28,7 @@ authRouter.post('/login', validate(loginSchema), async (req, res, next) => {
     if (!ok) {
       res.status(401).json({ message: 'Неверный email или пароль' }); return
     }
-    const payload = { userId: user.id, role: user.role }
+    const payload = { userId: user.id, role: user.role, tokenVersion: user.tokenVersion }
     const [accessToken, refreshToken] = await Promise.all([
       signAccess(payload),
       signRefresh(payload),
@@ -51,7 +51,9 @@ authRouter.post('/refresh', async (req, res, next) => {
     const payload    = await verifyRefresh(refreshToken)
     const user       = await prisma.user.findUnique({ where: { id: payload.userId } })
     if (!user || !user.isActive) { res.status(401).json({ message: 'Пользователь не найден' }); return }
-    const accessToken = await signAccess({ userId: user.id, role: user.role })
+    // Refresh-токен отозван вместе с версией (План_устранения 2.3).
+    if (tokenVersionOf(payload) !== user.tokenVersion) { res.status(401).json({ message: 'Сессия завершена — войдите снова' }); return }
+    const accessToken = await signAccess({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion })
     res.json({ accessToken })
   } catch {
     res.status(401).json({ message: 'Недействительный refresh-токен' })
@@ -81,6 +83,9 @@ authRouter.get('/me', requireAuthForPasswordChange, async (req: AuthRequest, res
  * Открыт и до обязательной смены пароля — ради неё и открыт: пароль,
  * заданный не самим пользователем, меняется здесь же, и отметка снимается
  * (План_устранения 2.1).
+ *
+ * Смена пароля отзывает все сессии пользователя — версия токенов растёт
+ * (2.3). Эта сессия продолжается: ответ несёт новые токены.
  */
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
@@ -103,24 +108,39 @@ authRouter.post('/password', requireAuthForPasswordChange, validate(changePasswo
       return
     }
 
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: await bcrypt.hash(newPassword, 10), mustChangePassword: false },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10), mustChangePassword: false, tokenVersion: { increment: 1 } },
+      select: { id: true, role: true, tokenVersion: true },
     })
     await audit(user.id, 'user.password_change', 'User', user.id, {})
 
+    const claims = { userId: updated.id, role: updated.role, tokenVersion: updated.tokenVersion }
+    const [accessToken, refreshToken] = await Promise.all([signAccess(claims), signRefresh(claims)])
+    res.json({ accessToken, refreshToken })
+  } catch (e) { next(e) }
+})
+
+/**
+ * DELETE /api/auth/logout — выход на этом устройстве: токены удаляет клиент.
+ * Отдельный токен сервер не отзывает — для этого «Выйти на всех
+ * устройствах» ниже. Открыт и до обязательной смены пароля.
+ */
+authRouter.delete('/logout', requireAuthForPasswordChange, async (_req: AuthRequest, res: Response, next) => {
+  try {
     res.status(204).send()
   } catch (e) { next(e) }
 })
 
-// DELETE /api/auth/logout — открыт и до обязательной смены пароля.
-authRouter.delete('/logout', requireAuthForPasswordChange, async (_req: AuthRequest, res: Response, next) => {
+/**
+ * POST /api/auth/logout-all — выйти на всех устройствах (План_устранения
+ * 2.3): версия токенов растёт, и все выданные токены пользователя, включая
+ * этот, больше не принимаются. Аудит `user.logout_all`.
+ */
+authRouter.post('/logout-all', requireAuthForPasswordChange, async (req: AuthRequest, res: Response, next) => {
   try {
-    // Stateless JWT — на клиенте просто удалить токены.
-    // TODO: token blacklist через Redis (SET ntt:bl:<jti> EX <ttl>) — jti в
-    //       токенах уже есть. При refresh и requireAuth проверять наличие jti
-    //       в blacklist. Блокировку учётки и смену роли requireAuth видит и
-    //       так: пользователь перечитывается из БД на каждом запросе.
+    await prisma.user.update({ where: { id: req.userId }, data: { tokenVersion: { increment: 1 } } })
+    await audit(req.userId, 'user.logout_all', 'User', req.userId, {})
     res.status(204).send()
   } catch (e) { next(e) }
 })

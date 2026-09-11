@@ -8,7 +8,10 @@ export interface AuthRequest extends Request {
 }
 
 const findAuthUser: FindAuthUser = (id) =>
-  prisma.user.findUnique({ where: { id }, select: { id: true, role: true, isActive: true, mustChangePassword: true } })
+  prisma.user.findUnique({
+    where: { id },
+    select: { id: true, role: true, isActive: true, mustChangePassword: true, tokenVersion: true },
+  })
 
 function authMiddleware(opts: { allowPasswordChange: boolean }): RequestHandler {
   return async (req, res, next) => {

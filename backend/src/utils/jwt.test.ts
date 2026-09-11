@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { SignJWT } from 'jose'
-import { signAccess, signRefresh, TOKEN_AUDIENCE, TOKEN_ISSUER, verifyAccess, verifyRefresh } from './jwt'
+import { signAccess, signRefresh, TOKEN_AUDIENCE, TOKEN_ISSUER, tokenVersionOf, verifyAccess, verifyRefresh } from './jwt'
 
 const SECRET = 'тестовый-секрет-длиной-не-меньше-32-символов'
-const claims = { userId: 'u1', role: 'ENGINEER' }
+const claims = { userId: 'u1', role: 'ENGINEER', tokenVersion: 0 }
 
 beforeAll(() => {
   process.env.JWT_SECRET = SECRET
@@ -88,5 +88,18 @@ describe('токены, выпущенные до типизации', () => {
     const t = await rawToken(claims, '7d')
     await expect(verifyRefresh(t)).resolves.toMatchObject({ userId: 'u1' })
     await expect(verifyAccess(t)).rejects.toThrow()
+  })
+})
+
+// План_устранения 2.3: версия токенов пользователя вписана в токен.
+describe('версия токенов', () => {
+  it('в токене — версия пользователя на момент выпуска', async () => {
+    const p = await verifyAccess(await signAccess({ ...claims, tokenVersion: 5 }))
+    expect(tokenVersionOf(p)).toBe(5)
+  })
+
+  it('нет поля — версия 0', () => {
+    expect(tokenVersionOf({})).toBe(0)
+    expect(tokenVersionOf({ tv: 1.5 })).toBe(0)
   })
 })

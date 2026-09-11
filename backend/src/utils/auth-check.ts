@@ -1,4 +1,4 @@
-import { verifyAccess } from './jwt'
+import { tokenVersionOf, verifyAccess } from './jwt'
 
 /** Пользователь, каким его видит проверка доступа: роль и активность — из БД. */
 export interface AuthUser {
@@ -7,6 +7,8 @@ export interface AuthUser {
   isActive: boolean
   /** Пароль задан не им самим — до смены открыта только смена пароля. */
   mustChangePassword?: boolean
+  /** Версия токенов (План_устранения 2.3); нет — 0. */
+  tokenVersion?: number
 }
 
 export type FindAuthUser = (id: string) => Promise<AuthUser | null>
@@ -35,13 +37,19 @@ export async function authenticate(
   opts: { allowPasswordChange?: boolean } = {},
 ): Promise<{ userId: string; role: string }> {
   let userId: string
+  let version: number
   try {
-    userId = (await verifyAccess(token)).userId
+    const payload = await verifyAccess(token)
+    userId = payload.userId
+    version = tokenVersionOf(payload)
   } catch {
     throw new AuthError('Недействительный или истёкший токен')
   }
   const user = await findUser(userId)
   if (!user || !user.isActive) throw new AuthError('Пользователь не найден или заблокирован')
+  // Версия выросла — пароль сменили или сбросили, учётку блокировали, либо
+  // вышли на всех устройствах: токен отозван (План_устранения 2.3).
+  if (version !== (user.tokenVersion ?? 0)) throw new AuthError('Сессия завершена — войдите снова')
   // Пароль задан не им — открыты только маршруты смены пароля (и «кто я»,
   // и выход): так обязательную смену не обойти запросами мимо экрана.
   if (user.mustChangePassword && !opts.allowPasswordChange) {

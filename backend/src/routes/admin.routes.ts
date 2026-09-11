@@ -119,9 +119,12 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
       }
     }
 
+    // Блокировка отзывает токены: иначе после разблокировки старые сессии
+    // ожили бы снова (План_устранения 2.3).
+    const revoke = patch.isActive === false && current.isActive
     const user = await prisma.user.update({
       where: { id },
-      data:  patch,
+      data:  revoke ? { ...patch, tokenVersion: { increment: 1 } } : patch,
       select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
     })
     await audit(auth.userId, 'user.update', 'User', id, patch)
@@ -152,7 +155,9 @@ adminRouter.post('/users/:id/password-reset', async (req, res: Response, next: N
     const password = temporaryPassword()
     await prisma.user.update({
       where: { id },
-      data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true },
+      // Сессии пользователя отзываются: старым паролем уже не войти, а
+      // выданные токены не должны его пережить (План_устранения 2.3).
+      data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, tokenVersion: { increment: 1 } },
     })
     await audit(auth.userId, 'user.password_reset', 'User', id, { email: user.email })
 
