@@ -62,7 +62,8 @@
     <!-- Примечание / разрешение конфликта -->
     <div class="c-note">
       <template v-if="conflict">
-        <span class="was">было {{ fmt(prevCalc) }}</span>
+        <span v-if="row.renamedFrom != null" class="was">было «{{ row.renamedFrom }}»</span>
+        <span v-else class="was">было {{ fmt(prevCalc) }}</span>
         <template v-if="!readonly">
           <button class="btn-amber" @click="$emit('keep', row.id)">Оставить моё</button>
           <button class="btn-plain" @click="$emit('drop', row.id)">Принять новое</button>

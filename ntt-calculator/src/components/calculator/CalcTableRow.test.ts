@@ -196,3 +196,17 @@ describe('CalcTableRow — цена сдвинулась при пересчёт
     expect(button(w, 'Принять новую цену').exists()).toBe(false)
   })
 })
+
+// План_устранения, 1.1: правки перенесены на строку с новым наименованием —
+// ячейка конфликта называет прежнее наименование, а не число.
+describe('строка со сменившимся наименованием', () => {
+  it('показывает прежнее наименование и кнопки решения', () => {
+    const row = makeRow({ priceManual: 41000, renamedFrom: 'Труба GRP DN250' })
+    const w = mount(CalcTableRow, {
+      props: { row: row as never, res: computeRow(row as never), conflict: true, prevCalc: null, fotK: null, disabled: false },
+    })
+    expect(w.find('.was').text()).toBe('было «Труба GRP DN250»')
+    expect(w.findAll('button').some((b) => b.text() === 'Оставить моё')).toBe(true)
+    expect(w.findAll('button').some((b) => b.text() === 'Принять новое')).toBe(true)
+  })
+})

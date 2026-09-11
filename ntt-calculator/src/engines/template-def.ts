@@ -289,18 +289,32 @@ export function bindParams(
 
 // ─── Материализация ──────────────────────────────────────────────────────────
 
-function materializeRef(ctx: MaterializeContext, env: DeviceEnv, ref: TemplateNodeRef, scope: Scope): CalcComponent[] {
+/**
+ * Узел шаблона — в компоненты расчёта, каждому — ключ `slot`
+ * (см. CalcComponent.slot).
+ *
+ * @param occurrence который по счёту в шаблоне узел каталога с этим кодом:
+ *   один узел каталога может стоять в шаблоне несколько раз
+ */
+function materializeRef(
+  ctx: MaterializeContext,
+  env: DeviceEnv,
+  ref: TemplateNodeRef,
+  scope: Scope,
+  occurrence: number,
+): CalcComponent[] {
   if (ref.kind === 'builtin') {
     const node = builtinNode(ref.ref)
     if (!node || node.device !== env.device) return []
-    return (node.build as (c: MaterializeContext, s: unknown) => CalcComponent[])(ctx, env.survey)
+    const built = (node.build as (c: MaterializeContext, s: unknown) => CalcComponent[])(ctx, env.survey)
+    return built.map((c, i) => ({ ...c, slot: `${ref.ref}#${c.slot ?? i}` }))
   }
   // Узла нет среди опубликованных (в архиве, не опубликован) — не строим:
   // публикация шаблона с таким узлом запрещена, сюда попадают только
   // исключения, и молчаливый пропуск честнее выдуманных строк.
   const node = ctx.catalogNodeOf?.(ref.code)
   if (!node) return []
-  return [materializeNode(ctx, node, bindParams(node.body, ref.bindings, scope, ctx), { title: ref.title })]
+  return [{ ...materializeNode(ctx, node, bindParams(node.body, ref.bindings, scope, ctx), { title: ref.title }), slot: `cat:${ref.code}#${occurrence}` }]
 }
 
 /**
@@ -313,7 +327,15 @@ function materializeRef(ctx: MaterializeContext, env: DeviceEnv, ref: TemplateNo
  */
 export function materializeTemplate(ctx: MaterializeContext, env: DeviceEnv, template: ProductTemplate): CalcTree {
   const scope = surveyScope(env)
-  const built = template.body.sections.map((s) => s.nodes.flatMap((ref) => materializeRef(ctx, env, ref, scope)))
+  // Узел каталога может стоять в шаблоне не раз: номер вхождения — часть ключа.
+  const seen = new Map<string, number>()
+  const occurrenceOf = (ref: TemplateNodeRef): number => {
+    if (ref.kind !== 'catalog') return 0
+    const n = seen.get(ref.code) ?? 0
+    seen.set(ref.code, n + 1)
+    return n
+  }
+  const built = template.body.sections.map((s) => s.nodes.flatMap((ref) => materializeRef(ctx, env, ref, scope, occurrenceOf(ref))))
   const sections: CalcSection[] = template.body.sections.map((s, i) => ({
     id: nextId('s'),
     code: String(i + 1),

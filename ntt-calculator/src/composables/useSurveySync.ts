@@ -1,4 +1,4 @@
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useCalcTreeStore } from '@/stores/calcTree'
 import { hasInvalidNumericField } from '@/utils/numeric-input'
 
@@ -173,5 +173,19 @@ export function useSurveySync(opts: {
     void flush()
   })
 
-  return { status, error, savedAt, salePriceRub, flush }
+  /**
+   * Сколько ручных правок расчёта пересборка не смогла перенести: узла или
+   * строки больше нет (План_устранения, 1.1). Список — на экране расчёта; ОЛ
+   * только сообщает, что он есть.
+   */
+  const lostEdits = computed(() => store.lostEdits.length)
+
+  /** Статус «сохранено» — время и предупреждение о непереносимых правках. */
+  function savedLabel(): string {
+    const at = savedAt.value?.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) ?? ''
+    const lost = lostEdits.value
+    return `сохранено ${at} · расчёт пересчитан` + (lost ? ` · не перенесено ручных правок: ${lost} — список в расчёте` : '')
+  }
+
+  return { status, error, savedAt, salePriceRub, flush, lostEdits, savedLabel }
 }

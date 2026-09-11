@@ -98,6 +98,8 @@ export function buildMountingLoops(ctx: MaterializeContext, dn: number): CalcCom
     id: nextId('c'),
     nodeCode: 'A10',
     title: `${kit.title} ×${loops}`,
+    // Комплект по DN бывает простым и усиленным, но узел один — петли.
+    slot: 'kit',
     enabled: true,
     rows: [
       ...kit.lines.map((l) =>

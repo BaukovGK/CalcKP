@@ -11,8 +11,10 @@ import {
   type CalcSection,
   type CalcTree,
   type KnsSurveyParams,
+  type LostEdit,
   type MaterializeContext,
 } from '@/engines/template-kns'
+import { titleStem } from '@/engines/component-key'
 import type { EmkSurveyParams, KolSurveyParams } from '@/engines/template-emk-kol'
 import { materializeEmk, materializeKns, materializeKol } from '@/engines/materialize'
 import { materializeNode, type CatalogNode, type NodeParamValues } from '@/engines/node-def'
@@ -236,7 +238,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
         : `В расчёте нет параметров ОЛ для изделия ${deviceType} — заполните опросный лист`
     }
 
-    if (baseTree) reconcileTrees(baseTree, fresh)
+    if (baseTree) {
+      const lost = reconcileTrees(baseTree, fresh)
+      const kept = baseTree.lostEdits ?? []
+      if (kept.length || lost.length) fresh.lostEdits = [...kept, ...lost]
+      lastLostCount.value = lost.length
+    } else {
+      lastLostCount.value = 0
+    }
     tree.value = fresh
     treeSurveyRev.value = savedRev
     recalcAll()
@@ -451,31 +460,128 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   }
 
   /**
+   * Сколько ручных правок не удалось перенести последней пересборкой —
+   * для сообщения о ней (экран расчёта, «Пересобрать»).
+   */
+  const lastLostCount = ref(0)
+
+  /** У строки есть ручная правка — то, что пересборка обязана перенести. */
+  function hasManualEdit(r: CalcRowNode): boolean {
+    const qty = r.qtyManual != null && String(r.qtyManual).trim() !== ''
+    return qty || (r.priceManual != null && !r.priceBinding) || r.enabled === false
+  }
+
+  /** Строка той же природы: вид, категория и ЕИ — наименование могло смениться. */
+  function sameKind(a: CalcRowNode, b: CalcRowNode): boolean {
+    return a.kind === b.kind && a.category === b.category && normalizePriceText(a.unit) === normalizePriceText(b.unit)
+  }
+
+  /** Правки строки, которую некуда перенести, — запись для списка. */
+  function lostRowOf(os: CalcSection, oc: CalcComponent, r: CalcRowNode): LostEdit {
+    return {
+      section: os.title,
+      component: oc.title,
+      row: {
+        kind: r.kind,
+        category: r.category,
+        name: r.name,
+        unit: r.unit,
+        ...(r.qtyManual != null && String(r.qtyManual).trim() !== '' ? { qtyManual: r.qtyManual } : {}),
+        ...(r.priceManual != null && !r.priceBinding ? { priceManual: r.priceManual } : {}),
+        ...(r.enabled === false ? { disabled: true } : {}),
+      },
+    }
+  }
+
+  /**
+   * Правки узла, которого в свежем дереве нет: по строке на каждую правленую
+   * и отдельная запись, если узел выключили вручную (выключенный тумблером ОЛ
+   * — не правка инженера).
+   */
+  function lostComponentOf(os: CalcSection, oc: CalcComponent): LostEdit[] {
+    const out = oc.rows.filter(hasManualEdit).map((r) => lostRowOf(os, oc, r))
+    if (!oc.enabled && oc.enabledCalc !== false) out.unshift({ section: os.title, component: oc.title, componentDisabled: true })
+    return out
+  }
+
+  /**
+   * Правки строки прежнего дерева — на строку свежего.
+   *
+   * @param renamed строка найдена не по наименованию, а по природе (вид,
+   *   категория, ЕИ): наименование сменилось вместе с параметром ОЛ, и
+   *   перенос помечается конфликтом `renamedFrom`
+   */
+  function carryEdits(or: CalcRowNode, nr: CalcRowNode, renamed: boolean) {
+    nr.qtyManual = or.qtyManual
+    if (!nr.priceBinding) nr.priceManual = or.priceManual
+    nr.enabled = or.enabled
+
+    const before = or.qtyCalcPrev ?? or.qtyCalc
+    nr.qtyCalcPrev = nr.qtyManual != null && before != null && before !== nr.qtyCalc ? before : undefined
+
+    if (renamed) {
+      // Самое раннее неразрешённое наименование — как у количества.
+      nr.renamedFrom = or.renamedFrom ?? or.name
+      return
+    }
+    if (or.renamedFrom) nr.renamedFrom = or.renamedFrom
+
+    // Свежее дерево берёт цены из действующего прайса. Сдвинулся он под
+    // строкой — отметка «было → стало», как у количества; непринятая
+    // прежняя отметка переносится (engines/reprice.ts). У переименованной
+    // строки позиция другая — сравнивать её цену с прежней бессмысленно.
+    nr.priceCatalogPrev = priceMarkAfter(or, nr.priceCatalog)
+  }
+
+  /**
    * Переносит ручные правки из старого дерева в свежематериализованное:
    * qtyManual/priceManual/enabled строк, тумблеры разделов и компонентов,
    * компоненты «Добавлено вручную» — целиком.
    *
-   * Две оговорки:
+   * Узел ищется по ключу `slot` (CalcComponent.slot), а не по названию: в
+   * названии параметры ОЛ — «Нитка напорного трубопровода DN150 ×2», — и при
+   * их смене правки узла прежде пропадали молча, а выключенный узел
+   * включался снова (План_устранения, 1.1). У деревьев, собранных до ключей,
+   * — по названию, затем по его основе без параметров
+   * (`engines/component-key.ts`).
+   *
+   * Строка — по «вид + наименование + ЕИ». Наименование сменилось вместе с
+   * параметром ОЛ (DN, длина штока) — правки переходят на строку той же
+   * природы с пометкой `renamedFrom`: это конфликт, его подтверждает инженер.
+   *
+   * Оговорки:
    *  - цена строки, связанной с полем ОЛ (`priceBinding`), НЕ переносится:
    *    её уже положила материализация из ОЛ, а ОЛ здесь источник — старая
    *    цифра из дерева вернула бы то, что инженер только что исправил;
    *  - если у строки с ручным количеством изменилось расчётное, прежнее
    *    расчётное запоминается в `qtyCalcPrev` — это конфликт «было → стало».
    *    Запоминается САМОЕ РАННЕЕ неразрешённое значение: при двух правках ОЛ
-   *    подряд инженер должен увидеть то, поверх чего ставил свою цифру.
+   *    подряд инженер должен увидеть то, поверх чего ставил свою цифру;
+   *  - что перенести некуда — узла или строки той же природы в свежем дереве
+   *    нет, — не пропадает молча, а возвращается списком.
+   *
+   * @returns правки, которые перенести не удалось
    */
-  function reconcileTrees(oldTree: CalcTree, fresh: CalcTree) {
+  function reconcileTrees(oldTree: CalcTree, fresh: CalcTree): LostEdit[] {
+    const lost: LostEdit[] = []
     // Раздел ищется по названию, номер — запасной ключ: шаблон технолога
     // переставляет разделы, и номер у раздела сменится, а название — нет.
     const sectionOf = (os: CalcSection): CalcSection | undefined =>
       fresh.sections.find((s) => s.title === os.title) ?? fresh.sections.find((s) => s.code === os.code)
-    // Компонент — по названию в своём разделе, а не нашёлся там — в любом:
-    // узел могли перенести в другой раздел. Сопоставленный второй раз не
-    // берётся: два одноимённых компонента не сливаются в один.
+    // Узел — сначала в своём разделе, а не нашёлся там — в любом: узел могли
+    // перенести в другой раздел. Сопоставленный второй раз не берётся.
+    const everywhere = fresh.sections.flatMap((s) => s.components)
     const taken = new Set<CalcComponent>()
-    const componentOf = (ns: CalcSection | undefined, title: string): CalcComponent | undefined => {
-      const pick = (list: CalcComponent[]) => list.find((c) => c.title === title && !taken.has(c))
-      return (ns && pick(ns.components)) ?? pick(fresh.sections.flatMap((s) => s.components))
+    const componentOf = (ns: CalcSection | undefined, oc: CalcComponent): CalcComponent | undefined => {
+      const pick = (match: (c: CalcComponent) => boolean) =>
+        (ns && ns.components.find((c) => !taken.has(c) && match(c))) ?? everywhere.find((c) => !taken.has(c) && match(c))
+      // Ключ решает всё: узла с тем же ключом нет — это узел другой роли
+      // (плоское днище сменилось эллиптическими), и его правки чужому узлу
+      // не достаются.
+      if (oc.slot) return pick((c) => c.slot === oc.slot)
+      const title = RENAMED_COMPONENTS[oc.title] ?? oc.title
+      const stem = titleStem(title)
+      return pick((c) => c.title === title) ?? pick((c) => titleStem(c.title) === stem)
     }
 
     for (const os of oldTree.sections) {
@@ -492,33 +598,38 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
           continue
         }
 
-        const title = RENAMED_COMPONENTS[oc.title] ?? oc.title
-        const nc = componentOf(ns, title)
-        if (!nc) continue
+        const nc = componentOf(ns, oc)
+        if (!nc) {
+          lost.push(...lostComponentOf(os, oc))
+          continue
+        }
         taken.add(nc)
         nc.enabled = reconciledEnabled(oc, nc)
 
         const used = new Set<number>()
+        const unmatched: CalcRowNode[] = []
         for (const or of oc.rows) {
           const key = rowMatchKey(or)
           const idx = nc.rows.findIndex((nr, i) => !used.has(i) && rowMatchKey(nr) === key)
-          const nr = idx >= 0 ? nc.rows[idx] : undefined
-          if (!nr) continue
+          if (idx < 0) {
+            if (hasManualEdit(or)) unmatched.push(or)
+            continue
+          }
           used.add(idx)
-          nr.qtyManual = or.qtyManual
-          if (!nr.priceBinding) nr.priceManual = or.priceManual
-          nr.enabled = or.enabled
-
-          const before = or.qtyCalcPrev ?? or.qtyCalc
-          nr.qtyCalcPrev = nr.qtyManual != null && before != null && before !== nr.qtyCalc ? before : undefined
-
-          // Свежее дерево берёт цены из действующего прайса. Сдвинулся он под
-          // строкой — отметка «было → стало», как у количества; непринятая
-          // прежняя отметка переносится (engines/reprice.ts).
-          nr.priceCatalogPrev = priceMarkAfter(or, nr.priceCatalog)
+          carryEdits(or, nc.rows[idx]!, false)
+        }
+        for (const or of unmatched) {
+          const idx = nc.rows.findIndex((nr, i) => !used.has(i) && sameKind(nr, or))
+          if (idx < 0) {
+            lost.push(lostRowOf(os, oc, or))
+            continue
+          }
+          used.add(idx)
+          carryEdits(or, nc.rows[idx]!, true)
         }
       }
     }
+    return lost
   }
 
   /**
@@ -627,9 +738,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     const s = new Set<string>()
     for (const r of rows.value) {
       if (r.qtyManual != null && r.qtyCalcPrev != null && r.qtyCalcPrev !== r.qtyCalc) s.add(r.id)
+      // Правки перенесены на строку с другим наименованием — их подтверждает инженер.
+      if (r.renamedFrom != null) s.add(r.id)
     }
     return s
   })
+
+  /** Правки, которые пересборка не смогла перенести (CalcTree.lostEdits). */
+  const lostEdits = computed<LostEdit[]>(() => tree.value?.lostEdits ?? [])
 
   /** Расчётное «было» у строк в конфликте — для подписи «было → стало». */
   const prevQtyCalc = computed<Record<string, number | null>>(() => {
@@ -724,14 +840,63 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   /** «Оставить моё» — гасит конфликт, override сохраняется. */
   function keepOverride(id: string) {
     const row = rows.value.find((r) => r.id === id)
+    if (!row) return
+    row.qtyCalcPrev = undefined
+    row.renamedFrom = undefined
+  }
+
+  /**
+   * «Принять новое» — сбрасывает override к расчётному. У строки со
+   * сменившимся наименованием — все перенесённые правки: количество, цену и
+   * выключение, — они относились к прежней позиции.
+   */
+  function dropOverride(id: string) {
+    const row = rows.value.find((r) => r.id === id)
+    if (row?.renamedFrom != null) {
+      if (!row.priceBinding) row.priceManual = null
+      row.enabled = true
+      row.renamedFrom = undefined
+    }
+    resetQty(id)
     if (row) row.qtyCalcPrev = undefined
   }
 
-  /** «Принять новое» — сбрасывает override к расчётному. */
-  function dropOverride(id: string) {
-    resetQty(id)
-    const row = rows.value.find((r) => r.id === id)
-    if (row) row.qtyCalcPrev = undefined
+  /**
+   * Вернуть непереносимую правку строкой, добавленной вручную: в раздел с тем
+   * же названием, а нет его — в последний. Правка узла целиком (узел был
+   * выключен) строкой не возвращается — её можно только убрать из списка.
+   */
+  function restoreLostEdit(index: number) {
+    const t = tree.value
+    const entry = t?.lostEdits?.[index]
+    if (!t || !entry?.row) return
+    const section = t.sections.find((s) => s.title === entry.section) ?? t.sections[t.sections.length - 1]
+    if (!section) return
+    const { row } = entry
+    addRow(section.code, {
+      kind: row.kind,
+      category: row.category,
+      name: row.name,
+      unit: row.unit,
+      qtyManual: row.qtyManual != null ? String(row.qtyManual) : null,
+      priceManual: row.priceManual ?? null,
+      enabled: !row.disabled,
+    })
+    dismissLostEdit(index)
+    recalcAll()
+  }
+
+  /** Убрать правку из списка непереносимых — инженер разобрался с ней сам. */
+  function dismissLostEdit(index: number) {
+    const t = tree.value
+    if (!t?.lostEdits) return
+    t.lostEdits = t.lostEdits.filter((_, i) => i !== index)
+    if (!t.lostEdits.length) delete t.lostEdits
+  }
+
+  /** Убрать весь список непереносимых правок. */
+  function dismissAllLostEdits() {
+    if (tree.value) delete tree.value.lostEdits
   }
 
   /**
@@ -1074,6 +1239,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     applySurvey, ensureContext, catalogPrice,
     setQtyManual, setPriceManual, resetQty, resetPrice,
     toggleSection, toggleComponent, keepOverride, dropOverride, fotKOf,
+    // Правки, которые пересборка не смогла перенести (План_устранения, 1.1).
+    lostEdits, lastLostCount, restoreLostEdit, dismissLostEdit, dismissAllLostEdits,
     addRow, removeRow,
     // Шаблоны изделий и узлы каталога (редактор шаблонов).
     templates, catalogNodes, activeTemplateVersion, templateOutdated, rebuildByActiveTemplate,

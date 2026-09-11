@@ -58,7 +58,7 @@ import {
   pressureGateValveCount,
   sleeveDiameter,
 } from './survey-kns'
-import type { EngineRow, PriceBinding } from './types'
+import type { Category, EngineRow, PriceBinding, RowKind } from './types'
 import type { CatalogNode } from './node-def'
 import type { ProductTemplate } from './template-def'
 import type { BasketDevice } from './basket-grinder'
@@ -250,6 +250,31 @@ export interface CalcRowNode extends EngineRow {
   isCustom?: boolean
 }
 
+/**
+ * Ручная правка, которую пересборка не смогла перенести: узла или строки в
+ * свежем дереве нет (План_устранения, 1.1). Прежде такие правки пропадали
+ * молча; теперь они копятся в дереве и видны инженеру списком, пока он их не
+ * вернёт строкой вручную или не уберёт.
+ */
+export interface LostEdit {
+  /** Раздел и узел прежнего дерева — где была правка. */
+  section: string
+  component: string
+  /** Строка с правками; нет — правка узла целиком. */
+  row?: {
+    kind: RowKind
+    category: Category
+    name: string
+    unit: string
+    qtyManual?: string | number | null
+    priceManual?: number | null
+    /** Строку выключили вручную. */
+    disabled?: boolean
+  }
+  /** Узел был выключен вручную, а в свежем дереве его нет. */
+  componentDisabled?: boolean
+}
+
 export interface CalcComponent {
   id: string
   /** Код узла каталога (A1…D5) — справочно, для аудита состава. */
@@ -274,6 +299,18 @@ export interface CalcComponent {
    * остаётся, как его оставил инженер (`stores/calcTree.ts`, reconcileTrees).
    */
   enabledCalc?: boolean
+  /**
+   * Ключ узла между сборками: `<узел шаблона>#<роль>`, у узла каталога —
+   * `cat:<код>#<n>`. Ставит материализация (`engines/template-def.ts`,
+   * materializeRef); строитель задаёт роль (`inlet`, `outlet`…), если набор
+   * его компонентов зависит от ОЛ, иначе ключ — номер компонента.
+   *
+   * По ключу, а не по названию, пересборка переносит ручные правки
+   * (`stores/calcTree.ts`, reconcileTrees): в названии — параметры ОЛ, и при
+   * их смене правки узла прежде пропадали молча. Нет ключа — дерево собрано
+   * до его появления, узел ищется по названию (`engines/component-key.ts`).
+   */
+  slot?: string
   rows: CalcRowNode[]
 }
 
@@ -328,6 +365,11 @@ export interface CalcTree {
    * редакций.
    */
   builtinRevision?: number
+  /**
+   * Ручные правки, которые пересборка не смогла перенести (см. LostEdit).
+   * Копятся от пересборки к пересборке, пока инженер их не разберёт.
+   */
+  lostEdits?: LostEdit[]
   sections: CalcSection[]
 }
 
@@ -527,6 +569,11 @@ export function grpNozzleOf(
 
 /** Патрубок изделия: заголовок узла, DN и число, наименование прорезки по прайсу. */
 export interface SleeveNozzle {
+  /**
+   * Роль патрубка — ключ узла (CalcComponent.slot): патрубок с нулевым
+   * количеством не строится, и номер компонента сдвинулся бы.
+   */
+  role: 'inlet' | 'outlet'
   title: string
   dn: number
   count: number
@@ -672,6 +719,7 @@ export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzl
     out.push({
       id: nextId('c'),
       nodeCode: 'A5',
+      slot: n.role,
       title: `${n.title}${n.grpJoint ? ' стеклопластиковый' : ''} DN${n.dn} ×${n.count}`,
       enabled: true,
       rows: [
@@ -884,6 +932,7 @@ export function buildKnsNozzles(
   // напорных — стык с ниткой напорного трубопровода (C2).
   return buildSleeveNozzles(ctx, [
     {
+      role: 'inlet',
       title: 'Патрубок подводящий',
       dn: s.inletDn,
       count: s.inletCount,
@@ -891,6 +940,7 @@ export function buildKnsNozzles(
       ...grpNozzleOf(s.inletMaterial, 'coupling'),
     },
     {
+      role: 'outlet',
       title: 'Патрубок напорный',
       dn: s.outletDn,
       count: s.outletCount,
@@ -1473,6 +1523,7 @@ export function buildPressurePipe(
       id: nextId('c'),
       nodeCode: 'C2',
       title: `Нитка напорного трубопровода DN${s.outletDn} ×${n}`,
+      slot: 'line',
       enabled: true,
       rows: [
         makeRow(ctx, item(kit.peSleeve, n, `ƒ по одной на нитку, ниток ${n}`)),
@@ -1496,6 +1547,7 @@ export function buildPressurePipe(
       id: nextId('c'),
       nodeCode: 'C2',
       title: 'Обвязка датчика давления',
+      slot: 'sensor',
       enabled: true,
       rows: [threeWayValve, ballValve, unionPipe].map((k) =>
         makeRow(ctx, {
@@ -1593,6 +1645,7 @@ export function buildPressurePipe(
       id: nextId('c'),
       nodeCode: 'C2',
       title: 'Аварийный трубопровод',
+      slot: 'emergency',
       ...surveyToggled(s.emergencyPipeline),
       rows: emergencyRows,
     })
@@ -1605,6 +1658,7 @@ export function buildPressurePipe(
     id: nextId('c'),
     nodeCode: 'C2',
     title: 'Работы по напорному трубопроводу',
+    slot: 'works',
     enabled: true,
     rows: [
       // Трудоёмкость самой нитки — норматив эталона, от диаметра и числа

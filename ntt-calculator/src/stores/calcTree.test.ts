@@ -1210,3 +1210,174 @@ describe('стор calcTree: шаблон технолога и узлы кат�
     expect(store.tree!.sections).toHaveLength(7)
   })
 })
+
+/**
+ * Перенос ручных правок при пересборке — по ключу узла, а не по названию
+ * (План_устранения, 1.1). В названиях узлов параметры ОЛ — «Нитка напорного
+ * трубопровода DN150 ×2», — и при их смене правки прежде пропадали молча:
+ * выключенный узел включался снова, ручные количества сбрасывались,
+ * конфликтов — ноль.
+ */
+describe('стор calcTree: перенос правок при смене параметров ОЛ', () => {
+  const kns = (over: Record<string, unknown> = {}) => ({
+    dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
+    nRab: '2', nRez: '1', emergency: false,
+    insulation: false, tiGlubina: '0', mvk: false, pipePrice: '', pumpPrice: '',
+    ...over,
+  })
+  const derived = { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: null }
+
+  function freshEstimate() {
+    const est = savedEstimate()
+    delete (est.surveyData as Record<string, unknown>).tree
+    Object.assign(est.surveyData, { surveyRev: 1, treeSurveyRev: 0, form: kns(), kns: kns(), derived })
+    return est
+  }
+
+  function echoPatch(est: ReturnType<typeof freshEstimate>) {
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return Promise.resolve(JSON.parse(JSON.stringify(est)))
+    })
+  }
+
+  /** Стор с деревом, собранным по ОЛ `first`. */
+  async function storeWith(first: Record<string, unknown> = {}) {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(first), kns: kns(first), derived, surveyRev: 2 })
+    return store
+  }
+
+  const componentsOf = (store: ReturnType<typeof useCalcTreeStore>) =>
+    store.tree!.sections.flatMap((s) => s.components.map((c) => ({ section: s, c })))
+  const find = (store: ReturnType<typeof useCalcTreeStore>, stem: string) =>
+    componentsOf(store).find(({ c }) => c.title.startsWith(stem))!
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  it('число напорных сменилось: выключенный узел и ручные количества переносятся', async () => {
+    const store = await storeWith()
+    const line = find(store, 'Нитка напорного трубопровода')
+    const nozzle = find(store, 'Патрубок напорный')
+    expect(line.c.title).toBe('Нитка напорного трубопровода DN150 ×2')
+    store.toggleComponent(line.section.code, line.c.id)
+    store.setQtyManual(line.c.rows[0]!.id, '99')
+    store.setQtyManual(nozzle.c.rows[0]!.id, '77')
+
+    await store.applySurvey('e1', { form: kns({ napKol: '3' }), kns: kns({ napKol: '3' }), derived, surveyRev: 3 })
+
+    const line2 = find(store, 'Нитка напорного трубопровода')
+    const nozzle2 = find(store, 'Патрубок напорный')
+    expect(line2.c.title).toBe('Нитка напорного трубопровода DN150 ×3')
+    expect(line2.c.enabled).toBe(false)
+    expect(line2.c.rows[0]!.qtyManual).toBe('99')
+    expect(nozzle2.c.title).toBe('Патрубок напорный DN150 ×3')
+    expect(nozzle2.c.rows[0]!.qtyManual).toBe('77')
+    expect(store.lostEdits).toEqual([])
+    expect(store.lastLostCount).toBe(0)
+  })
+
+  it('DN сменился: правка переходит на строку с новым наименованием и ждёт подтверждения', async () => {
+    const grp = { podvMat: 'стеклокомпозит' }
+    const store = await storeWith(grp)
+    const coupling = store.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')!
+    store.setPriceManual(coupling.id, 41000)
+
+    const next = { ...grp, podvDn: '300' }
+    await store.applySurvey('e1', { form: kns(next), kns: kns(next), derived, surveyRev: 3 })
+
+    const moved = store.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 300-1')!
+    expect(moved.priceManual).toBe(41000)
+    expect(moved.renamedFrom).toBe('Муфта-2 СК/НПС-К 250-1')
+    expect(store.conflictIds.has(moved.id)).toBe(true)
+
+    // «Оставить моё» — правка остаётся, пометка снимается.
+    store.keepOverride(moved.id)
+    expect(moved.renamedFrom).toBeUndefined()
+    expect(moved.priceManual).toBe(41000)
+    expect(store.conflictIds.has(moved.id)).toBe(false)
+  })
+
+  it('«Принять новое» у переименованной строки сбрасывает перенесённые правки', async () => {
+    const grp = { podvMat: 'стеклокомпозит' }
+    const store = await storeWith(grp)
+    const coupling = store.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')!
+    store.setPriceManual(coupling.id, 41000)
+    store.setQtyManual(coupling.id, '2')
+
+    const next = { ...grp, podvDn: '300' }
+    await store.applySurvey('e1', { form: kns(next), kns: kns(next), derived, surveyRev: 3 })
+    const moved = store.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 300-1')!
+    store.dropOverride(moved.id)
+
+    expect(moved.priceManual).toBeNull()
+    expect(moved.qtyManual).toBeNull()
+    expect(moved.renamedFrom).toBeUndefined()
+    expect(store.conflictIds.has(moved.id)).toBe(false)
+  })
+
+  it('узла больше нет: правка не пропадает молча, её можно вернуть строкой', async () => {
+    const store = await storeWith()
+    const inlet = find(store, 'Патрубок подводящий')
+    store.setQtyManual(inlet.c.rows[0]!.id, '5')
+    const edited = inlet.c.rows[0]!
+
+    await store.applySurvey('e1', { form: kns({ podvKol: '0' }), kns: kns({ podvKol: '0' }), derived, surveyRev: 3 })
+
+    expect(componentsOf(store).some(({ c }) => c.title.startsWith('Патрубок подводящий'))).toBe(false)
+    expect(store.lastLostCount).toBe(1)
+    expect(store.lostEdits).toEqual([
+      {
+        section: inlet.section.title,
+        component: 'Патрубок подводящий DN250 ×1',
+        row: { kind: edited.kind, category: edited.category, name: edited.name, unit: edited.unit, qtyManual: '5' },
+      },
+    ])
+
+    // Список сохраняется вместе с деревом — доживает до экрана расчёта.
+    const [, body] = patchSurvey.mock.calls[patchSurvey.mock.calls.length - 1] as [string, { tree: { lostEdits?: unknown[] } }]
+    expect(body.tree.lostEdits).toHaveLength(1)
+
+    store.restoreLostEdit(0)
+    const restored = store.rows.find((r) => r.isCustom && r.name === edited.name)!
+    expect(restored.qtyManual).toBe('5')
+    expect(store.lostEdits).toEqual([])
+  })
+
+  it('список не теряется следующей пересборкой и убирается по одной записи', async () => {
+    const store = await storeWith()
+    const inlet = find(store, 'Патрубок подводящий')
+    store.setQtyManual(inlet.c.rows[0]!.id, '5')
+    await store.applySurvey('e1', { form: kns({ podvKol: '0' }), kns: kns({ podvKol: '0' }), derived, surveyRev: 3 })
+    await store.applySurvey('e1', { form: kns({ podvKol: '0', napKol: '3' }), kns: kns({ podvKol: '0', napKol: '3' }), derived, surveyRev: 4 })
+
+    expect(store.lostEdits).toHaveLength(1)
+    expect(store.lastLostCount).toBe(0)
+    store.dismissLostEdit(0)
+    expect(store.lostEdits).toEqual([])
+  })
+
+  it('дерево, собранное до ключей, находит узел по основе названия', async () => {
+    const store = await storeWith()
+    // Прежнее дерево: ключей у узлов нет.
+    for (const { c } of componentsOf(store)) delete c.slot
+    const line = find(store, 'Нитка напорного трубопровода')
+    store.toggleComponent(line.section.code, line.c.id)
+    store.setQtyManual(line.c.rows[0]!.id, '99')
+
+    await store.applySurvey('e1', { form: kns({ napKol: '3' }), kns: kns({ napKol: '3' }), derived, surveyRev: 3 })
+
+    const line2 = find(store, 'Нитка напорного трубопровода')
+    expect(line2.c.title).toBe('Нитка напорного трубопровода DN150 ×3')
+    expect(line2.c.enabled).toBe(false)
+    expect(line2.c.rows[0]!.qtyManual).toBe('99')
+    expect(line2.c.slot).toBe('kns.pressurePipe#line')
+  })
+})

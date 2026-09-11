@@ -99,6 +99,25 @@
       >{{ rebuilding ? 'Пересобираем…' : st.templateChanged ? `Пересобрать ${templateRef(st.activeTemplateVersion)}` : 'Пересобрать по текущей редакции' }}</button>
     </div>
 
+    <!-- Ручные правки, которые пересборка не смогла перенести: узла или строки
+         той же природы в свежем дереве нет (План_устранения, 1.1). -->
+    <div v-if="!st.loading && st.lostEdits.length" class="pbar">
+      <span v-hint="LOST_EDITS_HINT" class="pbar-t">Не перенесено ручных правок: {{ st.lostEdits.length }}</span>
+      <span class="pbar-d">узла или строки после правки опросного листа больше нет</span>
+      <button class="btn" @click="lostOpen = !lostOpen">{{ lostOpen ? 'Скрыть список' : 'Показать список' }}</button>
+      <button v-if="!readOnly" v-hint="'Убрать весь список: правки остаются потерянными'" class="btn btn-g" @click="onDismissAllLost">Убрать все</button>
+    </div>
+    <ul v-if="!st.loading && lostOpen && st.lostEdits.length" class="lost">
+      <li v-for="(e, i) in st.lostEdits" :key="i" class="lost-i">
+        <span class="lost-w">{{ e.section }} · {{ e.component }}</span>
+        <span class="lost-t">{{ lostText(e) }}</span>
+        <template v-if="!readOnly">
+          <button v-if="e.row" v-hint="LOST_RESTORE_HINT" class="lost-b" @click="onRestoreLost(i)">вернуть строкой</button>
+          <button v-hint="'Убрать из списка: с правкой разобрались'" class="lost-b" @click="st.dismissLostEdit(i)">убрать</button>
+        </template>
+      </li>
+    </ul>
+
     <div v-if="st.loading" class="state">Загрузка расчёта…</div>
     <div v-else-if="st.error" class="state state-err">{{ st.error }}</div>
 
@@ -398,7 +417,7 @@ import type { Hint } from '@/directives/hint'
 import { tryEvalExpr } from '@/engines/expr'
 import { handleCellNav } from '@/utils/cell-nav'
 import { repricedToastText, repriceSummaryText } from '@/utils/reprice-text'
-import type { CalcComponent, CalcRowNode, MaterializeContext } from '@/engines/template-kns'
+import type { CalcComponent, CalcRowNode, LostEdit, MaterializeContext } from '@/engines/template-kns'
 import { defaultParams, materializeNode, type CatalogNode, type NodeParamDef, type NodeParamValues } from '@/engines/node-def'
 import { surveyScope, type DeviceEnv } from '@/engines/template-def'
 import { recalcFotSatellites } from '@/engines/fot'
@@ -524,9 +543,21 @@ const TEMPLATE_VERSION_HINT: Hint = {
 const REBUILD_HINT: Hint = {
   title: 'Пересобрать по действующему шаблону',
   text: [
-    'Расчёт собирается заново по опросному листу и новому шаблону. Ручные количества, цены и выключенные узлы переносятся по названиям узлов — и когда узел переехал в другой раздел.',
-    'Цены строк берутся из действующего прайса, сдвиги отмечаются «было … ₽». Расчёт сохраняется сразу.',
+    'Расчёт собирается заново по опросному листу и новому шаблону. Ручные количества, цены и выключенные узлы переносятся по ключу узла — и когда узел переехал в другой раздел или сменил название вместе с параметрами опросного листа.',
+    'Что перенести некуда, попадает в список над таблицей. Цены строк берутся из действующего прайса, сдвиги отмечаются «было … ₽». Расчёт сохраняется сразу.',
   ],
+}
+const LOST_EDITS_HINT: Hint = {
+  title: 'Непереносимые правки',
+  text: [
+    'Опросный лист или шаблон изменились так, что узла или строки с ручной правкой больше нет — например, подводящих патрубков стало ноль.',
+    'Правки не пропадают молча: верните нужную строкой вручную или уберите из списка. Список хранится в расчёте, пока вы его не разберёте.',
+  ],
+  tone: 'warn',
+}
+const LOST_RESTORE_HINT: Hint = {
+  title: 'Вернуть строкой',
+  text: 'Строка с прежним наименованием, количеством и ценой добавится в тот же раздел как добавленная вручную — её можно поправить или удалить.',
 }
 const CATALOG_NODE_HINT: Hint = {
   title: 'Узел каталога',
@@ -830,6 +861,32 @@ function addNodeFromCatalog() {
 
 const rebuilding = ref(false)
 
+// ── Непереносимые правки (План_устранения, 1.1) ──
+
+const lostOpen = ref(false)
+
+/** Что было в правке — словами: количество, цена, выключение. */
+function lostText(e: LostEdit): string {
+  if (!e.row) return 'узел был выключен вручную'
+  const parts: string[] = []
+  if (e.row.qtyManual != null) parts.push(`количество «${e.row.qtyManual}»`)
+  if (e.row.priceManual != null) parts.push(`цена ${e.row.priceManual.toLocaleString('ru-RU')} ₽`)
+  if (e.row.disabled) parts.push('строка выключена')
+  return `«${e.row.name}», ${e.row.unit}: ${parts.join(', ')}`
+}
+
+function onRestoreLost(index: number) {
+  const entry = st.lostEdits[index]
+  st.restoreLostEdit(index)
+  if (entry?.row) toast(`«${entry.row.name}» возвращена строкой вручную — сохраните расчёт`, 'success')
+}
+
+function onDismissAllLost() {
+  st.dismissAllLostEdits()
+  lostOpen.value = false
+  toast('Список непереносимых правок убран — сохраните расчёт')
+}
+
 async function onRebuildTemplate() {
   const to = st.activeTemplateVersion
   const byTemplate = st.templateChanged
@@ -841,10 +898,13 @@ async function onRebuildTemplate() {
   rebuilding.value = true
   try {
     await st.save()
+    const lost = st.lastLostCount
+    if (lost) lostOpen.value = true
     toast(
-      `Расчёт пересобран ${byTemplate ? templateRef(to) : `по редакции ${rev}`}: ручные правки перенесены` +
+      `Расчёт пересобран ${byTemplate ? templateRef(to) : `по редакции ${rev}`}: ` +
+        (lost ? `не перенесено ручных правок — ${lost}, список над таблицей` : 'ручные правки перенесены') +
         (conflicts ? ` · конфликтов с расчётным: ${conflicts}` : ''),
-      'success',
+      lost ? 'info' : 'success',
     )
   } catch (err) {
     toast(err instanceof Error ? err.message : 'Расчёт пересобран, но сохранить его не удалось', 'error')
@@ -1029,6 +1089,15 @@ onMounted(() => {
   border-bottom: 1px solid var(--amber); background: var(--amber-bg); font-size: 13.2px; flex: none; }
 .pbar-t { color: var(--amber); font-weight: 600; }
 .pbar-d { color: var(--muted); flex: 1 1 320px; min-width: 0; }
+/* Список непереносимых правок — под своей плашкой */
+.lost { list-style: none; margin: 0; padding: 4px 12px 8px; border-bottom: 1px solid var(--amber);
+  background: var(--amber-bg); font-size: 13.2px; flex: none; max-height: 30vh; overflow-y: auto; }
+.lost-i { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 3px 0; }
+.lost-w { color: var(--muted); }
+.lost-t { color: var(--text); flex: 1 1 320px; min-width: 0; }
+.lost-b { border: 1px solid var(--line2); color: var(--muted); background: transparent; font-size: 11.4px;
+  padding: 1px 6px; white-space: nowrap; cursor: pointer; font-family: inherit; }
+.lost-b:hover { color: var(--text); border-color: var(--amber); }
 .kpa-t { font-size: 14.4px; color: var(--text); line-height: 1.5; margin: 0 0 10px; }
 
 .state { padding: 24px; color: var(--muted); font-size: 14.4px; }

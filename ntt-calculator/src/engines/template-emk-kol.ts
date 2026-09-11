@@ -453,6 +453,7 @@ export function buildEmkBottoms(ctx: MaterializeContext, s: EmkSurveyParams): Ca
       id: nextId('c'),
       nodeCode: 'A3',
       title: 'Днища эллиптические ×2',
+      slot: 'elliptic',
       enabled: true,
       rows: [
         ...operationWithFot(ctx, {
@@ -481,6 +482,7 @@ export function buildEmkBottoms(ctx: MaterializeContext, s: EmkSurveyParams): Ca
       id: nextId('c'),
       nodeCode: 'A3',
       title: 'Днища цилиндрические ×2',
+      slot: 'cylindrical',
       enabled: true,
       rows: [
         // Концы из той же трубы: косые и центральный стыки на каждом. Сама
@@ -505,6 +507,7 @@ export function buildEmkBottoms(ctx: MaterializeContext, s: EmkSurveyParams): Ca
       id: nextId('c'),
       nodeCode: 'A2',
       title: 'Днище плоское',
+      slot: 'flat',
       enabled: true,
       rows: [
         ...operationWithFot(ctx, {
@@ -623,7 +626,14 @@ type NozzlesParams = Pick<
  */
 function emkKolNozzles(s: NozzlesParams, joint: GrpNozzleJoint): SleeveNozzle[] {
   const cutoutName = 'Прорезка отверстия патрубка в корпусе'
-  const nozzle = (title: string, dn: number, count: number, material: PipeMaterial | null | undefined): SleeveNozzle => ({
+  const nozzle = (
+    role: SleeveNozzle['role'],
+    title: string,
+    dn: number,
+    count: number,
+    material: PipeMaterial | null | undefined,
+  ): SleeveNozzle => ({
+    role,
     title,
     dn,
     count,
@@ -631,8 +641,8 @@ function emkKolNozzles(s: NozzlesParams, joint: GrpNozzleJoint): SleeveNozzle[] 
     ...grpNozzleOf(material, joint),
   })
   return [
-    nozzle('Патрубок подводящий', s.inletDn, s.inletCount, s.inletMaterial),
-    nozzle('Патрубок отводящий', s.outletDn, s.outletCount, s.outletMaterial),
+    nozzle('inlet', 'Патрубок подводящий', s.inletDn, s.inletCount, s.inletMaterial),
+    nozzle('outlet', 'Патрубок отводящий', s.outletDn, s.outletCount, s.outletMaterial),
   ]
 }
 
@@ -684,7 +694,15 @@ export const HATCH_ITEMS = {
  */
 export function buildHatches(
   ctx: MaterializeContext,
-  h: { count: number; diameterMm: number; handlesPerHatch: number; lockAndSwitch: boolean; title: string },
+  h: {
+    count: number
+    diameterMm: number
+    handlesPerHatch: number
+    lockAndSwitch: boolean
+    title: string
+    /** Роль — ключ узла: люк шахты, горловины и перекрытия — разные узлы. */
+    role: 'shaft' | 'neck' | 'top'
+  },
 ): CalcComponent[] {
   if (h.count <= 0) return []
   const cover = neckCoverMassKg(h.diameterMm)
@@ -697,6 +715,7 @@ export function buildHatches(
       id: nextId('c'),
       nodeCode: 'B2',
       title: `${h.title} Ø${h.diameterMm}${h.count > 1 ? ` ×${h.count}` : ''}`,
+      slot: h.role,
       enabled: true,
       rows: [
         ...operationWithFot(ctx, {
@@ -740,6 +759,7 @@ export function buildEmkHatches(ctx: MaterializeContext, s: EmkSurveyParams): Ca
     handlesPerHatch: 2,
     lockAndSwitch: true,
     title: s.hasShaft ? 'Люк шахты' : 'Люк',
+    role: s.hasShaft ? 'shaft' : 'top',
   })
 }
 
@@ -1110,6 +1130,7 @@ export function buildKolHatches(ctx: MaterializeContext, s: KolSurveyParams): Ca
     handlesPerHatch: 1,
     lockAndSwitch: false,
     title: s.hasNeck ? 'Люк горловины' : 'Люк',
+    role: s.hasNeck ? 'neck' : 'top',
   })
 }
 

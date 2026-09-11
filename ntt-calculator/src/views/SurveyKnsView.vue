@@ -563,7 +563,7 @@ const syncLabel = computed(() => {
     case 'pending': return 'изменения…'
     case 'saving': return 'сохраняем и пересчитываем…'
     case 'invalid': return 'не сохранено: исправьте поля, выделенные красным'
-    case 'saved': return `сохранено ${sync.savedAt.value?.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) ?? ''} · расчёт пересчитан`
+    case 'saved': return sync.savedLabel()
     case 'error': return `не сохранено: ${sync.error.value ?? 'ошибка'}`
     default: return 'сохранено · расчёт актуален'
   }

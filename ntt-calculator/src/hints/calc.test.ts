@@ -73,6 +73,17 @@ describe('сноска строки расчёта', () => {
     expect(all(h)).toContain('Расчётное — 392')
   })
 
+  // План_устранения, 1.1: правки перенесены на строку с новым наименованием.
+  it('наименование сменилось с параметром ОЛ — янтарь, прежнее наименование', () => {
+    const h = calcRowHint(
+      row({ name: 'Муфта-2 СК/НПС-К 300-1', priceManual: 41000, renamedFrom: 'Муфта-2 СК/НПС-К 250-1' }),
+      res({ priceOverridden: true }),
+      ctx({ conflict: true }),
+    )
+    expect(h.tone).toBe('warn')
+    expect(all(h)).toContain('было «Муфта-2 СК/НПС-К 250-1»')
+  })
+
   it('конфликт с опросным листом — янтарь, было → стало', () => {
     const h = calcRowHint(row({ qtyManual: '400' }), res({ qty: 400, qtyOverridden: true }), ctx({ conflict: true, prevCalc: 380 }))
     expect(h.tone).toBe('warn')

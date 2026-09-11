@@ -202,3 +202,10 @@ export function builtinCanon(device: DeviceType): string {
 export function builtinFingerprint(device: DeviceType): string {
   return fnv1a64(builtinCanon(device))
 }
+
+/**
+ * Наборы ОЛ отпечатка — ими же проверяются ключи узлов
+ * (`engines/component-key.test.ts`): ветки узлов покрыты, справочники —
+ * заглушки.
+ */
+export { CTX as FINGERPRINT_CTX, SURVEYS as FINGERPRINT_SURVEYS }
