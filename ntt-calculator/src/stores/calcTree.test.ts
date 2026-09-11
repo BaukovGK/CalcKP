@@ -276,6 +276,39 @@ describe('стор calcTree: подпись сохранённого', () => {
   })
 })
 
+// План_устранения 3.6: справочник под расчётом поправили после сборки —
+// расчёт это знает по значениям, прочитанным при сборке.
+describe('стор calcTree: справочники изменились после сборки', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  it('прочитанное при сборке значение в справочнике другое — изменение видно', async () => {
+    const est = savedEstimate()
+    ;(est.surveyData.tree as Record<string, unknown>).refsUsed = { 'pipeWeight:1000|0.6|10000': '120' }
+    estimatesGet.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    // Весов в справочнике теста нет — строки больше нет.
+    expect(store.refsChanges).toEqual([
+      { key: 'pipeWeight:1000|0.6|10000', label: 'вес трубы DN1000 PN0,6 SN10000', before: 120, after: null },
+    ])
+  })
+
+  it('справочник тот же — изменений нет', async () => {
+    const est = savedEstimate()
+    ;(est.surveyData.tree as Record<string, unknown>).refsUsed = { 'pipeWeight:1000|0.6|10000': 'null' }
+    estimatesGet.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    expect(store.refsChanges).toEqual([])
+  })
+})
+
 describe('стор calcTree: пересчёт из ОЛ и связанные цены', () => {
   /** ОЛ КНС в той форме, в которой его сохраняет SurveyKnsView. */
   const kns = (over: Record<string, unknown> = {}) => ({

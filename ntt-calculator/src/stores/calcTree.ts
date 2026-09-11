@@ -37,6 +37,7 @@ import { tryEvalExpr } from '@/engines/expr'
 import { hasBasketIn, hasGrinderIn, PIPE_MATERIALS, type Grinder, type PipeMaterial } from '@/types/survey'
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
 import { hasPriceDelta, hasPriceDrift, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
+import { refsChanges as refsChangesOf, type RefChange } from '@/engines/refs-used'
 
 /**
  * Стор дерева расчёта (§9, Библиотека §6.3).
@@ -1154,6 +1155,17 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   const templateOutdated = computed(() => templateChanged.value || builtinOutdated.value)
 
   /**
+   * Справочники, которыми собран расчёт, изменились: веса труб, нормы
+   * патрубков, Мс, днища, узлы каталога (План_устранения 3.6). Сверяются
+   * именно прочитанные при сборке значения — правка строки, которой расчёт
+   * не касался, его не тревожит.
+   */
+  const refsChanges = computed<RefChange[]>(() => {
+    void ctxLoads.value
+    return tree.value && ctxCache ? refsChangesOf(tree.value.refsUsed, ctxCache) : []
+  })
+
+  /**
    * Пересобрать расчёт по действующему шаблону: свежая материализация из
    * сохранённого ОЛ, ручные правки переносятся так же, как при правке ОЛ
    * (reconcileTrees). Цены строк свежее дерево берёт из действующего прайса.
@@ -1391,6 +1403,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, invalidInputIds, enabledFor, prevQtyCalc,
     // Пересчёт цен по действующему прайсу и отметки «было → стало» у цены.
     priceOutdated, repricePreview, priceDeltaIds,
+    // Справочники изменились после сборки (План_устранения 3.6).
+    refsChanges,
     repriceToCurrent, acceptPriceDelta, acceptAllPriceDeltas, keepPrevPrice,
     load, save, clear, recalcAll, settled,
     // Пересчёт из ОЛ и цены прайса для его подсказок.

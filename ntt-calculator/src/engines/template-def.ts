@@ -30,6 +30,7 @@ import { materializeNode, type CatalogNode, type NodeDefBody, type NodeParamValu
 import { BUILTIN_TEMPLATES, builtinNode, builtinNodesOf, type DeviceSurvey } from './code-nodes'
 import { builtinRevision } from './builtin-revisions'
 import { ratesFromPrices } from './economics'
+import { recordingContext, type RefsUsed } from './refs-used'
 import { computeEmkGeometry, computeKolGeometry } from './survey-emk-kol'
 import { emkLadderHeightMm } from './template-emk-kol'
 import {
@@ -326,7 +327,11 @@ function materializeRef(
  * в том же порядке, что до шаблонов-данных, и встроенный шаблон даёт дерево,
  * неотличимое от прежнего.
  */
-export function materializeTemplate(ctx: MaterializeContext, env: DeviceEnv, template: ProductTemplate): CalcTree {
+export function materializeTemplate(baseCtx: MaterializeContext, env: DeviceEnv, template: ProductTemplate): CalcTree {
+  // Какие значения справочников прочтёт сборка — в дерево: по ним экран
+  // расчёта увидит, что справочник под расчётом изменился (План_устранения 3.6).
+  const refsUsed: RefsUsed = {}
+  const ctx = recordingContext(baseCtx, refsUsed)
   const scope = surveyScope(env)
   // Узел каталога может стоять в шаблоне не раз: номер вхождения — часть ключа.
   const seen = new Map<string, number>()
@@ -350,6 +355,7 @@ export function materializeTemplate(ctx: MaterializeContext, env: DeviceEnv, tem
     priceListVersion: ctx.priceListVersion,
     // Ставки экономики — из того же прайса, что и цены строк.
     rates: ratesFromPrices(ctx.priceOf),
+    refsUsed,
     templateVersion: template.version,
     builtinRevision: builtinRevision(env.device),
     sections,

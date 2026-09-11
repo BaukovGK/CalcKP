@@ -96,6 +96,19 @@
       <span class="pbar-d">{{ rateFallback.detail }}</span>
     </div>
 
+    <!-- Справочники под расчётом изменились после сборки: веса труб, нормы
+         патрубков, Мс, днища, узлы каталога (План_устранения 3.6). -->
+    <div v-if="!st.loading && st.refsChanges.length" class="pbar">
+      <span v-hint="REFS_HINT" class="pbar-t">Справочники изменились после сборки расчёта</span>
+      <span class="pbar-d">{{ refsText }}</span>
+      <button
+        v-if="!readOnly"
+        class="btn btn-acc"
+        :disabled="rebuilding"
+        @click="onRebuildRefs"
+      >{{ rebuilding ? 'Пересобираем…' : 'Пересобрать по нынешним' }}</button>
+    </div>
+
     <!-- Состав расчёта собран не тем шаблоном, что действует: технолог
          опубликовал другую версию, либо релиз завёл новую редакцию
          встроенных узлов. -->
@@ -430,6 +443,7 @@ import type { Hint } from '@/directives/hint'
 import { tryEvalExpr } from '@/engines/expr'
 import { handleCellNav } from '@/utils/cell-nav'
 import { rateFallbackText, rateSourceText, repricedToastText, repriceSummaryText } from '@/utils/reprice-text'
+import { refChangeText } from '@/engines/refs-used'
 import type { CalcComponent, CalcRowNode, LostEdit, MaterializeContext } from '@/engines/template-kns'
 import { defaultParams, materializeNode, type CatalogNode, type NodeParamDef, type NodeParamValues } from '@/engines/node-def'
 import { surveyScope, type DeviceEnv } from '@/engines/template-def'
@@ -537,6 +551,14 @@ const REPRICE_HINT: Hint = {
     'Ставки экономики тоже берутся из действующего прайса: ПЗР и ФОТ строк считаются по одной ставке.',
     'Ручные цены остаются ручными. Договорная труба и позиции, которых в новом прайсе нет, не меняются. Расчёт сохраняется сразу.',
   ],
+}
+const REFS_HINT: Hint = {
+  title: 'Справочники изменились',
+  text: [
+    'Технолог поправил на экране «Шаблоны» значение, которое этот расчёт прочитал при сборке: вес трубы, норму патрубка, Мс на стыке, массу днища или узел каталога.',
+    'Числа расчёта остались прежними. Пересборка возьмёт нынешние справочники; ручные правки перенесутся, как при правке опросного листа.',
+  ],
+  tone: 'warn',
 }
 const RATE_FALLBACK_HINT: Hint = {
   title: 'Ставка не из прайса',
@@ -663,6 +685,34 @@ const outdatedDetail = computed(() => {
   const changes = st.builtinChanges.map((r) => `ред. ${r.version} от ${fmtRevDate(r.date)} — ${r.note}`)
   return changes.length ? `Что изменилось: ${changes.join('; ')}. ${after}` : after
 })
+
+/** Что изменилось в справочниках — первые три, остальное числом. */
+const refsText = computed(() => {
+  const all = st.refsChanges.map(refChangeText)
+  const shown = all.slice(0, 3).join('; ')
+  return all.length > 3 ? `${shown} и ещё ${all.length - 3}` : shown
+})
+
+/** Пересобрать по нынешним справочникам и сохранить (План_устранения 3.6). */
+async function onRebuildRefs() {
+  const problem = st.rebuildByActiveTemplate()
+  if (problem) { toast(problem, 'error'); return }
+  rebuilding.value = true
+  try {
+    await st.save()
+    const lost = st.lastLostCount
+    if (lost) lostOpen.value = true
+    toast(
+      'Расчёт пересобран по нынешним справочникам' +
+        (lost ? ` · не перенесено ручных правок — ${lost}, список над таблицей` : ' · ручные правки перенесены'),
+      lost ? 'info' : 'success',
+    )
+  } catch (err) {
+    toast(err instanceof Error ? err.message : 'Расчёт пересобран, но сохранить его не удалось', 'error')
+  } finally {
+    rebuilding.value = false
+  }
+}
 
 /** Ставки не из прайса — тексты плашки (решение Р5). */
 const rateFallback = computed(() => rateFallbackText(st.rateFallbacks))
