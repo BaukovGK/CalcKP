@@ -10,7 +10,9 @@ import { extractSpecification, isFotRow, isRowWithoutPrice, isWorkRow, resolveRo
 import {
   buildKpDocument,
   buildProjectKpDocument,
+  formatDate,
   formatMoney,
+  isoDate,
   formatQty,
   KpSpecificationIncomplete,
   NBSP,
@@ -499,5 +501,22 @@ describe('форматирование', () => {
   it('НДС из нулевой и отрицательной суммы — ноль', () => {
     expect(vatIncludedIn(0)).toBe(0)
     expect(vatIncludedIn(-100)).toBe(0)
+  })
+})
+
+// План_устранения, 1.6 / решение Р10: контейнер живёт по UTC, и КП, выпущенное
+// до 03:00 по Москве, получало вчерашнюю дату.
+describe('дата документа — по Москве', () => {
+  it('снапшот в 22:30 UTC печатается следующим днём', () => {
+    expect(formatDate(new Date('2026-09-11T22:30:00Z'))).toBe('12.09.2026')
+    expect(isoDate(new Date('2026-09-11T22:30:00Z'))).toBe('2026-09-12')
+  })
+
+  it('до полуночи по Москве — тот же день', () => {
+    expect(formatDate(new Date('2026-09-11T20:59:00Z'))).toBe('11.09.2026')
+  })
+
+  it('новый год по Москве наступает раньше, чем по UTC', () => {
+    expect(formatDate(new Date('2026-12-31T21:00:00Z'))).toBe('01.01.2027')
   })
 })

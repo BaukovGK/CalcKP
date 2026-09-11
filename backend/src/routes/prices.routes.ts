@@ -9,6 +9,7 @@ import { logger } from '../utils/logger'
 import { parseNnSheet } from '../utils/nn-sheet'
 import { buildPriceWorkbook } from '../utils/nn-export'
 import { findPriceIssues } from '../utils/price-issues'
+import { isoDate } from '../utils/kp-document'
 import { applyImport, importSummary, loadExisting, planImport } from '../utils/price-import'
 import { applyPriceEdit } from '../utils/price-edit'
 import ExcelJS from 'exceljs'
@@ -69,7 +70,8 @@ pricesRouter.get('/export', requireRole('ADMIN', 'BUYER'), async (req, res: Resp
       items: items.length,
     })
 
-    const date = new Date().toISOString().slice(0, 10)
+    // Дата в имени файла — по Москве, как в документах (решение Р10).
+    const date = isoDate(new Date())
     const name = encodeURIComponent(`Прайс_НН_${date}.xlsx`)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${name}`)

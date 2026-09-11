@@ -250,10 +250,38 @@ export function buildProjectKpDocument(input: KpProjectDocumentInput): KpDocumen
   }
 }
 
-/** Дата в формате документа: 08.09.2026. */
+/**
+ * Часовой пояс дат в документах — Москва (решение Р10, План_устранения 1.6).
+ *
+ * Контейнер живёт по UTC, и КП, выпущенное до 03:00 по Москве, получало
+ * вчерашнюю дату. Данные поясов — в ICU самой Node (в образе
+ * node:24-alpine полный ICU), от tzdata контейнера они не зависят.
+ */
+export const DOCUMENT_TIME_ZONE = 'Europe/Moscow'
+
+const DATE_PARTS = new Intl.DateTimeFormat('ru-RU', {
+  timeZone: DOCUMENT_TIME_ZONE,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
+
+/** День, месяц и год момента `d` по Москве. */
+function moscowDate(d: Date): { day: string; month: string; year: string } {
+  const part = (type: string) => DATE_PARTS.formatToParts(d).find((p) => p.type === type)?.value ?? ''
+  return { day: part('day'), month: part('month'), year: part('year') }
+}
+
+/** Дата в формате документа, по Москве: 08.09.2026. */
 export function formatDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`
+  const { day, month, year } = moscowDate(d)
+  return `${day}.${month}.${year}`
+}
+
+/** Дата для имён файлов, по Москве: 2026-09-08. */
+export function isoDate(d: Date): string {
+  const { day, month, year } = moscowDate(d)
+  return `${year}-${month}-${day}`
 }
 
 /**
