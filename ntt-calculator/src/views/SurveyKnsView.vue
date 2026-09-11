@@ -218,9 +218,10 @@
             </label>
           </div>
 
-          <!-- Корзина и дробилка — независимые признаки: бывает и то, и другое
-               сразу. Одним селектом это выражалось значением «обе», которое
-               читалось хуже двух тумблеров. -->
+          <!-- Корзина и дробилка — два тумблера: бывает и то, и другое сразу.
+               Одним селектом это выражалось значением «обе», которое читалось
+               хуже двух тумблеров. Хотя бы одно есть всегда: выключить
+               последнее — значит выбрать другое. -->
           <div class="ol-grid ol-grid--mid">
             <ToggleYesNo v-model="hasBasket" :hint="H.basket" label="Корзина" stacked class="fld--3" />
             <ToggleYesNo v-model="hasGrinder" :hint="H.grinder" label="Дробилка" stacked class="fld--3" />
@@ -277,12 +278,12 @@
             </div>
           </div>
 
-          <!-- Оба признака и зависимая от одного из них муфта — одной строкой
-               сетки: муфта появляется прямо рядом с тумблером, который её
-               включает. Муфта приваривается к трубопроводу, наружу торчит
-               только ответная часть; её размер от DN линии не зависит. -->
+          <!-- Признак и зависимая от него муфта — одной строкой сетки: муфта
+               появляется прямо рядом с тумблером, который её включает. Муфта
+               приваривается к трубопроводу, наружу торчит только ответная
+               часть; её размер от DN линии не зависит. Тумблера «Арматура на
+               подводящем» нет: задвижка на подводящем есть всегда. -->
           <div class="ol-grid ol-grid--mid">
-            <ToggleYesNo v-model="form.valveOnInlet" :hint="H.valveOnInlet" label="Арматура на подводящем" stacked class="fld--3" />
             <ToggleYesNo v-model="form.emergency" :hint="H.emergency" label="Аварийный трубопровод" stacked class="fld--3" />
             <label v-if="form.emergency" class="fld fld--3"><span v-hint="H.muftaGm">Быстросъёмная муфта</span>
               <select v-model="form.muftaGm">
@@ -764,14 +765,17 @@ function onScroll() {
 }
 
 // Корзина и дробилка — два тумблера над одним полем модели (см. grinderValue).
+// У КНС одно из двух есть всегда (уточнение завода 11.09.2026): выключить
+// последнее — значит выбрать другое; «нет» старых листов читается корзиной,
+// как его и считает расчёт (knsBasketOn).
 const hasBasket = computed({
-  get: () => hasBasketIn(form.value.drobilka),
-  set: (v: boolean) => { form.value.drobilka = grinderValue(v, hasGrinder.value) },
+  get: () => hasBasketIn(form.value.drobilka) || form.value.drobilka === 'нет',
+  set: (v: boolean) => { form.value.drobilka = grinderValue(v, v ? hasGrinder.value : true) },
 })
 
 const hasGrinder = computed({
   get: () => hasGrinderIn(form.value.drobilka),
-  set: (v: boolean) => { form.value.drobilka = grinderValue(hasBasket.value, v) },
+  set: (v: boolean) => { form.value.drobilka = grinderValue(v ? hasBasket.value : true, v) },
 })
 
 /** Свёрнутая строка арматуры: что именно поедет в расчёт. */

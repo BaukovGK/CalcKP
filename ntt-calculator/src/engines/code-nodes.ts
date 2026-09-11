@@ -37,6 +37,7 @@ import {
   buildSlab,
   buildVent,
   KNS_SECTIONS,
+  knsBasketOn,
   stationHeightM,
   type CalcComponent,
   type KnsSurveyParams,
@@ -110,7 +111,7 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
   kns({ ref: 'kns.shell', codes: ['A1'], title: 'Обечайка корпуса', reads: 'DN, Нподз, PN, SN, ТТ МВК, исполнение корпуса, цена трубы', build: buildKnsShell }),
   kns({ ref: 'kns.bottom', codes: ['A2'], title: 'Днище', reads: 'DN', build: buildKnsBottom }),
   kns({ ref: 'kns.nozzles', codes: ['A5'], title: 'Патрубки подводящие и напорные', reads: 'DN, число и материал труб подводящих и напорных патрубков', build: buildKnsNozzles }),
-  kns({ ref: 'kns.inletFlange', codes: ['A6'], title: 'Фланцевый патрубок под задвижку на подводящем', reads: 'DN и число подводящих, арматура на подводящем', build: buildKnsInletFlange }),
+  kns({ ref: 'kns.inletFlange', codes: ['A6'], title: 'Фланцевый патрубок под задвижку на подводящем', reads: 'DN и число подводящих', build: buildKnsInletFlange }),
   kns({ ref: 'kns.cableEntry', codes: ['A7'], title: 'Кабельный ввод', reads: '—', build: (ctx) => buildKnsCableEntry(ctx) }),
   kns({ ref: 'kns.insulation', codes: ['A9'], title: 'Теплоизоляция корпуса', reads: 'DN, теплоизоляция и её глубина', build: buildKnsInsulation }),
   kns({ ref: 'kns.loops', codes: ['A10'], title: 'Монтажные петли', reads: 'DN', build: (ctx, s) => [buildMountingLoops(ctx, s.dn)] }),
@@ -126,8 +127,9 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
     codes: ['D3'],
     title: 'Корзина сороудерживающая',
     reads: 'дробилка/корзина, DN, глубина лотка',
+    // Корзина или дробилка есть всегда: без того и другого — корзина.
     build: (ctx, s) => [
-      buildBasket(ctx, { device: 'KNS', dn: s.dn, trayDepthMm: s.inletTrayDepthMm, enabled: Boolean(s.hasBasket), withGrinder: Boolean(s.hasGrinder) }),
+      buildBasket(ctx, { device: 'KNS', dn: s.dn, trayDepthMm: s.inletTrayDepthMm, enabled: knsBasketOn(s), withGrinder: Boolean(s.hasGrinder) }),
     ],
   }),
   // Лестница — на всю длину трубы корпуса (лист, H122 + H123 = J14).
@@ -152,7 +154,7 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
   kns({ ref: 'kns.vent', codes: ['C1'], title: 'Вентиляционный стояк', reads: '—', build: (ctx) => buildVent(ctx) }),
   kns({ ref: 'kns.pressurePipe', codes: ['C2'], title: 'Напорный трубопровод', reads: 'напорные патрубки, насосы, аварийный трубопровод, расходомер', build: buildPressurePipe }),
   kns({ ref: 'kns.fasteners', codes: ['C3'], title: 'Крепёжный комплект', reads: 'DN и число напорных патрубков, насосы, расходомер', build: buildFasteners }),
-  kns({ ref: 'kns.valves', codes: ['C4'], title: 'Узел запорной арматуры', reads: 'патрубки, насосы, арматура на подводящем, ручные количества ОЛ', build: buildKnsValves }),
+  kns({ ref: 'kns.valves', codes: ['C4'], title: 'Узел запорной арматуры', reads: 'патрубки, насосы, ручные количества ОЛ', build: buildKnsValves }),
   kns({ ref: 'kns.pumps', codes: ['D1'], title: 'Насосная группа', reads: 'насосы, марка и цена насоса, высота станции', build: buildKnsPumps }),
   kns({ ref: 'kns.automation', codes: ['D2'], title: 'Автоматика: шкаф, датчики, расходомер', reads: 'блок «Автоматика» ОЛ, напорные патрубки, высота станции', build: buildKnsAutomation }),
   kns({ ref: 'kns.service', codes: ['D5'], title: 'Оборудование для обслуживания', reads: 'высота станции', build: buildKnsService }),

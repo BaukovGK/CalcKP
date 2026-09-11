@@ -125,8 +125,6 @@ export interface KnsSurveyParams {
    */
   pumpModel?: string | null
 
-  /** Арматура на подводящем. */
-  valveOnInlet: boolean
   /**
    * Количества арматуры, заданные в ОЛ вручную («изменить вручную» у блока
    * арматуры). Пусто — расчётное. Раньше ОЛ показывал ручную цифру в итоге
@@ -282,6 +280,15 @@ export interface CalcComponent {
 /** Состояние узла, включаемого тумблером ОЛ: фактическое и то, что сказал ОЛ. */
 export function surveyToggled(on: boolean): Pick<CalcComponent, 'enabled' | 'enabledCalc'> {
   return { enabled: on, enabledCalc: on }
+}
+
+/**
+ * Корзина у КНС. Корзина или дробилка есть всегда — одна из них или обе
+ * (уточнение завода 11.09.2026): без того и другого — корзина, как и
+ * предлагает ОЛ по умолчанию.
+ */
+export function knsBasketOn(s: Pick<KnsSurveyParams, 'hasBasket' | 'hasGrinder'>): boolean {
+  return Boolean(s.hasBasket) || !s.hasGrinder
 }
 
 export interface CalcSection {
@@ -904,7 +911,8 @@ const FLANGE_NOZZLE_WALL_M = 0.005
 
 /**
  * A6 — фланцевый патрубок под задвижку на подводящем (лист КНС, строки
- * 32–38), по флагу ОЛ «арматура на подводящем»:
+ * 32–38). Задвижка на подводящем у КНС есть всегда (уточнение завода
+ * 11.09.2026), и патрубок под неё — тоже; флага ОЛ у него больше нет:
  *
  * - патрубок — отрезок трубы Ø гильзы 0,3 м с приданием товарного вида; у
  *   подводящего меньше DN 300 — ручная формовка `π·DN·0,005·0,3·1850` кг;
@@ -914,15 +922,14 @@ const FLANGE_NOZZLE_WALL_M = 0.005
  *   k = 1, как в листе (строка 38).
  *
  * Прежде ламинирование считалось 3/10 от массы фланца с k = 0,56, а отрезка
- * трубы не было. Выключенный в ОЛ узел остаётся «призраком» с полными
- * количествами: включение в расчёте восстанавливает строки, а не нули.
+ * трубы не было.
  *
  * ❗ Расхождение с эталоном (осознанное): лист ставит ДВА патрубка на каждый
  * подводящий (`I32 = 2×K5`), завод уточнил (2026-09-09) — один. Берём один.
  */
 export function buildKnsInletFlange(
   ctx: MaterializeContext,
-  s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount' | 'valveOnInlet'>,
+  s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount'>,
 ): CalcComponent[] {
   // Номинал диктует подводящий патрубок: течение там безнапорное, но задвижка
   // всегда идёт с номинальным PN в наименовании. Масса ручной формовки фланца
@@ -970,7 +977,7 @@ export function buildKnsInletFlange(
       id: nextId('c'),
       nodeCode: 'A6',
       title: `Фланцевый патрубок под задвижку на подводящем DN${dn}`,
-      ...surveyToggled(s.valveOnInlet),
+      enabled: true,
       rows: [
         ...nozzleRows,
         ...operationWithFot(ctx, {
@@ -1776,11 +1783,11 @@ export function inletGateValveName(inletDn: number, trayDepthMm: number | null |
 export function buildKnsValves(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
   const pumps = s.pumpsWorking + s.pumpsReserve
   const W = STATION_WORKS
-  const gatesCalc = gateValveCount(s.inletCount, s.valveOnInlet)
+  const gatesCalc = gateValveCount(s.inletCount)
   const pressureGatesCalc = pressureGateValveCount(s.pumpsWorking, s.pumpsReserve, s.outletCount)
   const checkValvesCalc = checkValveCount(s.pumpsWorking, s.pumpsReserve)
 
-  const gates = fromSurvey(gatesCalc, s.gatesInletManual, `ƒ = подводящих (${s.inletCount}) × флаг «арматура на подводящем»`)
+  const gates = fromSurvey(gatesCalc, s.gatesInletManual, `ƒ = по задвижке на подводящий (${s.inletCount}) — есть всегда`)
   const pressureGates = fromSurvey(
     pressureGatesCalc,
     s.gatesPressureManual,

@@ -118,7 +118,6 @@ const OL3487: KnsSurveyParams = {
   outletCount: 2,
   pumpsWorking: 2,
   pumpsReserve: 1,
-  valveOnInlet: true,
   emergencyPipeline: false,
   insulationEnabled: true,
   insulationDepthMm: 2000,
@@ -518,14 +517,15 @@ describe('раздел 1 «Корпус»', () => {
     expect(a6.find((r) => r.name === 'Ламинирование патрубка к корпусу')!.qtyCalc).toBeCloseTo(1.1 * 0.3, 9)
   })
 
-  // Выключенный узел — «призрак» с полными количествами, как теплоизоляция:
-  // включение в расчёте восстанавливает строки, а не нули.
-  it('без арматуры на подводящем узел выключен, а строки держат количества', () => {
-    const off = materializeKns(ctx, { ...OL3487, valveOnInlet: false })
+  // Задвижка на подводящем есть всегда (уточнение завода 11.09.2026) — и
+  // фланцевый патрубок под неё тоже: узел не зависит от ОЛ.
+  it('фланцевый патрубок под задвижку есть всегда, по одному на подводящий', () => {
+    const a6 = materializeKns(ctx, { ...OL3487, inletCount: 2 })
       .sections.find((s) => s.code === '1')!
       .components.find((c) => c.nodeCode === 'A6')!
-    expect(off.enabled).toBe(false)
-    expect(off.rows.find((r) => r.name === 'Ручная формовка фланца для задвижки на подводящем трубопроводе')!.qtyCalc).toBeCloseTo(2.3, 6)
+    expect(a6.enabled).toBe(true)
+    expect(a6.enabledCalc).toBeUndefined()
+    expect(a6.rows.find((r) => r.name === 'Ручная формовка фланца для задвижки на подводящем трубопроводе')!.qtyCalc).toBeCloseTo(4.6, 6)
   })
 
   // Исполнение «целая труба» — умолчание: блок сегментов и стыков в эталоне
@@ -1199,18 +1199,28 @@ describe('раздел 1: корзина и дробилка (D3, D4)', () => {
     expect(basket.rows.find((r) => r.name.startsWith('Цепь'))?.qtyCalc).toBe(11)
   })
 
-  it('расчёты без полей корзины собираются с выключенными узлами', () => {
-    const list = korpus({})
-    expect(byTitle(list, 'Корзина')?.enabled).toBe(false)
+  // Корзина или дробилка есть всегда — одна из них или обе (уточнение
+  // завода 11.09.2026): без того и другого — корзина.
+  it('без корзины и дробилки в ОЛ — корзина: одно из двух есть всегда', () => {
+    const list = korpus({ hasBasket: false, hasGrinder: false })
+    expect(byTitle(list, 'Корзина')?.enabled).toBe(true)
     expect(byTitle(list, 'Дробилка')?.enabled).toBe(false)
+    const none = korpus({})
+    expect(byTitle(none, 'Корзина')?.enabled).toBe(true)
+  })
+
+  it('только дробилка — корзина выключена', () => {
+    const list = korpus({ hasBasket: false, hasGrinder: true, inletTrayDepthMm: 9910 })
+    expect(byTitle(list, 'Корзина')?.enabled).toBe(false)
+    expect(byTitle(list, 'Дробилка')?.enabled).toBe(true)
   })
 
   it('узлы, включаемые из ОЛ, помнят его ответ', () => {
-    const list = korpus({ hasBasket: true, valveOnInlet: false, insulationEnabled: true })
+    const list = korpus({ hasBasket: true, insulationEnabled: true })
     expect(byTitle(list, 'Корзина')?.enabledCalc).toBe(true)
-    expect(byTitle(list, 'Фланцевый патрубок')?.enabledCalc).toBe(false)
     expect(byTitle(list, 'Теплоизоляция')?.enabledCalc).toBe(true)
-    // Обечайка от ОЛ не включается — пометки у неё нет.
+    // Обечайка и фланцевый патрубок под задвижку от ОЛ не включаются — пометки у них нет.
     expect(byTitle(list, 'Обечайка')?.enabledCalc).toBeUndefined()
+    expect(byTitle(list, 'Фланцевый патрубок')?.enabledCalc).toBeUndefined()
   })
 })

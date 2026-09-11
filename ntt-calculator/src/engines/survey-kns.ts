@@ -286,13 +286,12 @@ export function sleeveDiameter(nozzleDn: number): number {
 // ─── Арматура ────────────────────────────────────────────────────────────────
 
 /**
- * Кол-во задвижек на подводящих (безнапорных) трубопроводах.
- *
- * `= кол-во подводящих патрубков × флаг «арматура на подводящем»`.
- * Задвижки ставятся только на безнапорные подводящие (README хендоффа).
+ * Кол-во задвижек на подводящих (безнапорных) трубопроводах — по одной на
+ * каждый подводящий: задвижка на подводящем у КНС есть всегда (уточнение
+ * завода 11.09.2026). Прежде её включал флаг ОЛ «арматура на подводящем».
  */
-export function gateValveCount(inletCount: number, valveOnInlet: boolean): number {
-  return valveOnInlet ? inletCount : 0
+export function gateValveCount(inletCount: number): number {
+  return inletCount
 }
 
 /**

@@ -29,7 +29,6 @@ export const SAMPLE_SURVEYS: { readonly [D in DeviceType]: DeviceSurvey[D] } = {
     pumpsReserve: 1,
     pumpsSpare: 0,
     pumpModel: null,
-    valveOnInlet: true,
     emergencyPipeline: false,
     hasFlowMeter: false,
     hasControlCabinet: true,

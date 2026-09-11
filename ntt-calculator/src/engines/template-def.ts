@@ -33,6 +33,7 @@ import { computeEmkGeometry, computeKolGeometry } from './survey-emk-kol'
 import { emkLadderHeightMm } from './template-emk-kol'
 import {
   GRP_PIPE_MATERIAL,
+  knsBasketOn,
   nextId,
   stationHeightM,
   type CalcComponent,
@@ -123,7 +124,8 @@ const KNS_FIELDS: Fields<DeviceSurvey['KNS']> = [
   num('pumpsSpare', 'Запасных насосов на склад', 'шт'),
   { key: 'pumps', label: 'Установленных насосов: рабочие + резервные', unit: 'шт', type: 'number', get: (s) => s.pumpsWorking + s.pumpsReserve },
   { key: 'pumpModel', label: 'Марка насоса', type: 'text', input: true, get: (s) => s.pumpModel ?? '' },
-  bool('valveOnInlet', 'Арматура на подводящем'),
+  // Задвижка на подводящем у КНС есть всегда; поле оставлено для биндингов.
+  { key: 'valveOnInlet', label: 'Задвижка на подводящем — есть всегда', type: 'bool', get: () => true },
   bool('emergencyPipeline', 'Аварийный трубопровод'),
   bool('hasFlowMeter', 'Расходомер'),
   bool('hasControlCabinet', 'Шкаф управления'),
@@ -133,7 +135,8 @@ const KNS_FIELDS: Fields<DeviceSurvey['KNS']> = [
   bool('hasLevelSensor', 'Датчик уровня'),
   bool('insulationEnabled', 'Теплоизоляция'),
   num('insulationDepthMm', 'Глубина теплоизоляции', 'мм'),
-  bool('hasBasket', 'Корзина для мусора'),
+  // Корзина или дробилка есть всегда: без того и другого — корзина.
+  { key: 'hasBasket', label: 'Корзина для мусора', type: 'bool', input: true, get: (s) => knsBasketOn(s) },
   bool('hasGrinder', 'Дробилка'),
 ]
 

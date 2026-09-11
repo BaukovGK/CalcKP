@@ -120,8 +120,6 @@ export interface KnsSurveyForm extends SurveyCommonForm {
   napKol: string
   napLotok: string
 
-  /** Арматура на подводящем. */
-  valveOnInlet: boolean
   /** Аварийный трубопровод. */
   emergency: boolean
   /**
@@ -211,7 +209,6 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     napDn: '150',
     napKol: '2',
     napLotok: '1800',
-    valveOnInlet: true,
     muftaGm: '150',
     emergency: false,
     zadvManual: '',

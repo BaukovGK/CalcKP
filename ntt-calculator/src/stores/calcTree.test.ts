@@ -205,7 +205,7 @@ describe('стор calcTree: наценка, тираж и версия прай
     Object.assign(est.surveyData, {
       kns: {
         dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
-        nRab: '2', nRez: '1', valveOnInlet: true, emergency: false,
+        nRab: '2', nRez: '1', emergency: false,
         insulation: false, tiGlubina: '0', mvk: false,
       },
       derived: { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: 'Vandjord VSL.80.37.4.5.0D' },
@@ -239,7 +239,7 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
   /** ОЛ КНС в той форме, в которой его сохраняет SurveyKnsView. */
   const kns = (over: Record<string, unknown> = {}) => ({
     dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
-    nRab: '2', nRez: '1', valveOnInlet: true, emergency: false,
+    nRab: '2', nRez: '1', emergency: false,
     insulation: false, tiGlubina: '0', mvk: false, pipePrice: '', pumpPrice: '',
     ...over,
   })
@@ -471,11 +471,18 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(node(store, 'Дробилка').enabled).toBe(true)
     expect(node(store, 'Корзина').rows.find((r) => r.name.startsWith('Цепь'))?.qtyCalc).toBe(11)
 
+    // Корзина или дробилка есть всегда: «нет» старого листа — корзина.
     const none = kns({ drobilka: 'нет', podvLotok: '9910' })
     await store.applySurvey('e1', { form: none, kns: none, derived, surveyRev: 3 })
 
-    expect(node(store, 'Корзина').enabled).toBe(false)
+    expect(node(store, 'Корзина').enabled).toBe(true)
     expect(node(store, 'Дробилка').enabled).toBe(false)
+
+    const grinder = kns({ drobilka: 'дробилка', podvLotok: '9910' })
+    await store.applySurvey('e1', { form: grinder, kns: grinder, derived, surveyRev: 4 })
+
+    expect(node(store, 'Корзина').enabled).toBe(false)
+    expect(node(store, 'Дробилка').enabled).toBe(true)
   })
 
   it('блок «Автоматика» ОЛ ведёт шкаф, датчики и расходомер; возвышение — к высоте станции', async () => {
@@ -1019,7 +1026,7 @@ describe('стор calcTree: пересчёт по новой версии пр�
 describe('стор calcTree: шаблон технолога и узлы каталога', () => {
   const kns = (over: Record<string, unknown> = {}) => ({
     dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
-    nRab: '2', nRez: '1', valveOnInlet: true, emergency: false,
+    nRab: '2', nRez: '1', emergency: false,
     insulation: false, tiGlubina: '0', mvk: false, pipePrice: '', pumpPrice: '',
     ...over,
   })

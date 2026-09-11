@@ -114,9 +114,8 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
 
   // ── Арматура: вычисляемая с override ──
 
-  const gatesCalc = computed(() =>
-    gateValveCount(num(form.value.podvKol) ?? 0, form.value.valveOnInlet),
-  )
+  // Задвижка на подводящем есть всегда — по одной на подводящий.
+  const gatesCalc = computed(() => gateValveCount(num(form.value.podvKol) ?? 0))
   const gates = computed(() => num(form.value.zadvManual) ?? gatesCalc.value)
   const gatesOverridden = computed(() => num(form.value.zadvManual) != null)
 
@@ -143,11 +142,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
 
   // Формулировки разбивки — как в прототипе: он объясняет смысл, а не
   // повторяет арифметику («по кол-ву подводящих патрубков = 1»).
-  const gatesExplain = computed(() =>
-    form.value.valveOnInlet
-      ? `по кол-ву подводящих патрубков = ${gatesCalc.value}`
-      : 'арматура на подводящем выключена = 0',
-  )
+  const gatesExplain = computed(() => `по кол-ву подводящих патрубков = ${gatesCalc.value}`)
   const pressureGatesExplain = computed(
     () =>
       `насосов (${form.value.nRab}+${form.value.nRez}) + отводящих ${form.value.napKol} = ${pressureGatesCalc.value}` +

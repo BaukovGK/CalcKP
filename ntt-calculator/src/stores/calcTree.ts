@@ -404,7 +404,6 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       // Возвышение над землёй — к высоте станции: цепь подъёма насосов,
       // таль, кабели поплавков и датчиков.
       elevationMm: n(kns.vozv),
-      valveOnInlet: Boolean(kns.valveOnInlet),
       emergencyPipeline: Boolean(kns.emergency),
       insulationEnabled: Boolean(kns.insulation),
       insulationDepthMm: n(kns.tiGlubina),

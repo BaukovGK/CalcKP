@@ -250,10 +250,11 @@ describe('sleeveDiameter — гильза патрубка (эталон K8/M8)'
 })
 
 describe('арматура — авторасчёт с override (§5.6 ТЗ)', () => {
-  it('задвижки = кол-во подводящих × флаг «арматура на подводящем»', () => {
-    expect(gateValveCount(1, true)).toBe(1)
-    expect(gateValveCount(2, true)).toBe(2)
-    expect(gateValveCount(2, false)).toBe(0)
+  // Задвижка на подводящем у КНС есть всегда (уточнение завода 11.09.2026).
+  it('задвижки подводящие = кол-во подводящих, флага больше нет', () => {
+    expect(gateValveCount(1)).toBe(1)
+    expect(gateValveCount(2)).toBe(2)
+    expect(gateValveCount(0)).toBe(0)
   })
 
   // Схема завода: задвижка на стояке КАЖДОГО установленного насоса (включая
@@ -265,7 +266,7 @@ describe('арматура — авторасчёт с override (§5.6 ТЗ)', (
   // Итог сходится с опросным листом: 5 напорных + подводящая + аварийная = 7,
   // и ровно 7 стоит в поле «Количество задвижек» ОЛ3487.
   it('вместе с подводящей и аварийной выходит 7 — как в опросном листе', () => {
-    expect(pressureGateValveCount(2, 1, 2) + gateValveCount(1, true) + 1).toBe(7)
+    expect(pressureGateValveCount(2, 1, 2) + gateValveCount(1) + 1).toBe(7)
   })
 
   it('обратные клапаны — по одному на установленный насос', () => {

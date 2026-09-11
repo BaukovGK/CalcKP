@@ -47,7 +47,7 @@ const CTX: MaterializeContext = {
 const KNS: KnsSurveyParams = {
   dn: 3000, depthMm: 11600, pnSurvey: 0.1, sn: 10000, mvk: true,
   inletDn: 250, inletCount: 1, outletDn: 150, outletCount: 2,
-  pumpsWorking: 2, pumpsReserve: 1, valveOnInlet: true, emergencyPipeline: false,
+  pumpsWorking: 2, pumpsReserve: 1, emergencyPipeline: false,
   insulationEnabled: true, insulationDepthMm: 2000,
 }
 
@@ -71,7 +71,7 @@ const SURVEYS: { readonly [D in DeviceType]: ReadonlyArray<DeviceEnv['survey']> 
     { hasBasket: true, inletTrayDepthMm: 4200 },
     { hasGrinder: true, inletTrayDepthMm: 4200 },
     { hasBasket: true, hasGrinder: true, inletTrayDepthMm: 5100 },
-    { valveOnInlet: false, insulationEnabled: false },
+    { insulationEnabled: false },
     { emergencyPipeline: true, emergencyCouplingGm: 80 },
     { hasFlowMeter: true, hasControlCabinet: true, controlCabinetType: 'уличный', controlCabinetStart: 'плавный', hasPressureSensors: true, hasLevelSensor: true },
     { pumpModel: 'VSL 123', pumpPriceRub: 99000, pumpsSpare: 1, elevationMm: 500 },

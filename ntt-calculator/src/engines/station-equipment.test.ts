@@ -154,7 +154,6 @@ describe('шаблон КНС против настоящего прайса', (
     pumpsWorking: 2,
     pumpsReserve: 1,
     pumpsSpare: 1,
-    valveOnInlet: true,
     emergencyPipeline: true,
     hasFlowMeter: true,
     hasBasket: true,
