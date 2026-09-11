@@ -29,7 +29,7 @@ import {
 import type { PriceBinding, RowResult } from '@/engines/types'
 import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
-import { hasBasketIn, hasGrinderIn, type Grinder } from '@/types/survey'
+import { hasBasketIn, hasGrinderIn, PIPE_MATERIALS, type Grinder, type PipeMaterial } from '@/types/survey'
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
 import { hasPriceDelta, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
 
@@ -321,7 +321,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       }
       case 'KOL': {
         const p = saved.kol as KolSurveyParams | undefined
-        return p ? materializeKol(ctx, p) : null
+        return p ? materializeKol(ctx, kolParamsWithForm(p, saved.form)) : null
       }
       default: {
         const p = surveyToParams(saved)
@@ -330,13 +330,19 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     }
   }
 
+  /** Материал подходящей трубы из формы ОЛ; не из списка — нет. */
+  function formMaterial(v: unknown): PipeMaterial | null {
+    return (PIPE_MATERIALS as readonly unknown[]).includes(v) ? (v as PipeMaterial) : null
+  }
+
   /**
-   * Параметры ёмкости, сохранённые до появления полей оборудования и числа
-   * шахт (редакция 2 встроенного шаблона ЕМК): ответы ОЛ «Запорная
-   * арматура», «Шкаф управления», «Датчики уровня» и марка насосов лежали в
-   * самой форме (`form`), но в параметры расчёта не попадали. Недостающее
-   * берётся из формы — пересборка старого расчёта строит те же узлы, что
-   * построила бы правка ОЛ.
+   * Параметры ёмкости, сохранённые до появления полей оборудования, числа
+   * шахт (редакция 2 встроенного шаблона ЕМК) и материала патрубков
+   * (редакция 3): ответы ОЛ «Запорная арматура», «Шкаф управления»,
+   * «Датчики уровня», марка насосов и материал лежали в самой форме
+   * (`form`), но в параметры расчёта не попадали. Недостающее берётся из
+   * формы — пересборка старого расчёта строит те же узлы, что построила бы
+   * правка ОЛ.
    */
   function emkParamsWithForm(p: EmkSurveyParams, form: unknown): EmkSurveyParams {
     const f = (form && typeof form === 'object' ? form : {}) as Record<string, unknown>
@@ -348,6 +354,22 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       valveOnInlet: p.valveOnInlet ?? flag(f.hasValves),
       hasControlCabinet: p.hasControlCabinet ?? flag(f.shu),
       hasLevelSensor: p.hasLevelSensor ?? flag(f.datchikiUrov),
+      inletMaterial: p.inletMaterial ?? formMaterial(f.podvMat),
+      outletMaterial: p.outletMaterial ?? formMaterial(f.otvMat),
+    }
+  }
+
+  /**
+   * Параметры колодца, сохранённые до появления материала патрубков
+   * (редакция 3 встроенного шаблона КОЛ): материал берётся из формы ОЛ, как
+   * у ёмкости (`emkParamsWithForm`).
+   */
+  function kolParamsWithForm(p: KolSurveyParams, form: unknown): KolSurveyParams {
+    const f = (form && typeof form === 'object' ? form : {}) as Record<string, unknown>
+    return {
+      ...p,
+      inletMaterial: p.inletMaterial ?? formMaterial(f.podvMat),
+      outletMaterial: p.outletMaterial ?? formMaterial(f.otvMat),
     }
   }
 

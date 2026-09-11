@@ -316,7 +316,7 @@ import { useCalcTreeStore } from '@/stores/calcTree'
 import { tryEvalExpr } from '@/engines/expr'
 import { acceptDn, NOZZLE_DN_SERIES } from '@/engines/dn-series'
 import { makeDefaultEmkSurvey, type EmkSurveyForm } from '@/types/survey-emk-kol'
-import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon } from '@/types/survey'
+import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon, PIPE_MATERIALS } from '@/types/survey'
 import { estimatesApi } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
 import { EMK_SECTIONS } from '@/engines/template-emk-kol'
@@ -377,7 +377,7 @@ const backLabel = computed(() => (props.projectId ? '← Проект' : '← П
 
 const TANK_TYPES = ['Накопительная', 'Химстойкая', 'Аккумулирующая', 'Питьевая', 'С насосным оборудованием'] as const
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const
-const MATERIALS = ['ПЭ', 'ПВХ', 'ПНД', 'ПП', 'Асбестцемент', 'Корсис', 'стеклокомпозит'] as const
+const MATERIALS = PIPE_MATERIALS
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
 const SN_LIST = ['1250', '2500', '5000', '10000'] as const
 /** Домен DN — из справочника весов, как и у КНС (30 значений). */
@@ -601,6 +601,9 @@ function surveyPayload() {
       inletCount: num(form.value.podvKol) ?? 0,
       outletDn: num(form.value.otvDn) ?? 0,
       outletCount: num(form.value.otvKol) ?? 0,
+      // Под стеклокомпозитную трубу патрубок стеклопластиковый.
+      inletMaterial: form.value.podvMat,
+      outletMaterial: form.value.otvMat,
       hasPumps: form.value.hasPumps,
       pumpsWorking: num(form.value.nRab) ?? 0,
       pumpsReserve: num(form.value.nRez) ?? 0,

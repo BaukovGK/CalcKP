@@ -79,6 +79,8 @@ const SURVEYS: { readonly [D in DeviceType]: ReadonlyArray<DeviceEnv['survey']> 
     { dn: 1300, depthMm: 5000, sn: 5000, mvk: false, inletDn: 350, outletDn: 100, outletCount: 1, pumpsWorking: 1, pumpsReserve: 1 },
     { dn: 2000, depthMm: 7400, inletCount: 0, outletCount: 3, pumpsWorking: 3, pumpsReserve: 0 },
     { dn: 2500, depthMm: 9000, pipeExecution: 'частями' },
+    // Порог формованной гильзы напорного — DN 300 включительно.
+    { outletDn: 300, outletCount: 1 },
   ].map((v) => ({ ...KNS, ...v }) as KnsSurveyParams),
   EMK: [
     {},
@@ -97,6 +99,9 @@ const SURVEYS: { readonly [D in DeviceType]: ReadonlyArray<DeviceEnv['survey']> 
       hasPumps: true, pumpsWorking: 1, pumpsReserve: 1, pumpModel: 'VSL 100', hasControlCabinet: true, hasLevelSensor: true,
     },
     { valveOnInlet: true, hasControlCabinet: true, shaftCount: 3 },
+    // Патрубки под стеклокомпозитную трубу: формованная гильза с фланцем без
+    // нормы (DN150) и гильза из трубы с фланцем (DN400).
+    { inletMaterial: 'стеклокомпозит', outletMaterial: 'стеклокомпозит', outletDn: 400 },
   ].map((v) => ({ ...EMK, ...v }) as EmkSurveyParams),
   KOL: [
     {},
@@ -106,6 +111,9 @@ const SURVEYS: { readonly [D in DeviceType]: ReadonlyArray<DeviceEnv['survey']> 
     { insulationEnabled: true, insulationDepthMm: 1500, underRoadway: true, sn: 10000 },
     { hasLadder: false, dn: 2000, workingDepthMm: 6000, pipePriceRub: 8000, servicePipePriceRub: 5000 },
     { outletCount: 0, inletCount: 2 },
+    // Патрубки под стеклокомпозитную трубу: формованная гильза и гильза из
+    // трубы — обе с муфтой.
+    { inletMaterial: 'стеклокомпозит', inletDn: 300, outletMaterial: 'стеклокомпозит', outletDn: 500 },
   ].map((v) => ({ ...KOL, ...v }) as KolSurveyParams),
 }
 

@@ -636,6 +636,99 @@ describe('материализация КОЛ', () => {
   })
 })
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Патрубки под стеклокомпозитную трубу
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Под стеклокомпозитную трубу патрубок сам стеклопластиковый (уточнение
+// завода 11.09.2026): у ёмкости — гильза и фланец, у колодца — гильза и
+// муфта. Гильза до DN 300 включительно формуется по норме Мф, крупнее —
+// отрезок трубы. В листах эта ветка не работает: у ёмкости материал вписан
+// числом «ПЭ», у колодца подводящий ссылается на ячейку своего же листа.
+describe('патрубки под стеклокомпозитную трубу', () => {
+  const nozzles = (tree: CalcTree) =>
+    tree.sections.find((s) => s.code === '1')!.components.filter((c) => c.nodeCode === 'A5')
+
+  it('ёмкость DN300: формованная гильза Ø400 и стеклокомпозитный фланец по DN', () => {
+    const [inlet, outlet] = nozzles(materializeEmk(ctx, { ...EMK, inletDn: 300, inletCount: 2, inletMaterial: 'стеклокомпозит' }))
+    expect(inlet!.title).toBe('Патрубок подводящий стеклопластиковый DN300 ×2')
+    const rows = inlet!.rows
+    // Гильза Ø400: Мф 1,1 кг × 2.
+    const formed = rows.find((r) => r.name === 'Формовка гильз')!
+    expect(formed.qtyCalc).toBeCloseTo(2.2, 9)
+    expect(formed.fotK).toBe(1)
+    expect(formed.priceCatalog).toBe(310.2)
+    // Фланец — по DN трубы: Мф фланца(DN300) 3,1 кг × 2.
+    const flange = rows.find((r) => r.name === 'Ручная формовка стеклокомпозитного фланца')!
+    expect(flange.qtyCalc).toBeCloseTo(6.2, 9)
+    expect(flange.fotK).toBe(1)
+    expect(rows.find((r) => r.name === 'Ламинирование патрубка к корпусу')!.qtyCalc).toBeCloseTo(0.66, 9)
+    expect(rows.find((r) => r.name === 'Прорезка отверстия патрубка в корпусе')!.qtyCalc).toBeCloseTo(((400 * Math.PI) / 1000) * 0.5 * 2, 9)
+    expect(rows.some((r) => r.name.startsWith('Труба СК') || r.name === 'Ручная формовка патрубка')).toBe(false)
+    // ФОТ — у формовки гильз, фланца и ламинирования.
+    expect(rows.filter((r) => r.name === 'ФОТ')).toHaveLength(3)
+    // Отводящий из ПЭ — гильза под проход трубы, как в листе.
+    expect(outlet!.title).toBe('Патрубок отводящий DN150 ×1')
+    expect(outlet!.rows.some((r) => r.name === 'Ручная формовка стеклокомпозитного фланца')).toBe(false)
+  })
+
+  it('ёмкость DN400: гильза крупнее DN 300 — отрезок трубы, фланец тот же', () => {
+    const [, outlet] = nozzles(materializeEmk(ctx, { ...EMK, outletDn: 400, outletMaterial: 'стеклокомпозит' }))
+    const rows = outlet!.rows
+    // DN400 → гильза Ø500: отрезок трубы 0,5 м с товарным видом.
+    expect(rows.find((r) => r.name === 'Труба СК/НПС-К 500-0,1-2500')!.qtyCalc).toBeCloseTo(0.5, 9)
+    expect(rows.find((r) => r.name === 'Придание изделию товарного вида')!.qtyCalc).toBeCloseTo((500 / 1300) * 0.5, 9)
+    expect(rows.some((r) => r.name === 'Формовка гильз')).toBe(false)
+    expect(rows.find((r) => r.name === 'Ручная формовка стеклокомпозитного фланца')!.qtyCalc).toBeCloseTo(4.6, 9)
+  })
+
+  it('нормы фланца для DN нет — строка ждёт массу вручную', () => {
+    const [inlet] = nozzles(materializeEmk(ctx, { ...EMK, inletMaterial: 'стеклокомпозит' }))
+    // DN150: гильза Ø250 по норме есть, фланца DN150 в нормах теста нет.
+    expect(inlet!.rows.find((r) => r.name === 'Формовка гильз')!.qtyCalc).toBeCloseTo(0.6, 9)
+    const flange = inlet!.rows.find((r) => r.name === 'Ручная формовка стеклокомпозитного фланца')!
+    expect(flange.qtyCalc).toBeNull()
+    expect(flange.note).toContain('введите массу вручную')
+  })
+
+  it('колодец: гильза и «Муфта-2» по DN трубы, ламинируется проходная муфта', () => {
+    const [inlet, outlet] = nozzles(
+      materializeKol(ctx, {
+        ...KOL,
+        inletDn: 250,
+        inletMaterial: 'стеклокомпозит',
+        outletDn: 400,
+        outletCount: 2,
+        outletMaterial: 'стеклокомпозит',
+      }),
+    )
+    // DN250 → гильза Ø400 формуется: Мф 1,1 кг.
+    expect(inlet!.title).toBe('Патрубок подводящий стеклопластиковый DN250 ×1')
+    expect(inlet!.rows.find((r) => r.name === 'Формовка гильз')!.qtyCalc).toBeCloseTo(1.1, 9)
+    const coupling = inlet!.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')!
+    expect(coupling.qtyCalc).toBe(1)
+    expect(coupling.unit).toBe('шт')
+    // Муфты в прайсе нет — цена договорная, строка «красная», как у «Муфты-1».
+    expect(coupling.priceCatalog).toBeNull()
+    const lam = inlet!.rows.find((r) => r.name === 'Ламинирование проходной муфты к корпусу')!
+    expect(lam.qtyCalc).toBeCloseTo(0.33, 9)
+    expect(lam.fotK).toBe(1)
+    expect(inlet!.rows.some((r) => r.name === 'Ламинирование патрубка к корпусу' || r.name.includes('фланца'))).toBe(false)
+    // DN400 → гильза Ø500 — отрезок трубы 0,5 м × 2, муфт две.
+    expect(outlet!.rows.find((r) => r.name === 'Труба СК/НПС-К 500-0,1-2500')!.qtyCalc).toBeCloseTo(1, 9)
+    expect(outlet!.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 400-1')!.qtyCalc).toBe(2)
+    expect(outlet!.rows.find((r) => r.name === 'Ламинирование проходной муфты к корпусу')!.qtyCalc).toBeCloseTo(1.9 * 0.3 * 2, 9)
+  })
+
+  it('прочие материалы — гильза под проход трубы, как в листе', () => {
+    for (const material of ['ПЭ', 'ПВХ', 'Корсис'] as const) {
+      const [inlet] = nozzles(materializeKol(ctx, { ...KOL, inletMaterial: material }))
+      expect(inlet!.title).toBe('Патрубок подводящий DN150 ×1')
+      expect(inlet!.rows.find((r) => r.name === 'Ручная формовка патрубка')!.qtyCalc).toBe(0.5)
+    }
+  })
+})
+
 describe('общие узлы переиспользуются всеми тремя изделиями', () => {
   it('лестница и перекрытие есть и у ЕМК, и у КОЛ', () => {
     for (const rows of [flattenRows(materializeEmk(ctx, EMK)), flattenRows(materializeKol(ctx, KOL))]) {

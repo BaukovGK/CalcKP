@@ -814,6 +814,54 @@ describe('стор calcTree: ёмкость', () => {
     expect(node(store, 'Шкаф управления').enabled).toBe(false)
     expect(node(store, 'Шахта обслуживания').title).not.toContain('×')
   })
+
+  // Материал патрубков пришёл в параметры редакцией 3; до неё — только в форме.
+  it('старые параметры ёмкости: материал патрубков берётся из формы ОЛ', async () => {
+    const store = emkStore()
+    await store.applySurvey('e1', { form: { podvMat: 'стеклокомпозит', otvMat: 'ПЭ' }, emk: emk(), surveyRev: 2 })
+    expect(node(store, 'Патрубок подводящий').title).toBe('Патрубок подводящий стеклопластиковый DN150 ×1')
+    expect(node(store, 'Патрубок отводящий').title).toBe('Патрубок отводящий DN150 ×1')
+    expect(store.rows.some((r) => r.name === 'Ручная формовка стеклокомпозитного фланца')).toBe(true)
+
+    // Параметры листа побеждают форму.
+    await store.applySurvey('e1', { form: { podvMat: 'стеклокомпозит' }, emk: emk({ inletMaterial: 'ПЭ' }), surveyRev: 3 })
+    expect(node(store, 'Патрубок подводящий').title).toBe('Патрубок подводящий DN150 ×1')
+  })
+})
+
+describe('стор calcTree: колодец', () => {
+  /** Параметры ОЛ колодца в той форме, в которой их шлёт SurveyKolView. */
+  const kol = (over: Record<string, unknown> = {}) => ({
+    dn: 1500, workingDepthMm: 2500, elevationMm: 200, pnSurvey: 0.1,
+    hasNeck: true, neckHeightMm: 800, neckDiameterMm: 1000,
+    inletDn: 150, inletCount: 1, outletDn: 150, outletCount: 1,
+    hasBasket: false, underRoadway: false, insulationEnabled: false, insulationDepthMm: 0,
+    ...over,
+  })
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  it('старые параметры колодца: материал патрубков берётся из формы ОЛ', async () => {
+    const est = savedEstimate()
+    est.deviceType = 'KOL'
+    delete (est.surveyData as Record<string, unknown>).tree
+    Object.assign(est.surveyData, { surveyRev: 1, treeSurveyRev: 0, form: {}, kol: kol() })
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return Promise.resolve(JSON.parse(JSON.stringify(est)))
+    })
+    const store = useCalcTreeStore()
+
+    await store.applySurvey('e1', { form: { podvMat: 'ПЭ', otvMat: 'стеклокомпозит' }, kol: kol(), surveyRev: 2 })
+    const titles = store.tree!.sections.flatMap((s) => s.components).filter((c) => c.nodeCode === 'A5').map((c) => c.title)
+    expect(titles).toEqual(['Патрубок подводящий DN150 ×1', 'Патрубок отводящий стеклопластиковый DN150 ×1'])
+    expect(store.rows.some((r) => r.name === 'Муфта-2 СК/НПС-К 150-1')).toBe(true)
+  })
 })
 
 /**

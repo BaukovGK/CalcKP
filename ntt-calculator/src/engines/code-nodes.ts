@@ -161,7 +161,7 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
   emk({ ref: 'emk.shell', codes: ['A1'], title: 'Обечайка корпуса', reads: 'DN, объём или длина, расположение, тип, PN, SN, цена трубы', build: buildEmkShell }),
   emk({ ref: 'emk.bottoms', codes: ['A2', 'A3'], title: 'Днища', reads: 'DN, расположение, тип днищ', build: buildEmkBottoms }),
   emk({ ref: 'emk.shaft', codes: ['A8'], title: 'Шахты обслуживания', reads: 'шахта, число шахт, их Ø и высота, цена трубы шахты', build: buildEmkShaft }),
-  emk({ ref: 'emk.nozzles', codes: ['A5'], title: 'Патрубки подводящие и отводящие', reads: 'DN и число патрубков', build: buildEmkNozzles }),
+  emk({ ref: 'emk.nozzles', codes: ['A5'], title: 'Патрубки подводящие и отводящие', reads: 'DN, число и материал труб патрубков', build: buildEmkNozzles }),
   emk({ ref: 'emk.insulation', codes: ['A9'], title: 'Теплоизоляция шахт и верха', reads: 'DN, шахты, теплоизоляция и её глубина', build: buildEmkInsulation }),
   emk({ ref: 'emk.loops', codes: ['A10'], title: 'Монтажные петли', reads: 'DN', build: (ctx, s) => [buildMountingLoops(ctx, s.dn)] }),
   // Дробилки в листе ёмкости нет — ни строк, ни формул: узла нет и здесь.
@@ -263,7 +263,7 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
   kol({ ref: 'kol.shell', codes: ['A1'], title: 'Обечайка корпуса', reads: 'DN, рабочая часть (без горловины — с возвышением), PN, SN, цена трубы', build: buildKolShell }),
   kol({ ref: 'kol.bottom', codes: ['A2'], title: 'Днище', reads: 'DN', build: buildKolBottom }),
   kol({ ref: 'kol.neck', codes: ['A8'], title: 'Горловина', reads: 'горловина, её Ø и высота, возвышение, цена трубы горловины', build: buildKolNeck }),
-  kol({ ref: 'kol.nozzles', codes: ['A5'], title: 'Патрубки подводящие и отводящие', reads: 'DN и число патрубков', build: buildKolNozzles }),
+  kol({ ref: 'kol.nozzles', codes: ['A5'], title: 'Патрубки подводящие и отводящие', reads: 'DN, число и материал труб патрубков', build: buildKolNozzles }),
   kol({ ref: 'kol.insulation', codes: ['A9'], title: 'Теплоизоляция корпуса', reads: 'DN, теплоизоляция и её глубина', build: buildKolInsulation }),
   kol({ ref: 'kol.loops', codes: ['A10'], title: 'Монтажные петли', reads: 'DN', build: (ctx, s) => [buildMountingLoops(ctx, s.dn)] }),
   // Дробилка колодца — в корпусе, как в листе (строки 67–75).

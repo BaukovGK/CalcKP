@@ -471,12 +471,20 @@ export function ownPipeRow(ctx: MaterializeContext, name: string, qtyCalc: numbe
 }
 
 /**
- * Ниже этого DN гильза напорного патрубка КНС формуется — «Формовка гильз»
- * по норме Мф: через формованную гильзу протягивается напорная труба малого
- * диаметра (уточнение 11.09.2026). Лист КНС здесь ставит ручную формовку
- * 0,5 кг (меньше DN 200) или отрезок трубы (DN 200–299).
+ * До этого DN включительно гильза формуется — «Формовка гильз» по норме Мф,
+ * а не режется из трубы (уточнение 11.09.2026). Так делают гильзу, через
+ * которую протягивают напорную трубу КНС, и стеклопластиковый патрубок под
+ * стеклокомпозитную трубу. Формованная гильза большего диаметра возможна, но
+ * пока не нужна — крупнее идёт отрезок трубы. Листы здесь ставят ручную
+ * формовку 0,5 кг (меньше DN 200) или отрезок трубы.
  */
-export const PRESSURE_SLEEVE_FORMED_BELOW_DN = 300
+export const FORMED_SLEEVE_MAX_DN = 300
+
+/**
+ * Чем стеклопластиковый патрубок соединяется со стеклокомпозитной трубой: у
+ * ёмкости — фланцем, у колодца — муфтой (уточнение 11.09.2026).
+ */
+export type GrpNozzleJoint = 'flange' | 'coupling'
 
 /** Патрубок изделия: заголовок узла, DN и число, наименование прорезки по прайсу. */
 export interface SleeveNozzle {
@@ -485,10 +493,17 @@ export interface SleeveNozzle {
   count: number
   cutoutName: string
   /**
-   * Ниже этого DN гильза не режется из трубы, а формуется: «Формовка гильз»,
-   * масса — норма Мф по Ø гильзы × кол-во. Нет — модель листа.
+   * Гильза формуется, а не режется из трубы: до `maxDn` включительно —
+   * «Формовка гильз», масса — норма Мф по Ø гильзы × кол-во; `why` — зачем,
+   * для пояснения строки. Нет — модель листа.
    */
-  formedSleeveBelowDn?: number
+  formed?: { maxDn: number; why: string }
+  /**
+   * Патрубок под стеклокомпозитную трубу (ОЛ «Материал» — стеклокомпозит):
+   * он сам стеклопластиковый, и к гильзе добавляется соединение с трубой —
+   * стеклокомпозитный фланец (`flange`) или муфта «Муфта-2» (`coupling`).
+   */
+  grpJoint?: GrpNozzleJoint
 }
 
 /**
@@ -505,13 +520,20 @@ export interface SleeveNozzle {
  *   своё — у КНС «под гильзу входящего / напорного патрубка», у ёмкости и
  *   колодца «патрубка в корпусе».
  *
- * Исключение — `formedSleeveBelowDn`: у напорных патрубков КНС меньше DN 300
- * гильза формуется («Формовка гильз», Мф × кол-во, ФОТ k = 1) — через неё
- * протягивается напорная труба малого диаметра. Ламинирование к корпусу и
- * прорезка у такой гильзы те же.
+ * Отступления от листов — уточнения завода 11.09.2026:
  *
- * Материал патрубка «Труба стеклокомпозитная» (в листе — «Муфта-2» и порог
- * DN 300) в расчёт не передаётся: разборы КНС и ЕМК/КОЛ.
+ * - `formed` — гильза до DN 300 включительно формуется («Формовка гильз»,
+ *   Мф × кол-во, ФОТ k = 1): у напорных патрубков КНС через неё
+ *   протягивается напорная труба малого диаметра, у патрубков под
+ *   стеклокомпозитную трубу это сам стеклопластиковый патрубок;
+ * - `grpJoint` — патрубок под стеклокомпозитную трубу соединяется с ней: у
+ *   ёмкости «Ручная формовка стеклокомпозитного фланца» = Мф фланца(DN) ×
+ *   кол-во, у колодца муфта «Муфта-2 СК/НПС-К DN-1» на патрубок (цена
+ *   договорная); ламинируется тогда проходная муфта — так строку называет
+ *   лист колодца (строки 28, 33).
+ *
+ * Ламинирование к корпусу и прорезка у всех патрубков одни. Материал
+ * патрубка КНС в расчёт пока не передаётся (разбор КНС §4).
  */
 export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzle[]): CalcComponent[] {
   const out: CalcComponent[] = []
@@ -521,7 +543,7 @@ export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzl
     const norm = ctx.nozzleNormOf?.(sleeve) ?? null
     const lamination = norm ? laminationMassKg(norm.moldingMassKg) * n.count : null
     const sleeveM = SLEEVE_PIPE_M * n.count
-    const formed = n.formedSleeveBelowDn != null && n.dn < n.formedSleeveBelowDn
+    const formed = n.formed != null && n.dn <= n.formed.maxDn
     const fromPipe = !formed && n.dn >= SLEEVE_PIPE_FROM_DN
     const formedMass = norm ? norm.moldingMassKg * n.count : null
 
@@ -535,7 +557,7 @@ export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzl
           note:
             formedMass == null
               ? `Гильза Ø${sleeve} × ${n.count} · нормы формовки для Ø${sleeve} в «Для расчетов» нет — введите массу вручную`
-              : `ƒ Мф(Ø${sleeve}) ${fmtNum(norm!.moldingMassKg)} кг × ${n.count} = ${fmtNum(formedMass)} кг — гильза под протяжку напорной трубы меньше DN ${n.formedSleeveBelowDn}`,
+              : `ƒ Мф(Ø${sleeve}) ${fmtNum(norm!.moldingMassKg)} кг × ${n.count} = ${fmtNum(formedMass)} кг — ${n.formed!.why}: до DN ${n.formed!.maxDn} гильза формуется`,
         })
       : fromPipe
       ? [
@@ -563,16 +585,52 @@ export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzl
           note: `ƒ 0,5 кг на патрубок × ${n.count} — меньше DN ${SLEEVE_PIPE_FROM_DN} гильза формуется вручную`,
         })
 
+    // Соединение стеклопластикового патрубка с трубой. Норма фланца — по DN
+    // трубы, как у фланцевого патрубка под задвижку КНС (A6).
+    const flangeNorm = n.grpJoint === 'flange' ? (ctx.nozzleNormOf?.(n.dn) ?? null) : null
+    const flangeMass = flangeNorm?.flangeMassKg != null ? flangeNorm.flangeMassKg * n.count : null
+    const jointRows: CalcRowNode[] =
+      n.grpJoint === 'flange'
+        ? operationWithFot(ctx, {
+            category: 'Собственное производство',
+            name: 'Ручная формовка стеклокомпозитного фланца',
+            unit: 'кг',
+            qtyCalc: flangeMass,
+            fotK: FOT_K_MANUAL,
+            note:
+              flangeMass == null
+                ? `Мф фланца для DN${n.dn} в нормах «Для расчетов» нет — введите массу вручную`
+                : `ƒ Мф фланца(DN${n.dn}) ${fmtNum(flangeNorm!.flangeMassKg!)} кг × ${n.count} = ${fmtNum(flangeMass)} кг — фланец под стеклокомпозитную трубу`,
+          })
+        : n.grpJoint === 'coupling'
+        ? [
+            {
+              ...makeRow(ctx, {
+                kind: 'МАТЕРИАЛ',
+                category: 'Собственное производство',
+                name: `Муфта-2 СК/НПС-К ${n.dn}-1`,
+                unit: 'шт',
+                qtyCalc: n.count,
+                bucket: 'Труба, муфта',
+                note: `Муфта под стеклокомпозитную трубу DN${n.dn} × ${n.count} · цена договорная — введите`,
+              }),
+              priceCatalog: null,
+            },
+          ]
+        : []
+
     out.push({
       id: nextId('c'),
       nodeCode: 'A5',
-      title: `${n.title} DN${n.dn} ×${n.count}`,
+      title: `${n.title}${n.grpJoint ? ' стеклопластиковый' : ''} DN${n.dn} ×${n.count}`,
       enabled: true,
       rows: [
         ...sleeveRows,
+        ...jointRows,
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
-          name: 'Ламинирование патрубка к корпусу',
+          // У патрубка с муфтой лист колодца называет строку так (строки 28, 33).
+          name: n.grpJoint === 'coupling' ? 'Ламинирование проходной муфты к корпусу' : 'Ламинирование патрубка к корпусу',
           unit: 'кг',
           qtyCalc: lamination,
           // В листах у этой строки k = 1 («*ламин*» → 1), а не 0,56.
@@ -761,7 +819,7 @@ export function buildKnsBottom(ctx: MaterializeContext, s: Pick<KnsSurveyParams,
 /**
  * A5 — патрубки КНС: подводящие и напорные, каждый со своей гильзой
  * (`buildSleeveNozzles`; лист КНС, строки 26–30, 40–44, 87–88). У напорных
- * меньше DN 300 гильза формуется — «Формовка гильз» по норме Мф.
+ * до DN 300 включительно гильза формуется — «Формовка гильз» по норме Мф.
  */
 export function buildKnsNozzles(
   ctx: MaterializeContext,
@@ -782,7 +840,7 @@ export function buildKnsNozzles(
       count: s.outletCount,
       cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)',
       // Гильза под протяжку напорной трубы малого диаметра формуется.
-      formedSleeveBelowDn: PRESSURE_SLEEVE_FORMED_BELOW_DN,
+      formed: { maxDn: FORMED_SLEEVE_MAX_DN, why: 'гильза под протяжку напорной трубы' },
     },
   ])
 }

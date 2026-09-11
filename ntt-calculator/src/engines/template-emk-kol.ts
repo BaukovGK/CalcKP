@@ -38,9 +38,11 @@ import {
   type InsulationResult,
 } from './formulas'
 import { FOT_K_LAMIN, FOT_K_MECH } from './fot'
+import type { PipeMaterial } from '@/types/survey'
 import {
   boundPrice,
   buildSleeveNozzles,
+  FORMED_SLEEVE_MAX_DN,
   inletGateValveName,
   makeRow,
   nextId,
@@ -53,7 +55,9 @@ import {
   TYPICAL_HATCH_MM,
   type CalcComponent,
   type CalcRowNode,
+  type GrpNozzleJoint,
   type MaterializeContext,
+  type SleeveNozzle,
 } from './template-kns'
 import {
   computeEmkGeometry,
@@ -143,6 +147,14 @@ export interface EmkSurveyParams {
   inletCount: number
   outletDn: number
   outletCount: number
+  /**
+   * Материал подходящей трубы (ОЛ «Материал»). Под стеклокомпозитную трубу
+   * патрубок стеклопластиковый: гильза (до DN 300 формуется) и фланец —
+   * уточнение завода 11.09.2026. Пусто — у расчётов до появления поля:
+   * берётся из формы ОЛ, иначе гильза под проход трубы.
+   */
+  inletMaterial?: PipeMaterial | null
+  outletMaterial?: PipeMaterial | null
 
   /** Насосное оборудование (при «да» появляется напорный трубопровод). */
   hasPumps: boolean
@@ -199,6 +211,14 @@ export interface KolSurveyParams {
   inletCount: number
   outletDn: number
   outletCount: number
+  /**
+   * Материал подходящей трубы (ОЛ «Материал»). Под стеклокомпозитную трубу
+   * патрубок стеклопластиковый: гильза (до DN 300 формуется) и муфта
+   * «Муфта-2» — уточнение завода 11.09.2026. Пусто — у расчётов до появления
+   * поля: берётся из формы ОЛ, иначе гильза под проход трубы.
+   */
+  inletMaterial?: PipeMaterial | null
+  outletMaterial?: PipeMaterial | null
 
   hasBasket: boolean
   /**
@@ -586,25 +606,45 @@ export function buildEmkShaft(ctx: MaterializeContext, s: EmkSurveyParams): Calc
 }
 
 /**
+ * Материал подходящей трубы, под который патрубок — стеклопластиковый: в
+ * листах «Труба стеклокомпозитная».
+ */
+export const GRP_PIPE_MATERIAL: PipeMaterial = 'стеклокомпозит'
+
+type NozzlesParams = Pick<
+  EmkSurveyParams,
+  'inletDn' | 'inletCount' | 'outletDn' | 'outletCount' | 'inletMaterial' | 'outletMaterial'
+>
+
+/**
  * Патрубки ёмкости и колодца для общего узла A5 (`buildSleeveNozzles`): прорезка
  * у обоих — «Прорезка отверстия патрубка в корпусе» (лист колодца, строки
  * 80–81; у ёмкости на их месте строки 81–82 умножают на длину трубы шахты —
  * сдвиг при копировании, Вопросы_заводу §6и).
+ *
+ * Под стеклокомпозитную трубу патрубок стеклопластиковый (уточнение завода
+ * 11.09.2026): гильза до DN 300 включительно формуется, крупнее — отрезок
+ * трубы, и к ней соединение с трубой — `joint`: у ёмкости фланец, у колодца
+ * муфта.
  */
-function emkKolNozzles(s: { inletDn: number; inletCount: number; outletDn: number; outletCount: number }) {
+function emkKolNozzles(s: NozzlesParams, joint: GrpNozzleJoint): SleeveNozzle[] {
   const cutoutName = 'Прорезка отверстия патрубка в корпусе'
+  const nozzle = (title: string, dn: number, count: number, material: PipeMaterial | null | undefined): SleeveNozzle =>
+    material === GRP_PIPE_MATERIAL
+      ? { title, dn, count, cutoutName, formed: { maxDn: FORMED_SLEEVE_MAX_DN, why: 'стеклопластиковый патрубок' }, grpJoint: joint }
+      : { title, dn, count, cutoutName }
   return [
-    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName },
-    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName },
+    nozzle('Патрубок подводящий', s.inletDn, s.inletCount, s.inletMaterial),
+    nozzle('Патрубок отводящий', s.outletDn, s.outletCount, s.outletMaterial),
   ]
 }
 
-/** A5 — патрубки ёмкости: подводящие и отводящие, каждый со своей гильзой. */
-export function buildEmkNozzles(
-  ctx: MaterializeContext,
-  s: Pick<EmkSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
-): CalcComponent[] {
-  return buildSleeveNozzles(ctx, emkKolNozzles(s))
+/**
+ * A5 — патрубки ёмкости: подводящие и отводящие, каждый со своей гильзой; под
+ * стеклокомпозитную трубу — стеклопластиковый патрубок с фланцем.
+ */
+export function buildEmkNozzles(ctx: MaterializeContext, s: NozzlesParams): CalcComponent[] {
+  return buildSleeveNozzles(ctx, emkKolNozzles(s, 'flange'))
 }
 
 /** A9 — теплоизоляция ёмкости: шахты и верх, слой 4 мм (лист ЕМК, строки 49–52, 86). */
@@ -1035,12 +1075,12 @@ export function buildKolNeck(ctx: MaterializeContext, s: KolSurveyParams): CalcC
   ]
 }
 
-/** A5 — патрубки колодца: подводящие и отводящие, каждый со своей гильзой. */
-export function buildKolNozzles(
-  ctx: MaterializeContext,
-  s: Pick<KolSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
-): CalcComponent[] {
-  return buildSleeveNozzles(ctx, emkKolNozzles(s))
+/**
+ * A5 — патрубки колодца: подводящие и отводящие, каждый со своей гильзой; под
+ * стеклокомпозитную трубу — стеклопластиковый патрубок с муфтой.
+ */
+export function buildKolNozzles(ctx: MaterializeContext, s: NozzlesParams): CalcComponent[] {
+  return buildSleeveNozzles(ctx, emkKolNozzles(s, 'coupling'))
 }
 
 /**

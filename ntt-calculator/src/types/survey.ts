@@ -9,7 +9,9 @@ import type { FlowUnit } from '@/engines/survey-kns'
 
 export type NsType = 'Канализационная' | 'Ливневая' | 'Дренажная' | 'Водопроводная'
 export type Stage = 'проект' | 'рабочая' | 'КД' | 'продажа' | 'тендер'
-export type PipeMaterial = 'ПЭ' | 'ПВХ' | 'ПНД' | 'ПП' | 'Асбестцемент' | 'Корсис' | 'стеклокомпозит'
+/** Материалы подходящей трубы — список ОЛ; «стеклокомпозит» меняет патрубок ёмкости и колодца. */
+export const PIPE_MATERIALS = ['ПЭ', 'ПВХ', 'ПНД', 'ПП', 'Асбестцемент', 'Корсис', 'стеклокомпозит'] as const
+export type PipeMaterial = (typeof PIPE_MATERIALS)[number]
 export type Grinder = 'корзина' | 'дробилка' | 'обе' | 'нет'
 
 /**

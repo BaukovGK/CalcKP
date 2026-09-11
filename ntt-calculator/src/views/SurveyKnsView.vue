@@ -489,6 +489,7 @@ import {
   hasGrinderIn,
   makeDefaultKnsSurvey,
   pickCommon,
+  PIPE_MATERIALS,
   type KnsSurveyForm,
   type PipeExecution,
 } from '@/types/survey'
@@ -652,7 +653,7 @@ const SECTIONS = [
 
 const NS_TYPES = ['Канализационная', 'Ливневая', 'Дренажная', 'Водопроводная'] as const
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const
-const MATERIALS = ['ПЭ', 'ПВХ', 'ПНД', 'ПП', 'Асбестцемент', 'Корсис', 'стеклокомпозит'] as const
+const MATERIALS = PIPE_MATERIALS
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
 const SN_LIST = ['1250', '2500', '5000', '10000'] as const
 

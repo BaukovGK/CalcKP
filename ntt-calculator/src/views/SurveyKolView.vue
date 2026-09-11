@@ -279,7 +279,7 @@ import { useCalcTreeStore } from '@/stores/calcTree'
 import { tryEvalExpr } from '@/engines/expr'
 import { acceptDn, NOZZLE_DN_SERIES } from '@/engines/dn-series'
 import { makeDefaultKolSurvey, resinGrade, type KolSurveyForm } from '@/types/survey-emk-kol'
-import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon } from '@/types/survey'
+import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon, PIPE_MATERIALS } from '@/types/survey'
 import { estimatesApi } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
 import { KOL_SECTIONS } from '@/engines/template-emk-kol'
@@ -336,7 +336,7 @@ const backLabel = computed(() => (props.projectId ? '← Проект' : '← П
 
 const WELL_TYPES = ['Смотровой', 'Поворотный', 'Перепадный', 'Гаситель', 'Накопительный'] as const
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const
-const MATERIALS = ['ПЭ', 'ПВХ', 'ПНД', 'ПП', 'Асбестцемент', 'Корсис', 'стеклокомпозит'] as const
+const MATERIALS = PIPE_MATERIALS
 const RESINS = ['Стандарт', 'Винилэфирная стандарт', 'Винилэфирная высокотемп.'] as const
 const EFFLUENTS = ['Хозяйственно-бытовые', 'Ливневые', 'Промышленные', 'Агрессивные'] as const
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
@@ -503,6 +503,9 @@ function surveyPayload() {
       inletCount: num(form.value.podvKol) ?? 0,
       outletDn: num(form.value.otvDn) ?? 0,
       outletCount: num(form.value.otvKol) ?? 0,
+      // Под стеклокомпозитную трубу патрубок стеклопластиковый.
+      inletMaterial: form.value.podvMat,
+      outletMaterial: form.value.otvMat,
       hasBasket: form.value.grinder === 'корзина' || form.value.grinder === 'обе',
       hasGrinder: form.value.grinder === 'дробилка' || form.value.grinder === 'обе',
       inletTrayDepthMm: num(form.value.podvLotok),
