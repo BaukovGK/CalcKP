@@ -33,7 +33,9 @@
           шаблон {{ compositionLabel(treeTemplateVersion, st.tree?.builtinRevision) }}<template v-if="st.templateChanged"> · действует {{ compositionLabel(st.activeTemplateVersion, st.activeBuiltinRevision) }}</template><template v-else-if="st.builtinOutdated"> · действует ред. {{ st.activeBuiltinRevision }}</template>
         </span>
         <template v-if="!readOnly">
-          <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
+          <!-- Автосохранение (План_устранения 3.2): статус — рядом с кнопкой. -->
+          <span v-if="saveLabel" v-hint="SAVE_HINT" class="tb-save" :class="`tb-save--${autosave.status.value}`">{{ saveLabel }}</span>
+          <button class="btn" :disabled="autosave.status.value === 'saving'" @click="onSave">Сохранить</button>
           <button v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
           <button v-hint="'Заявка на закупку: покупные позиции расчёта с количествами, для отдела закупок'" class="btn" @click="onExport">Экспорт ▾</button>
           <button v-hint="KP_HINT" class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
@@ -413,7 +415,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { useTreeAutosave } from '@/composables/useTreeAutosave'
 import CalcTableRow from '@/components/calculator/CalcTableRow.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -446,7 +449,6 @@ const { theme, toggle } = useTheme()
  */
 const readOnly = computed(() => auth.role === 'VIEWER')
 
-const saving = ref(false)
 const kpBusy = ref(false)
 /** Выпуск КП ждёт ответа: пересчитать цены по действующему прайсу или нет. */
 const kpAsk = ref(false)
@@ -996,17 +998,58 @@ async function onReprice() {
   }
 }
 
+// ── Автосохранение (План_устранения 3.2, решение Р6) ──
+
+const autosave = useTreeAutosave(st, { enabled: () => !readOnly.value && !!st.estimate && !st.loading })
+
+/** Статус записи словами — рядом с кнопкой «Сохранить». */
+const saveLabel = computed(() => {
+  switch (autosave.status.value) {
+    case 'pending': return 'изменения…'
+    case 'saving': return 'сохраняем…'
+    case 'saved': return `сохранено ${autosave.savedAt.value?.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) ?? ''}`
+    case 'error': return `не сохранено: ${autosave.error.value ?? 'ошибка'}`
+    default: return ''
+  }
+})
+
+const SAVE_HINT: Hint = {
+  title: 'Автосохранение',
+  text: [
+    'Правки расчёта сохраняются сами — через полторы секунды после последней. «Сохранить» записывает сразу.',
+    'Закрыть вкладку с несохранённым браузер не даст без вопроса, а уход на другой экран сначала сохранит расчёт.',
+  ],
+}
+
 async function onSave() {
-  saving.value = true
+  const had = autosave.dirty()
   try {
-    await st.save()
-    toast('Расчёт сохранён', 'success')
+    await autosave.flush()
+    toast(had ? 'Расчёт сохранён' : 'Всё уже сохранено', 'success')
   } catch (err) {
     toast(err instanceof Error ? err.message : 'Не удалось сохранить', 'error')
-  } finally {
-    saving.value = false
   }
 }
+
+/**
+ * Уход с экрана — сначала сохранить несохранённое. Не вышло — остаёмся и
+ * объясняем; второй уход подряд — уже без сохранения: держать на экране при
+ * лежащей сети было бы хуже.
+ */
+let leaveAnyway = false
+onBeforeRouteLeave(async () => {
+  if (leaveAnyway || readOnly.value || !autosave.dirty()) return true
+  try {
+    await autosave.flush()
+    return true
+  } catch (err) {
+    // Конфликт перечитал расчёт — терять уже нечего.
+    if (!autosave.dirty()) return true
+    leaveAnyway = true
+    toast(`Расчёт не сохранён: ${err instanceof Error ? err.message : 'ошибка'}. Уйти без сохранения — ещё раз`, 'error')
+    return false
+  }
+})
 
 /**
  * Скачать печатную форму КП по конкретной редакции.
@@ -1118,6 +1161,9 @@ onMounted(() => {
 .tb-prob { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 13.2px; padding: 4px 9px; }
 .tb-prob.on { border-color: var(--amber); color: var(--amber); }
 .tb-pl { font-size: 12.6px; color: var(--faint); }
+/* Статус автосохранения */
+.tb-save { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.tb-save--error { color: var(--acc); }
 .tb-pl.old { color: var(--amber); }
 .btn { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 13.8px; padding: 4px 10px; }
 .btn:hover:not(:disabled) { color: var(--text); }

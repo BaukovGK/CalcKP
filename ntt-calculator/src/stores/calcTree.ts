@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type RateKey, type TreeRates } from '@/engines/economics'
 import { recalcFotSatellites, resolveFotK } from '@/engines/fot'
 import { computeRow, manualQty, resolveQty } from '@/engines/row'
@@ -30,6 +30,7 @@ import {
   type CatalogItem,
 } from '@/utils/materialize-context'
 import { CalcDeferredError } from './calc-errors'
+import { stableStringify } from '@/utils/stable-stringify'
 import type { PriceBinding, RowResult } from '@/engines/types'
 import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
@@ -76,6 +77,13 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
    * до фиксации ставок, — и до его первого сохранения (План_устранения, 1.3).
    */
   const liveRates = ref<TreeRates>({ ...FALLBACK_RATES })
+  /**
+   * Подпись сохранённого состояния — дерево, наценка, тираж, какими они ушли
+   * на сервер последней записью или пришли с загрузкой. Экран расчёта
+   * сверяет с ней текущее и знает, есть ли несохранённое (План_устранения
+   * 3.2). `null` — сохранённого нет: дерево пересобрано при загрузке.
+   */
+  const savedSignature = ref<string | null>(null)
   /** Ставки, по которым считается экономика: дерева, а у старого дерева — прайса. */
   const rates = computed<TreeRates>(() => tree.value?.rates ?? liveRates.value)
   /**
@@ -193,6 +201,9 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     const savedTree = saved.tree && typeof saved.tree === 'object' ? (saved.tree as CalcTree) : null
     const problem = rebuildTree(ctx, est.deviceType, saved, savedTree, { force: false })
     if (problem) error.value = problem
+    // Дерево поднято как есть — оно и сохранено; пересобрано по изменившемуся
+    // ОЛ — ещё нет, его сохранит автосохранение.
+    savedSignature.value = tree.value && toRaw(tree.value) === savedTree ? stateSignature() : null
   }
 
   /**
@@ -1311,10 +1322,18 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     if (tree.value && !tree.value.rates) tree.value.rates = { ...liveRates.value }
   }
 
+  /** Подпись текущего состояния — для сравнения с сохранённым (savedSignature). */
+  function stateSignature(): string {
+    return stableStringify({ tree: tree.value, markup: markup.value, tirage: tirage.value })
+  }
+
   async function saveNow() {
     if (!estimate.value || !tree.value) return
     catchUpPriceVersion()
     stampRates()
+    // Подпись того, что уходит: правки, сделанные, пока запись в пути, в неё
+    // не попадают и останутся несохранёнными.
+    const sent = stateSignature()
     const current = estimate.value
     let updated: EstimateDetail
     try {
@@ -1347,6 +1366,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       throw e
     }
     estimate.value = mergeEstimate(current, updated)
+    savedSignature.value = sent
   }
 
   function clear() {
@@ -1357,10 +1377,13 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     markup.value = DEFAULT_MARKUP
     tirage.value = 1
     priceListVersion.value = 1
+    savedSignature.value = null
   }
 
   return {
     estimate, tree, rates, rateFallbacks, markup, tirage, loading, error, catalog,
+    // Несохранённое на экране расчёта (План_устранения 3.2).
+    savedSignature, stateSignature,
     // Активная версия прайса на сервере. Отличается от tree.priceListVersion,
     // который хранит версию, из которой расчёт был материализован, — топбар
     // показывает именно её.

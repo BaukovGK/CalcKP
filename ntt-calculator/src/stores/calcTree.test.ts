@@ -236,6 +236,46 @@ describe('стор calcTree: наценка, тираж и версия прай
  * ОЛ — основной экран изделия: правка ОЛ сама пересобирает расчёт
  * (applySurvey), а цены трубы и насоса связаны с полями ОЛ в обе стороны.
  */
+// План_устранения 3.2: экран расчёта знает, есть ли несохранённое, — по
+// подписи того, что загружено или ушло последней записью.
+describe('стор calcTree: подпись сохранённого', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  it('после загрузки и записи — чисто, после правки — есть несохранённое', async () => {
+    estimatesGet.mockResolvedValue(savedEstimate())
+    patchSurvey.mockResolvedValue(savedEstimate())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    expect(store.savedSignature).toBe(store.stateSignature())
+
+    store.markup = 0.5
+    expect(store.savedSignature).not.toBe(store.stateSignature())
+
+    await store.save()
+    expect(store.savedSignature).toBe(store.stateSignature())
+  })
+
+  it('дерево пересобрано при загрузке по изменившемуся ОЛ — оно ещё не сохранено', async () => {
+    const est = savedEstimate()
+    Object.assign(est.surveyData, {
+      surveyRev: 3,
+      treeSurveyRev: 2,
+      form: { dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2', nRab: '2', nRez: '1' },
+      kns: { dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2', nRab: '2', nRez: '1' },
+      derived: { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: null },
+    })
+    estimatesGet.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    expect(store.savedSignature).toBeNull()
+  })
+})
+
 describe('стор calcTree: пересчёт из ОЛ и связанные цены', () => {
   /** ОЛ КНС в той форме, в которой его сохраняет SurveyKnsView. */
   const kns = (over: Record<string, unknown> = {}) => ({
