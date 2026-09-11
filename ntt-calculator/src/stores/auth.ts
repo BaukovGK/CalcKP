@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import axios from 'axios'
+import { api, clearSession, refreshAccessToken, SESSION_KEYS } from '@/api/client'
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'BUYER' | 'VIEWER'
 
@@ -10,13 +12,17 @@ export interface AuthUser {
   role: UserRole
 }
 
-const apiUrl = () => (import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
-
+/**
+ * Сессия пользователя. Все запросы — через общий клиент (`api/client.ts`):
+ * базовый адрес, заголовок авторизации и обновление токена на 401 у стора
+ * и у остального приложения одни. Прежде стор держал свой `fetch` с
+ * собственным адресом и без обновления токена (План_реализации §4.2 №7).
+ */
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(
-    JSON.parse(localStorage.getItem('ntt_user') ?? 'null')
+    JSON.parse(localStorage.getItem(SESSION_KEYS.user) ?? 'null')
   )
-  const accessToken = ref<string | null>(localStorage.getItem('ntt_token'))
+  const accessToken = ref<string | null>(localStorage.getItem(SESSION_KEYS.access))
 
   const isLoggedIn = computed(() => !!user.value)
   const role = computed(() => user.value?.role ?? null)
@@ -24,27 +30,24 @@ export const useAuthStore = defineStore('auth', () => {
   function _persist(u: AuthUser | null, token: string | null) {
     user.value = u
     accessToken.value = token
-    if (u) localStorage.setItem('ntt_user', JSON.stringify(u))
-    else localStorage.removeItem('ntt_user')
+    if (u) localStorage.setItem(SESSION_KEYS.user, JSON.stringify(u))
+    else localStorage.removeItem(SESSION_KEYS.user)
 
-    if (token) localStorage.setItem('ntt_token', token)
-    else localStorage.removeItem('ntt_token')
+    if (token) localStorage.setItem(SESSION_KEYS.access, token)
+    else localStorage.removeItem(SESSION_KEYS.access)
   }
 
   // ── Login ──────────────────────────────────────────────────────────────────
+  // Ошибка — как у любого запроса клиента: текст сервера в `response.data`.
   async function login(email: string, password: string): Promise<void> {
-    const res = await fetch(`${apiUrl()}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: 'Ошибка сервера' }))
-      throw new Error(err.message ?? 'Неверный email или пароль')
-    }
-    const data = await res.json()
+    const { data } = await api.post<{ accessToken: string; refreshToken?: string; user: AuthUser }>(
+      '/auth/login',
+      { email, password },
+      // 401 здесь — «неверный email или пароль», а не истёкший токен.
+      { skipAuthRefresh: true },
+    )
     _persist(data.user, data.accessToken)
-    if (data.refreshToken) localStorage.setItem('ntt_refresh', data.refreshToken)
+    if (data.refreshToken) localStorage.setItem(SESSION_KEYS.refresh, data.refreshToken)
   }
 
   // ── Demo login (без backend) ───────────────────────────────────────────────
@@ -61,52 +64,42 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout(): Promise<void> {
     try {
       if (accessToken.value && accessToken.value !== 'demo-token') {
-        await fetch(`${apiUrl()}/auth/logout`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${accessToken.value}` },
-        })
+        await api.delete('/auth/logout', { skipAuthRefresh: true })
       }
-    } catch { /* ignore network errors on logout */ }
-    localStorage.removeItem('ntt_refresh')
+    } catch { /* сеть или сессия уже истекла — выходим всё равно */ }
+    clearSession()
     _persist(null, null)
   }
 
   // ── Refresh ───────────────────────────────────────────────────────────────
   async function refresh(): Promise<boolean> {
-    const refreshToken = localStorage.getItem('ntt_refresh')
-    if (!refreshToken || refreshToken === 'demo-token') return !!user.value
-    try {
-      const res = await fetch(`${apiUrl()}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      })
-      if (!res.ok) { _persist(null, null); return false }
-      const data = await res.json()
-      _persist(user.value, data.accessToken)
-      return true
-    } catch {
-      return false
-    }
+    if (localStorage.getItem(SESSION_KEYS.refresh) === 'demo-token') return !!user.value
+    const token = await refreshAccessToken()
+    if (!token) { _persist(null, null); return false }
+    accessToken.value = token
+    return true
   }
 
   // ── Check auth on app start ────────────────────────────────────────────────
+  /**
+   * Сверяет сессию с сервером: кто пользователь и какая у него роль сейчас.
+   * Кэш в localStorage мог устареть — роль сменили или учётку заблокировали;
+   * сервер это видит на каждом запросе, а экран — после этой проверки.
+   * Истёкший токен доступа обновит клиент; сеть недоступна — остаётся кэш.
+   */
   async function checkAuth(): Promise<void> {
     if (!accessToken.value) return
-    // Демо-токен не работает с backend — сбрасываем сессию
+    // Демо-сессия с сервером не работает: без пользователя — сбрасывается.
     if (accessToken.value === 'demo-token') {
-      _persist(null, null)
+      if (!user.value) _persist(null, null)
       return
     }
     try {
-      const res = await fetch(`${apiUrl()}/auth/me`, {
-        headers: { Authorization: `Bearer ${accessToken.value}` },
-      })
-      if (!res.ok) { _persist(null, null); return }
-      const data = await res.json()
-      user.value = data as AuthUser
-    } catch {
-      // network error — keep cached user
+      const { data } = await api.get<AuthUser>('/auth/me')
+      _persist(data, localStorage.getItem(SESSION_KEYS.access))
+    } catch (e) {
+      // Ответ сервера — сессии нет; нет ответа — сеть, остаёмся с кэшем.
+      if (axios.isAxiosError(e) && e.response) _persist(null, null)
     }
   }
 

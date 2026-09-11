@@ -96,11 +96,16 @@ const router = createRouter({
 })
 
 // ── Navigation guard ───────────────────────────────────────────────────────
+/** Сессия сверена с сервером в этом запуске приложения. */
+let sessionChecked = false
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
-  // Run checkAuth once on first navigation
-  if (!auth.isLoggedIn && auth.accessToken) {
+  // Один раз за запуск — и при пользователе из кэша: роль в кэше могла
+  // устареть, а сервер берёт её из БД на каждом запросе.
+  if (!sessionChecked && auth.accessToken) {
+    sessionChecked = true
     await auth.checkAuth()
   }
 
