@@ -1,0 +1,15 @@
+{
+  "comment": "Глубина подземной части КНС (Нподз) по опросному листу: Vмин = (Q·3,6/n)·5/60, hраб = 4·Vмин/(π·(DN/1000)²), hР = hраб + 0,3 + 0,16 + мин. уровень насоса, Нподз = ROUNDUP((лоток/1000 + hР)·1000; −2). Арифметика задана в двух местах — бэкенд (utils/pump-station-dimensions.ts, приток на один насос) и опросный лист фронтенда (engines/survey-kns.ts, computeDepth) — и обязана давать одно и то же: примеры прогоняют тесты обеих сторон. Ожидаемые значения посчитаны по формуле независимо от кода, с точностью 50 знаков; ни один пример не лежит на границе округления. DN — внутри выпускаемого диапазона 1800…3200: бэкенд вне его диаметр поднимает.",
+  "cases": [
+    { "flowLps": 25.13, "pumpsWorking": 2, "dnMm": 3000, "inletInvertMm": 9910, "minLevelM": 0.627, "hRabM": 0.533275162653, "npodzMm": 11600, "note": "ОЛ3487 «КНС Пехотная» — контрольное число ТЗ, совпадает с листом" },
+    { "flowLps": 4.17, "pumpsWorking": 1, "dnMm": 3000, "inletInvertMm": 9490, "minLevelM": 0.627, "hRabM": 0.176980296718, "npodzMm": 10800, "note": "КНС Бирюлевская: 15,012 м³/ч на насос — совпадает с листом (10 800)" },
+    { "flowLps": 6.53, "pumpsWorking": 1, "dnMm": 2500, "inletInvertMm": 2880, "minLevelM": 0.495, "hRabM": 0.399084202902, "npodzMm": 4300, "note": "ОЛ3462 КНС 2500: в листе рама 0,14 и запас 0,15 — там 4100, по модели 4300" },
+    { "flowLps": 10.88, "pumpsWorking": 1, "dnMm": 2500, "inletInvertMm": 3180, "minLevelM": 0.555, "hRabM": 0.664936619842, "npodzMm": 4900, "note": "ОЛ3462 ЛНС 2500: те же отличия листа — там 4700, по модели 4900" },
+    { "flowLps": 10, "pumpsWorking": 1, "dnMm": 1800, "inletInvertMm": 2000, "minLevelM": 0.627, "hRabM": 1.178925504384, "npodzMm": 4300, "note": "малый корпус — высокая рабочая зона" },
+    { "flowLps": 60, "pumpsWorking": 3, "dnMm": 3200, "inletInvertMm": 5000, "minLevelM": 0.8, "hRabM": 0.746038795743, "npodzMm": 7100, "note": "три насоса, большой корпус" },
+    { "flowLps": 150, "pumpsWorking": 2, "dnMm": 2400, "inletInvertMm": 4500, "minLevelM": 1.01, "hRabM": 4.973591971622, "npodzMm": 11000, "note": "большой приток: рабочая зона почти 5 м" },
+    { "flowLps": 3, "pumpsWorking": 1, "dnMm": 2000, "inletInvertMm": 1500, "minLevelM": 0.4, "hRabM": 0.286478897565, "npodzMm": 2700, "note": "малый приток" },
+    { "flowLps": 25.13, "pumpsWorking": 2, "dnMm": 3000, "inletInvertMm": 5370, "minLevelM": 0.627, "hRabM": 0.533275162653, "npodzMm": 7000, "note": "ровно 7000 — ещё SN 5000 (порог «больше 7000»)" },
+    { "flowLps": 25.13, "pumpsWorking": 2, "dnMm": 3000, "inletInvertMm": 5390, "minLevelM": 0.627, "hRabM": 0.533275162653, "npodzMm": 7100, "note": "7100 — уже SN 10000" }
+  ]
+}

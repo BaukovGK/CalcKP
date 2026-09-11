@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import depthVectors from '../../../backend/src/utils/depth.vectors.json'
 import snVectors from '../../../backend/src/utils/sn-rule.vectors.json'
 import {
   checkValveCount,
@@ -58,6 +59,17 @@ describe('подбор глубины — контрольный кейс ОЛ34
 
   it('деление на ноль насосов не роняет расчёт', () => {
     expect(computeDepth({ ...OL3487, pumpsWorking: 0 }).npodzMm).toBeGreaterThan(0)
+  })
+})
+
+// Те же примеры прогоняет бэкенд (utils/pump-station-dimensions.ts): арифметика
+// глубины задана в двух местах, и расхождение молча развело бы Нподз опросного
+// листа и подбора — а с ним длину трубы корпуса и SN.
+describe('глубина подземной части — общие примеры с бэкендом', () => {
+  it.each(depthVectors.cases)('$note', ({ flowLps, pumpsWorking, dnMm, inletInvertMm, minLevelM, hRabM, npodzMm }) => {
+    const r = computeDepth({ flow: flowLps, flowUnit: 'l/s', dn: dnMm, pumpsWorking, inletInvertMm, minLevelM })
+    expect(r.hRab).toBeCloseTo(hRabM, 9)
+    expect(r.npodzMm).toBe(npodzMm)
   })
 })
 

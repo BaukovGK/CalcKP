@@ -123,6 +123,9 @@ export interface DepthResult {
  *
  * ⚠️ `hраб` считается от **Vмин**, а не от «Vраб», как записано в ТЗ §5.6:
  * только так воспроизводится контрольное число прототипа.
+ *
+ * Та же арифметика есть на сервере (`backend/src/utils/pump-station-dimensions.ts`,
+ * подбор НС); совпадение держат общие примеры `backend/src/utils/depth.vectors.json`.
  */
 export function computeDepth(input: DepthInput): DepthResult {
   const {

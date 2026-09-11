@@ -9,6 +9,7 @@ import {
   type PumpStationWarning,
 } from './pump-station-dimensions'
 import { ringStiffnessDesignation, ringStiffnessPa } from './ring-stiffness'
+import depthVectors from './depth.vectors.json'
 
 /**
  * Тесты на данных 7 реальных опросных листов из «Работа/Примеры» (прочитаны
@@ -403,5 +404,23 @@ describe('roundUpTo', () => {
   it('двоичный хвост не переносит ровную границу на следующий шаг', () => {
     expect((0.1 + 0.2) * 1000).not.toBe(300)
     expect(roundUpTo((0.1 + 0.2) * 1000, 100)).toBe(300)
+  })
+})
+
+// Те же примеры прогоняет опросный лист фронтенда (engines/survey-kns.ts,
+// computeDepth): арифметика глубины задана в двух местах и обязана давать одно
+// и то же. Функция здесь принимает приток на один насос — он и передаётся.
+describe('Нподз — общие примеры с фронтендом', () => {
+  it.each(depthVectors.cases)('$note', ({ flowLps, pumpsWorking, dnMm, inletInvertMm, minLevelM, hRabM, npodzMm }) => {
+    const r = calcPumpStationDimensions({
+      inletPipeHeightM: inletInvertMm / 1000,
+      mvkRequired: false,
+      capacityM3h: (flowLps * 3.6) / pumpsWorking,
+      diameterMm: dnMm,
+      minPumpLevelM: minLevelM,
+    })
+    expect(r.diameterMm).toBe(dnMm)
+    expect(r.workingZoneHeightM).toBeCloseTo(hRabM, 9)
+    expect(r.heightMm).toBe(npodzMm)
   })
 })
