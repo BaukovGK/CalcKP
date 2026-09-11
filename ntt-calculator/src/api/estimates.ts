@@ -45,6 +45,11 @@ export interface EstimateSnapshotInfo {
    * опубликованная технологом. `null` — слепок снят до появления отметки.
    */
   templateVersion?: number | null
+  /**
+   * Редакция встроенного шаблона изделия — версия кода, которым собран
+   * состав (engines/builtin-revisions.ts). `null` — слепок снят до учёта редакций.
+   */
+  builtinRevision?: number | null
 }
 
 export type SnapshotReason = 'CREATE' | 'MANUAL' | 'KP'

@@ -13,6 +13,7 @@
         <b v-else>встроенный шаблон</b>
         <template v-if="activeInfo"> · {{ fmtDate(activeInfo.publishedAt) }}{{ activeInfo.publishedBy ? ` · ${activeInfo.publishedBy}` : '' }}</template>
       </span>
+      <span v-hint="TEMPLATE_HINTS.builtinRevision" class="pe-status">встроенные узлы — ред. {{ currentRevision.version }} от {{ fmtRevDate(currentRevision.date) }}</span>
       <span v-hint="TEMPLATE_HINTS.draft" class="pe-draft" :class="{ dirty }">{{ draftText }}</span>
       <div class="pe-spacer" />
       <button class="btn" :disabled="busy || !dirty" @click="saveDraft">Сохранить черновик</button>
@@ -99,11 +100,19 @@
           <div class="pe-verr">
             <b>встроенный</b>
             <span class="pe-muted">состав из кода, версия 0</span>
-            <span class="pe-note" />
+            <span class="pe-note">ред. {{ currentRevision.version }} — {{ currentRevision.note }}</span>
             <span v-if="!activeVersion" class="chip chip-on">действует</span>
             <button v-else class="btn-mini" :disabled="busy" @click="activate(null)">сделать действующим</button>
             <button v-hint="'Загрузить встроенный состав в черновик'" class="btn-mini" @click="loadIntoWork(BUILTIN_TEMPLATES[device])">в черновик</button>
           </div>
+          <details class="pe-revs">
+            <summary v-hint="TEMPLATE_HINTS.builtinRevision">Редакции встроенных узлов · {{ revisions.length }}</summary>
+            <div v-for="r in revisions" :key="r.version" class="pe-rev">
+              <b>ред. {{ r.version }}</b>
+              <span class="pe-muted">{{ fmtRevDate(r.date) }}</span>
+              <span>{{ r.note }}</span>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -159,6 +168,7 @@ import { useFormulaTarget } from '@/composables/useFormulaTarget'
 import { TEMPLATE_HINTS } from '@/hints/templates'
 import { templatesApi, type CatalogNodeInfo, type ProductTemplateInfo } from '@/api/templates'
 import { BUILTIN_TEMPLATES, builtinNode, builtinNodesOf } from '@/engines/code-nodes'
+import { BUILTIN_REVISIONS } from '@/engines/builtin-revisions'
 import type { CatalogNode, NodeParamDef } from '@/engines/node-def'
 import { tryEvalExpr } from '@/engines/expr'
 import { sampleSurvey } from '@/engines/template-samples'
@@ -207,6 +217,11 @@ const busy = ref(false)
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+const fmtRevDate = (iso: string) => iso.split('-').reverse().join('.')
+
+/** Редакции встроенных узлов изделия — от новой к старой; действующая — первая. */
+const revisions = computed(() => [...BUILTIN_REVISIONS[device.value]].reverse())
+const currentRevision = computed(() => revisions.value[0]!)
 
 // ── Шаблон на сервере ─────────────────────────────────────────────────────
 
@@ -529,6 +544,8 @@ async function activate(version: number | null) {
 .pe-verh { padding: 5px 8px; font-size: 11.4px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); border-bottom: 1px solid var(--line); }
 .pe-verr { display: grid; grid-template-columns: 84px 170px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: 12.6px; }
 .pe-note { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pe-revs summary { padding: 5px 8px; cursor: pointer; font-size: 12.6px; color: var(--muted); }
+.pe-rev { display: grid; grid-template-columns: 64px 84px minmax(0, 1fr); gap: 8px; padding: 3px 8px; border-top: 1px solid var(--line); font-size: 12.6px; }
 .pe-muted { color: var(--faint); font-size: 12.6px; }
 .pe-warn { color: var(--amber); }
 

@@ -8,9 +8,11 @@
  * параметры связаны с полями ОЛ биндингами — формулами над полями ОЛ.
  *
  * Шаблон версионируется: встроенный — версия 0, каждая публикация технолога —
- * следующая версия. Материализация пишет версию в дерево расчёта
- * (`CalcTree.templateVersion`), а снапшот КП — в свою запись: по ним видно,
- * каким составом посчитано выпущенное КП.
+ * следующая версия. Код, которым собираются встроенные узлы, версионируется
+ * отдельно — редакциями (engines/builtin-revisions.ts). Материализация пишет
+ * обе версии в дерево расчёта (`CalcTree.templateVersion`,
+ * `CalcTree.builtinRevision`), а снапшот КП — в свою запись: по ним видно,
+ * каким составом и каким кодом посчитано выпущенное КП.
  */
 
 import type { DeviceType } from '@/types/device'
@@ -25,6 +27,7 @@ import {
 } from './node-expr'
 import { materializeNode, type CatalogNode, type NodeDefBody, type NodeParamValues } from './node-def'
 import { BUILTIN_TEMPLATES, builtinNode, builtinNodesOf, type DeviceSurvey } from './code-nodes'
+import { builtinRevision } from './builtin-revisions'
 import { computeEmkGeometry, computeKolGeometry } from './survey-emk-kol'
 import { emkLadderHeightMm } from './template-emk-kol'
 import { nextId, stationHeightM, type CalcComponent, type CalcSection, type CalcTree, type MaterializeContext } from './template-kns'
@@ -284,6 +287,7 @@ export function materializeTemplate(ctx: MaterializeContext, env: DeviceEnv, tem
     survey: env.survey as unknown as Record<string, unknown>,
     priceListVersion: ctx.priceListVersion,
     templateVersion: template.version,
+    builtinRevision: builtinRevision(env.device),
     sections,
   }
 }

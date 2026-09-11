@@ -17,6 +17,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_MARKUP } from '@/engines/economics'
 import { BUILTIN_TEMPLATES } from '@/engines/code-nodes'
+import { BUILTIN_REVISIONS, builtinRevision } from '@/engines/builtin-revisions'
 import type { CatalogNode } from '@/engines/node-def'
 
 const estimatesGet = vi.fn()
@@ -1077,6 +1078,30 @@ describe('стор calcTree: шаблон технолога и узлы кат�
     expect(inSection().find((c) => c.id === comp.id)!.rows.map((r) => r.kind)).toEqual(['МАТЕРИАЛ'])
     store.removeComponent('3', comp.id)
     expect(inSection().some((c) => c.id === comp.id)).toBe(false)
+  })
+
+  it('расчёт, собранный прежней редакцией встроенных узлов, видит, что изменилось, и пересобирается', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    const current = builtinRevision('KNS')
+    expect(store.tree!.builtinRevision).toBe(current)
+    expect(store.builtinOutdated).toBe(false)
+    expect(store.templateOutdated).toBe(false)
+
+    // Дерево, собранное до учёта редакций: номера нет.
+    delete store.tree!.builtinRevision
+    expect(store.builtinOutdated).toBe(true)
+    expect(store.templateChanged).toBe(false)
+    expect(store.templateOutdated).toBe(true)
+    expect(store.builtinChanges.map((r) => r.version)).toEqual(BUILTIN_REVISIONS.KNS.map((r) => r.version))
+
+    expect(store.rebuildByActiveTemplate()).toBeNull()
+    expect(store.tree!.builtinRevision).toBe(current)
+    expect(store.builtinOutdated).toBe(false)
+    expect(store.builtinChanges).toEqual([])
   })
 
   it('сервер без шаблонов — расчёт собирается встроенным', async () => {

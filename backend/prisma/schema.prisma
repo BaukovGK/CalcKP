@@ -108,6 +108,11 @@ model EstimateSnapshot {
   /// шаблон из кода, N — опубликованная технологом. null — слепок снят до
   /// появления редактора шаблонов или с дерева без отметки версии.
   templateVersion  Int?
+  /// Редакция встроенного шаблона изделия — версия кода, которым собран
+  /// состав: формулы и состав встроенных узлов, исполнение узлов каталога
+  /// (ntt-calculator/src/engines/builtin-revisions.ts). null — слепок снят
+  /// до учёта редакций.
+  builtinRevision  Int?
   createdAt        DateTime @default(now())
 
   @@unique([estimateId, version])

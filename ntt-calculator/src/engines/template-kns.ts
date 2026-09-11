@@ -304,6 +304,13 @@ export interface CalcTree {
    * релиза.
    */
   templateVersion?: number
+  /**
+   * Редакция встроенного шаблона изделия — версия кода, которым собран
+   * состав: формулы и состав встроенных узлов, исполнение узлов каталога
+   * (engines/builtin-revisions.ts). Нет поля — дерево собрано до учёта
+   * редакций.
+   */
+  builtinRevision?: number
   sections: CalcSection[]
 }
 

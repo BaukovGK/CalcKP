@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { treePriceListVersion, treeTemplateVersion } from './estimate-tree'
+import { treeBuiltinRevision, treePriceListVersion, treeTemplateVersion } from './estimate-tree'
 
 describe('версия прайса сохранённого дерева', () => {
   // Расчёт, собранный по прайсу v2 и не пересчитанный после импорта v5,
@@ -33,5 +33,19 @@ describe('версия шаблона сохранённого дерева', ()
     expect(treeTemplateVersion({ tree: { templateVersion: -1 } })).toBeNull()
     expect(treeTemplateVersion({ tree: { templateVersion: '2' } })).toBeNull()
     expect(treeTemplateVersion(null)).toBeNull()
+  })
+})
+
+describe('редакция встроенного шаблона сохранённого дерева', () => {
+  it('берётся из дерева — редакция кода, которым собран состав', () => {
+    expect(treeBuiltinRevision({ tree: { builtinRevision: 3, templateVersion: 0, sections: [] } })).toBe(3)
+  })
+
+  it('дерево до учёта редакций и мусор — null', () => {
+    expect(treeBuiltinRevision({ tree: { templateVersion: 2, sections: [] } })).toBeNull()
+    expect(treeBuiltinRevision({ tree: { builtinRevision: 0 } })).toBeNull()
+    expect(treeBuiltinRevision({ tree: { builtinRevision: 1.5 } })).toBeNull()
+    expect(treeBuiltinRevision({ tree: { builtinRevision: '4' } })).toBeNull()
+    expect(treeBuiltinRevision(undefined)).toBeNull()
   })
 })

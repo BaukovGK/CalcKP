@@ -30,7 +30,7 @@
           прайс {{ priceListLabel }}<template v-if="st.priceOutdated"> · действует v{{ st.priceListVersion }}</template>
         </span>
         <span v-hint.plain="TEMPLATE_VERSION_HINT" class="tb-pl" :class="{ old: st.templateOutdated }">
-          шаблон {{ templateLabel(treeTemplateVersion) }}<template v-if="st.templateOutdated"> · действует {{ templateLabel(st.activeTemplateVersion) }}</template>
+          шаблон {{ compositionLabel(treeTemplateVersion, st.tree?.builtinRevision) }}<template v-if="st.templateChanged"> · действует {{ compositionLabel(st.activeTemplateVersion, st.activeBuiltinRevision) }}</template><template v-else-if="st.builtinOutdated"> · действует ред. {{ st.activeBuiltinRevision }}</template>
         </span>
         <template v-if="!readOnly">
           <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
@@ -84,17 +84,19 @@
       >{{ repricing ? 'Пересчитываем…' : `Пересчитать по прайсу v${st.priceListVersion}` }}</button>
     </div>
 
-    <!-- Технолог обновил шаблон изделия после сборки расчёта. -->
+    <!-- Состав расчёта собран не тем шаблоном, что действует: технолог
+         опубликовал другую версию, либо релиз завёл новую редакцию
+         встроенных узлов. -->
     <div v-if="!st.loading && st.templateOutdated" class="pbar">
-      <span class="pbar-t">Состав расчёта собран {{ templateRef(treeTemplateVersion) }}, а действует {{ st.activeTemplateVersion ? `v${st.activeTemplateVersion}` : 'встроенный шаблон' }}.</span>
-      <span class="pbar-d">Шаблон изделия обновили. Пересборка возьмёт новый состав по опросному листу; ручные правки перенесутся, а узлы, которых в шаблоне больше нет, уйдут из расчёта.</span>
+      <span class="pbar-t">{{ outdatedTitle }}</span>
+      <span class="pbar-d">{{ outdatedDetail }}</span>
       <button
         v-if="!readOnly"
         v-hint="REBUILD_HINT"
         class="btn btn-acc"
         :disabled="rebuilding"
         @click="onRebuildTemplate"
-      >{{ rebuilding ? 'Пересобираем…' : `Пересобрать ${templateRef(st.activeTemplateVersion)}` }}</button>
+      >{{ rebuilding ? 'Пересобираем…' : st.templateChanged ? `Пересобрать ${templateRef(st.activeTemplateVersion)}` : 'Пересобрать по текущей редакции' }}</button>
     </div>
 
     <div v-if="st.loading" class="state">Загрузка расчёта…</div>
@@ -346,7 +348,7 @@
             <td>v{{ v.version }}</td>
             <td>{{ fmtDateTime(v.createdAt) }}</td>
             <td class="ver-reason">{{ REASON_LABEL[v.reason ?? 'KP'] }}</td>
-            <td>НН v{{ v.priceListVersion }}<span v-if="v.templateVersion != null" class="ver-tpl">шаблон {{ templateLabel(v.templateVersion) }}</span></td>
+            <td>НН v{{ v.priceListVersion }}<span v-if="v.templateVersion != null || v.builtinRevision != null" class="ver-tpl">шаблон {{ v.templateVersion == null ? '—' : templateLabel(v.templateVersion) }}{{ v.builtinRevision == null ? '' : ` · ред. ${v.builtinRevision}` }}</span></td>
             <td class="num">{{ v.totalRub ? fmtInt(v.totalRub) : '—' }}</td>
             <!-- Слепок создания — исходное состояние: проверку строк без цены
                  он не проходил, поэтому КП по нему не печатается. -->
@@ -515,7 +517,8 @@ const TEMPLATE_VERSION_HINT: Hint = {
   title: 'Версия шаблона изделия',
   text: [
     'Из каких разделов и узлов собран расчёт: встроенный шаблон — состав из кода, vN — версия, опубликованная технологом в редакторе шаблонов.',
-    'Новая версия шаблона не меняет готовый расчёт сама: его пересобирают кнопкой под фильтрами или правкой опросного листа.',
+    'Ред. N — редакция встроенных узлов: версия формул и состава, заданных кодом. Её поднимает релиз, меняющий то, что программа строит из опросного листа.',
+    'Новая версия шаблона или редакция не меняют готовый расчёт сами: его пересобирают кнопкой под фильтрами или правкой опросного листа.',
   ],
 }
 const REBUILD_HINT: Hint = {
@@ -584,6 +587,29 @@ const treeTemplateVersion = computed(() => st.tree?.templateVersion ?? 0)
 const templateLabel = (v: number) => (v ? `v${v}` : 'встроенный')
 /** «по шаблону v2» / «по встроенному шаблону» — для кнопки и тоста. */
 const templateRef = (v: number) => (v ? `по шаблону v${v}` : 'по встроенному шаблону')
+/** «v2 · ред. 3» / «встроенный · ред. 3»; редакции нет — прочерк. */
+const compositionLabel = (v: number, rev: number | null | undefined) => `${templateLabel(v)} · ред. ${rev ?? '—'}`
+
+const fmtRevDate = (iso: string) => iso.split('-').reverse().join('.')
+
+/** Заголовок плашки: что именно устарело — версия шаблона или редакция кода. */
+const outdatedTitle = computed(() => {
+  if (st.templateChanged) {
+    return `Состав расчёта собран ${templateRef(treeTemplateVersion.value)}, а действует ${st.activeTemplateVersion ? `v${st.activeTemplateVersion}` : 'встроенный шаблон'}.`
+  }
+  const rev = st.tree?.builtinRevision
+  return rev == null
+    ? `Состав расчёта собран до учёта редакций встроенных узлов, в программе — редакция ${st.activeBuiltinRevision}.`
+    : `Состав расчёта собран встроенными узлами редакции ${rev}, а в программе — редакция ${st.activeBuiltinRevision}.`
+})
+
+/** Пояснение плашки: у новой редакции — что изменилось, по журналу редакций. */
+const outdatedDetail = computed(() => {
+  const after = 'Пересборка возьмёт состав по опросному листу; ручные правки перенесутся, а узлы, которых в шаблоне больше нет, уйдут из расчёта.'
+  if (st.templateChanged) return `Шаблон изделия обновили. ${after}`
+  const changes = st.builtinChanges.map((r) => `ред. ${r.version} от ${fmtRevDate(r.date)} — ${r.note}`)
+  return changes.length ? `Что изменилось: ${changes.join('; ')}. ${after}` : after
+})
 
 /** Что даст пересчёт по действующему прайсу — словами (utils/reprice-text.ts). */
 const repriceText = computed(() => (st.repricePreview ? repriceSummaryText(st.repricePreview) : ''))
@@ -806,6 +832,8 @@ const rebuilding = ref(false)
 
 async function onRebuildTemplate() {
   const to = st.activeTemplateVersion
+  const byTemplate = st.templateChanged
+  const rev = st.activeBuiltinRevision
   const problem = st.rebuildByActiveTemplate()
   if (problem) { toast(problem, 'error'); return }
   const conflicts = st.conflictIds.size
@@ -814,7 +842,7 @@ async function onRebuildTemplate() {
   try {
     await st.save()
     toast(
-      `Расчёт пересобран ${templateRef(to)}: ручные правки перенесены` +
+      `Расчёт пересобран ${byTemplate ? templateRef(to) : `по редакции ${rev}`}: ручные правки перенесены` +
         (conflicts ? ` · конфликтов с расчётным: ${conflicts}` : ''),
       'success',
     )

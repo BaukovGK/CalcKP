@@ -113,6 +113,20 @@ export function treeTemplateVersion(surveyData: unknown): number | null {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null
 }
 
+/**
+ * Редакция встроенного шаблона изделия, которой собран состав сохранённого
+ * дерева (`tree.builtinRevision`): версия кода — формул и состава встроенных
+ * узлов. Вместе с версией шаблона технолога она отвечает на вопрос, каким
+ * составом посчитано КП, и после релиза, поменявшего формулы.
+ *
+ * @returns редакция или `null`, если дерево собрано до учёта редакций
+ */
+export function treeBuiltinRevision(surveyData: unknown): number | null {
+  if (!isObj(surveyData) || !isObj(surveyData.tree)) return null
+  const v = surveyData.tree.builtinRevision
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : null
+}
+
 const num = (v: unknown): number | null => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
   if (typeof v === 'string' && v.trim() !== '') {

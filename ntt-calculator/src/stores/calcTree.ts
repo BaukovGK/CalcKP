@@ -16,6 +16,7 @@ import {
 import type { EmkSurveyParams, KolSurveyParams } from '@/engines/template-emk-kol'
 import { materializeEmk, materializeKns, materializeKol } from '@/engines/materialize'
 import { materializeNode, type CatalogNode, type NodeParamValues } from '@/engines/node-def'
+import { builtinRevision, revisionsAfter, type BuiltinRevision } from '@/engines/builtin-revisions'
 import { estimatesApi, type EstimateDetail } from '@/api/estimates'
 import type { ActiveTemplates } from '@/api/refs'
 import {
@@ -801,13 +802,32 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   )
 
   /**
-   * Состав расчёта собран не по действующему шаблону: технолог опубликовал
-   * версию или откатил шаблон после сборки. Дерево без отметки собрано
-   * встроенным шаблоном своего релиза — это версия 0.
+   * Технолог опубликовал другую версию шаблона или откатил его после сборки
+   * расчёта. Дерево без отметки собрано встроенным шаблоном — это версия 0.
    */
-  const templateOutdated = computed(
+  const templateChanged = computed(
     () => !!tree.value && (tree.value.templateVersion ?? 0) !== activeTemplateVersion.value,
   )
+
+  /** Действующая редакция встроенного шаблона изделия этого расчёта (код). */
+  const activeBuiltinRevision = computed(() => (tree.value ? builtinRevision(tree.value.deviceType) : 0))
+
+  /**
+   * Код новее редакции, которой собран расчёт: релиз изменил формулы или
+   * состав встроенных узлов. Дерево без отметки собрано до учёта редакций —
+   * заведомо прежним кодом.
+   */
+  const builtinOutdated = computed(
+    () => !!tree.value && (tree.value.builtinRevision ?? 0) < activeBuiltinRevision.value,
+  )
+
+  /** Что изменилось во встроенном шаблоне с редакции расчёта — для плашки. */
+  const builtinChanges = computed<BuiltinRevision[]>(() =>
+    tree.value && builtinOutdated.value ? revisionsAfter(tree.value.deviceType, tree.value.builtinRevision) : [],
+  )
+
+  /** Состав расчёта не совпадает с тем, что собрал бы сейчас действующий шаблон. */
+  const templateOutdated = computed(() => templateChanged.value || builtinOutdated.value)
 
   /**
    * Пересобрать расчёт по действующему шаблону: свежая материализация из
@@ -1012,6 +1032,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     addRow, removeRow,
     // Шаблоны изделий и узлы каталога (редактор шаблонов).
     templates, catalogNodes, activeTemplateVersion, templateOutdated, rebuildByActiveTemplate,
+    // Редакция встроенного шаблона (код) и что изменилось с редакции расчёта.
+    templateChanged, activeBuiltinRevision, builtinOutdated, builtinChanges,
     addCatalogNode, removeComponent,
   }
 })
