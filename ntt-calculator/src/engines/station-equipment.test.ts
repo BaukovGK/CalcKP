@@ -18,11 +18,11 @@ import {
   __resetIds,
   flattenRows,
   LADDER_ITEMS,
-  materializeKns,
   type KnsSurveyParams,
   type MaterializeContext,
 } from './template-kns'
-import { emkLadderHeightMm, materializeEmk, materializeKol, type EmkSurveyParams, type KolSurveyParams } from './template-emk-kol'
+import { emkLadderHeightMm, type EmkSurveyParams, type KolSurveyParams } from './template-emk-kol'
+import { materializeEmk, materializeKns, materializeKol } from './materialize'
 import { computeEmkGeometry } from './survey-emk-kol'
 
 const KEYS = new Set(prices.map((p) => `${p.category}|${p.name}|${p.unit}`))

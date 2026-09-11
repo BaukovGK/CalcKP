@@ -10,12 +10,12 @@ import {
   flattenRows,
   inletGateValveName,
   KNS_SECTIONS,
-  materializeKns,
   sectionEnabledFor,
   stationHeightM,
   type KnsSurveyParams,
   type MaterializeContext,
 } from './template-kns'
+import { materializeKns } from './materialize'
 
 // ─── Заглушка справочников (движок чист от БД) ──────────────────────────────
 

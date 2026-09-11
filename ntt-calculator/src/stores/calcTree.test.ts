@@ -16,6 +16,8 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_MARKUP } from '@/engines/economics'
+import { BUILTIN_TEMPLATES } from '@/engines/code-nodes'
+import type { CatalogNode } from '@/engines/node-def'
 
 const estimatesGet = vi.fn()
 const priceVersion = vi.fn()
@@ -24,6 +26,10 @@ const engineering = vi.fn(() => Promise.resolve({ shell: [], ellipticBottom: [] 
 /** Прайс: категория → позиции. По умолчанию пуст; тесты пересчёта цен подставляют свой. */
 const nomenclature = vi.fn((): Promise<Record<string, Array<{ name: string; unit: string; priceRub: number | null }>>> =>
   Promise.resolve({}),
+)
+/** Действующие шаблоны и узлы каталога. По умолчанию своих нет — всё встроенное. */
+const templates = vi.fn((): Promise<{ products: Record<string, unknown>; nodes: unknown[] }> =>
+  Promise.resolve({ products: {}, nodes: [] }),
 )
 
 vi.mock('@/api/estimates', () => ({
@@ -39,6 +45,7 @@ vi.mock('@/api/refs', () => ({
     pipeWeights: () => Promise.resolve({ grp: [], pe: [] }),
     engineering: () => engineering(),
     priceVersion: (...a: unknown[]) => priceVersion(...a),
+    templates: () => templates(),
   },
 }))
 
@@ -917,5 +924,169 @@ describe('стор calcTree: пересчёт по новой версии пр�
 
     expect(store.priceOutdated).toBe(false)
     expect(store.repricePreview).toBeNull()
+  })
+})
+
+describe('стор calcTree: шаблон технолога и узлы каталога', () => {
+  const kns = (over: Record<string, unknown> = {}) => ({
+    dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',
+    nRab: '2', nRez: '1', valveOnInlet: true, emergency: false,
+    insulation: false, tiGlubina: '0', mvk: false, pipePrice: '', pumpPrice: '',
+    ...over,
+  })
+  const derived = { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: null }
+
+  function freshEstimate() {
+    const est = savedEstimate()
+    delete (est.surveyData as Record<string, unknown>).tree
+    Object.assign(est.surveyData, { surveyRev: 1, treeSurveyRev: 0, form: kns(), kns: kns(), derived })
+    return est
+  }
+
+  function echoPatch(est: ReturnType<typeof freshEstimate>) {
+    patchSurvey.mockImplementation((_id: string, body: Record<string, unknown>) => {
+      est.surveyData = { ...est.surveyData, ...body } as typeof est.surveyData
+      return Promise.resolve(JSON.parse(JSON.stringify(est)))
+    })
+  }
+
+  /** Узел технолога: площадка обслуживания, настил — операция в кг с ФОТ. */
+  const PLATFORM: CatalogNode = {
+    code: 'B5',
+    version: 2,
+    body: {
+      code: 'B5',
+      name: 'Площадка Ø{d}',
+      tag: 'конструкции обслуживания',
+      params: [{ key: 'd', label: 'DN корпуса', type: 'number', default: 2000 }],
+      rows: [
+        { kind: 'МАТЕРИАЛ', category: 'Металлопрокат', name: 'Уголок площадки', unit: 'м', qty: 'd / 1000 * 4' },
+        { kind: 'ОПЕРАЦИЯ', category: 'Собственное производство', name: 'Формовка настила', unit: 'кг', qty: 'd / 100', fotK: 1 },
+      ],
+    },
+  }
+
+  /**
+   * Шаблон КНС v2: перекрытие — вторым разделом, лестница — третьим;
+   * кабельный ввод убран, в перекрытие добавлены площадка и вентстояк.
+   */
+  function knsV2() {
+    const b = structuredClone(BUILTIN_TEMPLATES.KNS)
+    const [korpus, ladder, slab, vent] = [b.sections[0]!, b.sections[1]!, b.sections[2]!, b.sections[3]!]
+    korpus.nodes = korpus.nodes.filter((n) => n.kind !== 'builtin' || n.ref !== 'kns.cableEntry')
+    slab.nodes.push({ kind: 'catalog', code: 'B5', bindings: { d: 'dn' } }, { kind: 'builtin', ref: 'kns.vent' })
+    vent.nodes = []
+    b.sections.splice(1, 2, slab, ladder)
+    return { products: { KNS: { version: 2, body: b } }, nodes: [PLATFORM] }
+  }
+
+  const sectionTitled = (store: ReturnType<typeof useCalcTreeStore>, title: string) =>
+    store.tree!.sections.find((s) => s.title.startsWith(title))!
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+    templates.mockResolvedValue({ products: {}, nodes: [] })
+  })
+
+  it('расчёт собирается по действующему шаблону с сервера и помнит его версию', async () => {
+    templates.mockResolvedValue(knsV2())
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+
+    expect(store.tree!.templateVersion).toBe(2)
+    expect(store.tree!.sections.map((s) => `${s.code} ${s.title}`).slice(0, 3)).toEqual([
+      '1 Корпус', '2 Перекрытие, площадка, несущие балки', '3 Лестница',
+    ])
+    const slab = sectionTitled(store, 'Перекрытие')
+    expect(slab.components.map((c) => c.title)).toEqual(expect.arrayContaining(['Площадка Ø3000', 'Вентиляционный стояк ПЭ Ду110']))
+    expect(store.rows.some((r) => r.name.startsWith('Гермоввод'))).toBe(false)
+    expect(store.templateOutdated).toBe(false)
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: { templateVersion: number } }]
+    expect(body.tree.templateVersion).toBe(2)
+  })
+
+  it('старый расчёт видит новую версию шаблона и пересобирается по ней, не теряя ручных правок', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const first = useCalcTreeStore()
+    await first.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    expect(first.tree!.templateVersion).toBe(0)
+    // Инженер выключил раздел «Лестница» и поправил строку вентстояка.
+    first.toggleSection(sectionTitled(first, 'Лестница').code)
+    const vent = sectionTitled(first, 'Вентиляционный').components[0]!
+    const ventRow = vent.rows[0]!
+    first.setQtyManual(ventRow.id, '3')
+    await first.save()
+
+    // Технолог опубликовал v2; расчёт открывают заново.
+    templates.mockResolvedValue(knsV2())
+    setActivePinia(createPinia())
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    expect(store.tree!.templateVersion).toBe(0)
+    expect(store.activeTemplateVersion).toBe(2)
+    expect(store.templateOutdated).toBe(true)
+
+    expect(store.rebuildByActiveTemplate()).toBeNull()
+    expect(store.tree!.templateVersion).toBe(2)
+    expect(store.templateOutdated).toBe(false)
+    // Раздел нашёлся по названию, хотя его номер сменился со 2 на 3.
+    expect(sectionTitled(store, 'Лестница')).toMatchObject({ code: '3', enabled: false })
+    expect(sectionTitled(store, 'Перекрытие')).toMatchObject({ code: '2', enabled: true })
+    // Вентстояк переехал в перекрытие — ручная цифра переехала с ним.
+    const moved = sectionTitled(store, 'Перекрытие').components.find((c) => c.title === vent.title)!
+    expect(moved.rows.find((r) => r.name === ventRow.name)!.qtyManual).toBe('3')
+  })
+
+  it('узел каталога вставляется в расчёт вручную и переживает пересборку по ОЛ', async () => {
+    templates.mockResolvedValue({ products: {}, nodes: [PLATFORM] })
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    expect(store.catalogNodes.map((n) => n.code)).toEqual(['B5'])
+
+    const comp = store.addCatalogNode('3', PLATFORM, { d: 1500 })!
+    expect(comp.id.startsWith('custom-')).toBe(true)
+    expect(comp).toMatchObject({ title: 'Площадка Ø1500', nodeCode: 'B5', nodeVersion: 2 })
+    // Свои id строк: счётчик материализации их не повторит.
+    expect(comp.rows.every((r) => r.isCustom && r.id.startsWith('cn-'))).toBe(true)
+    const fot = store.rows.find((r) => r.kind === 'ФОТ' && r.id.startsWith('cn-'))!
+    expect(comp.rows.some((r) => r.id === fot.parentId)).toBe(true)
+    expect(fot.qtyCalc).toBe(15)
+
+    // Свободная строка идёт в свой компонент, а не в узел.
+    store.addRow('3', { name: 'Болт' })
+    const inSection = () => store.tree!.sections[2]!.components
+    expect(inSection().find((c) => c.id === comp.id)!.rows.some((r) => r.name === 'Болт')).toBe(false)
+
+    await store.applySurvey('e1', { form: kns({ nRab: '3' }), kns: kns({ nRab: '3' }), derived, surveyRev: 3 })
+    const again = inSection().find((c) => c.id === comp.id)!
+    expect(again.rows).toHaveLength(comp.rows.length)
+
+    // Строка операции удаляется вместе со своим ФОТ, узел — целиком.
+    store.removeRow(again.rows.find((r) => r.kind === 'ОПЕРАЦИЯ')!.id)
+    expect(inSection().find((c) => c.id === comp.id)!.rows.map((r) => r.kind)).toEqual(['МАТЕРИАЛ'])
+    store.removeComponent('3', comp.id)
+    expect(inSection().some((c) => c.id === comp.id)).toBe(false)
+  })
+
+  it('сервер без шаблонов — расчёт собирается встроенным', async () => {
+    templates.mockRejectedValue(new Error('404'))
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    expect(store.tree!.templateVersion).toBe(0)
+    expect(store.tree!.sections).toHaveLength(7)
   })
 })

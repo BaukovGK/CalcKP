@@ -1,4 +1,7 @@
 import { api } from './client'
+import type { DeviceType } from '@/types/device'
+import type { CatalogNode } from '@/engines/node-def'
+import type { TemplateBody } from '@/engines/template-def'
 
 /** Справочники (ТЗ §7). Источник — мастер-шаблон, извлечены в сид. */
 
@@ -85,6 +88,16 @@ export interface PriceVersionInfo {
   createdAt: string | null
 }
 
+/**
+ * Действующие шаблоны изделий и опубликованные узлы каталога (редактор
+ * шаблонов, этап 2). Изделия без своего шаблона в `products` нет — оно
+ * собирается встроенным (версия 0).
+ */
+export interface ActiveTemplates {
+  products: Partial<Record<DeviceType, { version: number; body: TemplateBody }>>
+  nodes: CatalogNode[]
+}
+
 export const refsApi = {
   nomenclature(): Promise<Nomenclature> {
     return api.get<Nomenclature>('/refs/nomenclature').then((r) => r.data)
@@ -107,5 +120,10 @@ export const refsApi = {
 
   pipeWeights(): Promise<{ grp: PipeWeightGrp[]; pe: PePipe[] }> {
     return api.get<{ grp: PipeWeightGrp[]; pe: PePipe[] }>('/refs/pipe-weights').then((r) => r.data)
+  },
+
+  /** Действующие шаблоны изделий и узлы каталога — вход материализации. */
+  templates(): Promise<ActiveTemplates> {
+    return api.get<ActiveTemplates>('/refs/templates').then((r) => r.data)
   },
 }

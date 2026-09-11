@@ -98,6 +98,21 @@ export function treePriceListVersion(surveyData: unknown): number | null {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : null
 }
 
+/**
+ * Версия шаблона изделия, по которой собран состав сохранённого дерева
+ * (`tree.templateVersion`): 0 — встроенный шаблон из кода, N — опубликованная
+ * технологом версия (редактор шаблонов). Снапшот хранит её рядом с версией
+ * прайса: по двум числам видно, каким составом и по каким ценам посчитано
+ * выпущенное КП.
+ *
+ * @returns версия или `null`, если дерево собрано до появления отметки
+ */
+export function treeTemplateVersion(surveyData: unknown): number | null {
+  if (!isObj(surveyData) || !isObj(surveyData.tree)) return null
+  const v = surveyData.tree.templateVersion
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null
+}
+
 const num = (v: unknown): number | null => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
   if (typeof v === 'string' && v.trim() !== '') {

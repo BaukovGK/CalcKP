@@ -29,6 +29,9 @@
         <span v-hint.plain="PRICE_LIST_HINT" class="tb-pl" :class="{ old: st.priceOutdated }">
           прайс {{ priceListLabel }}<template v-if="st.priceOutdated"> · действует v{{ st.priceListVersion }}</template>
         </span>
+        <span v-hint.plain="TEMPLATE_VERSION_HINT" class="tb-pl" :class="{ old: st.templateOutdated }">
+          шаблон {{ templateLabel(treeTemplateVersion) }}<template v-if="st.templateOutdated"> · действует {{ templateLabel(st.activeTemplateVersion) }}</template>
+        </span>
         <template v-if="!readOnly">
           <button class="btn" :disabled="saving" @click="onSave">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
           <button v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
@@ -81,6 +84,19 @@
       >{{ repricing ? 'Пересчитываем…' : `Пересчитать по прайсу v${st.priceListVersion}` }}</button>
     </div>
 
+    <!-- Технолог обновил шаблон изделия после сборки расчёта. -->
+    <div v-if="!st.loading && st.templateOutdated" class="pbar">
+      <span class="pbar-t">Состав расчёта собран {{ templateRef(treeTemplateVersion) }}, а действует {{ st.activeTemplateVersion ? `v${st.activeTemplateVersion}` : 'встроенный шаблон' }}.</span>
+      <span class="pbar-d">Шаблон изделия обновили. Пересборка возьмёт новый состав по опросному листу; ручные правки перенесутся, а узлы, которых в шаблоне больше нет, уйдут из расчёта.</span>
+      <button
+        v-if="!readOnly"
+        v-hint="REBUILD_HINT"
+        class="btn btn-acc"
+        :disabled="rebuilding"
+        @click="onRebuildTemplate"
+      >{{ rebuilding ? 'Пересобираем…' : `Пересобрать ${templateRef(st.activeTemplateVersion)}` }}</button>
+    </div>
+
     <div v-if="st.loading" class="state">Загрузка расчёта…</div>
     <div v-else-if="st.error" class="state state-err">{{ st.error }}</div>
 
@@ -121,7 +137,15 @@
 
           <template v-for="c in sec.components" :key="c.id">
             <div v-if="visibleRows(c).length" class="ch">
-              └ {{ c.title }}
+              <span>
+                └ {{ c.title }}
+                <button
+                  v-if="!readOnly && c.nodeCode && c.id.startsWith('custom-')"
+                  v-hint="'Убрать вставленный узел из расчёта целиком'"
+                  class="ch-del"
+                  @click="st.removeComponent(sec.code, c.id)"
+                >✕ убрать узел</button>
+              </span>
               <span class="ch-sum">{{ componentSum(c) }}</span>
             </div>
             <CalcTableRow
@@ -234,16 +258,56 @@
       @close="catalogOpen = false"
     >
       <p class="cat-sub">→ в сборку «{{ secTitle(catalogSec) }}»</p>
-      <input v-model="catalogQ" class="cat-q" placeholder="поиск по прайсу — минимум 2 символа" autofocus />
-      <div class="cat-list">
-        <button v-for="p in catalogHits" :key="`${p.category}|${p.name}|${p.unit}`" class="cat-i" @click="addFromCatalog(p)">
-          <span class="cat-c">{{ p.category }}</span>
-          <span v-hint.plain="p.name" class="cat-n">{{ p.name }}</span>
-          <span class="cat-u">{{ p.unit }}</span>
-          <span class="cat-p num">{{ p.priceRub == null ? '—' : fmtInt(p.priceRub) }}</span>
-        </button>
-        <div v-if="catalogQ.trim().length >= 2 && !catalogHits.length" class="cat-empty">Ничего не найдено</div>
+      <div v-if="st.catalogNodes.length" class="cat-tabs">
+        <button class="cat-tab" :class="{ on: catalogMode === 'price' }" @click="catalogMode = 'price'">Позиция прайса</button>
+        <button v-hint="CATALOG_NODE_HINT" class="cat-tab" :class="{ on: catalogMode === 'node' }" @click="catalogMode = 'node'">Узел каталога · {{ st.catalogNodes.length }}</button>
       </div>
+      <template v-if="catalogMode === 'price'">
+        <input v-model="catalogQ" class="cat-q" placeholder="поиск по прайсу — минимум 2 символа" autofocus />
+        <div class="cat-list">
+          <button v-for="p in catalogHits" :key="`${p.category}|${p.name}|${p.unit}`" class="cat-i" @click="addFromCatalog(p)">
+            <span class="cat-c">{{ p.category }}</span>
+            <span v-hint.plain="p.name" class="cat-n">{{ p.name }}</span>
+            <span class="cat-u">{{ p.unit }}</span>
+            <span class="cat-p num">{{ p.priceRub == null ? '—' : fmtInt(p.priceRub) }}</span>
+          </button>
+          <div v-if="catalogQ.trim().length >= 2 && !catalogHits.length" class="cat-empty">Ничего не найдено</div>
+        </div>
+      </template>
+      <div v-else-if="!pickedNode" class="cat-list">
+        <button v-for="n in st.catalogNodes" :key="n.code" class="cat-i" @click="pickNode(n)">
+          <span class="cat-c">{{ n.body.tag }}</span>
+          <span v-hint.plain="n.body.description || n.body.name" class="cat-n">{{ n.code }} · {{ n.body.name }}</span>
+          <span class="cat-u">v{{ n.version }}</span>
+          <span class="cat-p">{{ n.body.rows.length }} стр.</span>
+        </button>
+      </div>
+      <div v-else class="cat-node">
+        <div class="cat-nh">
+          <b>{{ pickedNode.code }} · {{ nodePreview?.title ?? pickedNode.body.name }}</b>
+          <button class="fl-clear" @click="pickedNode = null">← к списку узлов</button>
+        </div>
+        <p v-if="pickedNode.body.description" class="cat-sub">{{ pickedNode.body.description }}</p>
+        <div v-if="pickedNode.body.params.length" class="cat-pgrid">
+          <label v-for="p in pickedNode.body.params" :key="p.key" class="cat-pf">
+            <span>{{ p.label }}{{ p.unit ? `, ${p.unit}` : '' }}</span>
+            <input v-if="p.type === 'bool'" type="checkbox" :checked="nodeValues[p.key] === true" @change="nodeValues[p.key] = ($event.target as HTMLInputElement).checked" />
+            <input v-else class="cat-in" :class="{ num: p.type === 'number' }" :value="nodeValueText(p)" @change="setNodeValue(p, ($event.target as HTMLInputElement).value)" />
+          </label>
+        </div>
+        <div class="cat-list">
+          <div v-for="r in nodePreview?.rows ?? []" :key="r.id" class="cat-pr" :class="{ red: r.missing }">
+            <span class="cat-n">{{ r.name }}</span>
+            <span class="num">{{ r.qty }}</span>
+            <span class="cat-u">{{ r.unit }}</span>
+            <span class="num">{{ r.price }}</span>
+          </div>
+        </div>
+      </div>
+      <template v-if="catalogMode === 'node' && pickedNode" #footer>
+        <button class="btn" @click="pickedNode = null">Назад</button>
+        <button class="btn btn-acc" @click="addNodeFromCatalog">Добавить в раздел</button>
+      </template>
     </BaseModal>
 
     <!-- ── Выпуск КП по прайсу старше действующего ── -->
@@ -268,21 +332,21 @@
       @close="versionsOpen = false"
     >
       <p class="ver-sub">
-        Версия фиксирует дерево, итог и версию прайса на момент снимка.
+        Версия фиксирует дерево, итог, версию прайса и шаблона на момент снимка.
         Снимается при создании единицы, при выпуске КП и вручную.
       </p>
       <div v-if="versionsLoading" class="ver-state">Загрузка…</div>
       <div v-else-if="!versions.length" class="ver-state">Версий пока нет</div>
       <table v-else class="ver-tbl">
         <thead>
-          <tr><th>Версия</th><th>Дата</th><th>Причина</th><th>Прайс</th><th class="num">Итог ₽</th><th>КП</th></tr>
+          <tr><th>Версия</th><th>Дата</th><th>Причина</th><th class="ver-thw"><span v-hint.plain="'Версия прайса, по которой посчитаны цены, и версия шаблона изделия, по которой собран состав'">Прайс / шаблон</span></th><th class="num">Итог ₽</th><th>КП</th></tr>
         </thead>
         <tbody>
           <tr v-for="v in versions" :key="v.id">
             <td>v{{ v.version }}</td>
             <td>{{ fmtDateTime(v.createdAt) }}</td>
             <td class="ver-reason">{{ REASON_LABEL[v.reason ?? 'KP'] }}</td>
-            <td>НН v{{ v.priceListVersion }}</td>
+            <td>НН v{{ v.priceListVersion }}<span v-if="v.templateVersion != null" class="ver-tpl">шаблон {{ templateLabel(v.templateVersion) }}</span></td>
             <td class="num">{{ v.totalRub ? fmtInt(v.totalRub) : '—' }}</td>
             <!-- Слепок создания — исходное состояние: проверку строк без цены
                  он не проходил, поэтому КП по нему не печатается. -->
@@ -317,7 +381,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CalcTableRow from '@/components/calculator/CalcTableRow.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
@@ -332,7 +396,10 @@ import type { Hint } from '@/directives/hint'
 import { tryEvalExpr } from '@/engines/expr'
 import { handleCellNav } from '@/utils/cell-nav'
 import { repricedToastText, repriceSummaryText } from '@/utils/reprice-text'
-import type { CalcComponent, CalcRowNode } from '@/engines/template-kns'
+import type { CalcComponent, CalcRowNode, MaterializeContext } from '@/engines/template-kns'
+import { defaultParams, materializeNode, type CatalogNode, type NodeParamDef, type NodeParamValues } from '@/engines/node-def'
+import { surveyScope, type DeviceEnv } from '@/engines/template-def'
+import { recalcFotSatellites } from '@/engines/fot'
 import { estimatesApi, type EstimateSnapshotInfo, type SnapshotReason } from '@/api/estimates'
 
 const route = useRoute()
@@ -444,6 +511,24 @@ const KP_HINT: Hint = {
   title: 'Сформировать КП',
   text: 'Печатная форма КП в Word и PDF и новая версия расчёта. Пока есть строки без цены, КП не выпускается.',
 }
+const TEMPLATE_VERSION_HINT: Hint = {
+  title: 'Версия шаблона изделия',
+  text: [
+    'Из каких разделов и узлов собран расчёт: встроенный шаблон — состав из кода, vN — версия, опубликованная технологом в редакторе шаблонов.',
+    'Новая версия шаблона не меняет готовый расчёт сама: его пересобирают кнопкой под фильтрами или правкой опросного листа.',
+  ],
+}
+const REBUILD_HINT: Hint = {
+  title: 'Пересобрать по действующему шаблону',
+  text: [
+    'Расчёт собирается заново по опросному листу и новому шаблону. Ручные количества, цены и выключенные узлы переносятся по названиям узлов — и когда узел переехал в другой раздел.',
+    'Цены строк берутся из действующего прайса, сдвиги отмечаются «было … ₽». Расчёт сохраняется сразу.',
+  ],
+}
+const CATALOG_NODE_HINT: Hint = {
+  title: 'Узел каталога',
+  text: 'Готовый набор строк с формулами от параметров — площадка, комплект, обвязка. Заполните параметры, проверьте строки и добавьте: узел ляжет в раздел целиком, его строки можно править и удалять.',
+}
 const SECTION_ON_HINT = 'Выключить раздел: его строки не войдут в итог, ручные значения сохранятся'
 const SECTION_OFF_HINT = 'Раздел выключен и в итог не входит. Включить обратно — со всеми ручными значениями'
 
@@ -493,6 +578,12 @@ const priceListLabel = computed(() => {
 
 /** Версия прайса, по которой посчитаны цены строк. */
 const treePriceVersion = computed(() => st.tree?.priceListVersion ?? 1)
+
+/** Версия шаблона, по которой собран состав: без отметки — встроенный. */
+const treeTemplateVersion = computed(() => st.tree?.templateVersion ?? 0)
+const templateLabel = (v: number) => (v ? `v${v}` : 'встроенный')
+/** «по шаблону v2» / «по встроенному шаблону» — для кнопки и тоста. */
+const templateRef = (v: number) => (v ? `по шаблону v${v}` : 'по встроенному шаблону')
 
 /** Что даст пересчёт по действующему прайсу — словами (utils/reprice-text.ts). */
 const repriceText = computed(() => (st.repricePreview ? repriceSummaryText(st.repricePreview) : ''))
@@ -614,6 +705,8 @@ const catalogQ = ref('')
 function openCatalog(sectionCode: string) {
   catalogSec.value = sectionCode
   catalogQ.value = ''
+  catalogMode.value = 'price'
+  pickedNode.value = null
   catalogOpen.value = true
 }
 
@@ -635,6 +728,101 @@ function addFromCatalog(p: { category: string; name: string; unit: string; price
   })
   catalogOpen.value = false
   toast(`Добавлено: ${p.name}`, 'success')
+}
+
+// ── Узел каталога: параметры, предпросмотр строк, вставка ──
+
+const catalogMode = ref<'price' | 'node'>('price')
+const pickedNode = shallowRef<CatalogNode | null>(null)
+const nodeValues = reactive<NodeParamValues>({})
+const nodeCtx = shallowRef<MaterializeContext | null>(null)
+
+/**
+ * Выбрать узел: параметры — умолчания узла, а те, что названы как поле ОЛ
+ * («dn», «depthMm»), — значения из опросного листа этого расчёта.
+ */
+async function pickNode(n: CatalogNode) {
+  for (const k of Object.keys(nodeValues)) delete nodeValues[k]
+  Object.assign(nodeValues, defaultParams(n.body))
+  const tree = st.tree
+  if (tree) {
+    const scope = surveyScope({ device: tree.deviceType, survey: tree.survey } as unknown as DeviceEnv)
+    for (const p of n.body.params) {
+      const v = scope[p.key]
+      if (v == null) continue
+      if ((p.type === 'number' && typeof v === 'number') || (p.type === 'bool' && typeof v === 'boolean') || (p.type === 'text' && typeof v === 'string')) {
+        nodeValues[p.key] = v
+      }
+    }
+  }
+  pickedNode.value = n
+  nodeCtx.value = await st.ensureContext()
+}
+
+const nodeValueText = (p: NodeParamDef) => {
+  const v = nodeValues[p.key]
+  return typeof v === 'number' ? String(v).replace('.', ',') : typeof v === 'string' ? v : ''
+}
+function setNodeValue(p: NodeParamDef, text: string) {
+  nodeValues[p.key] = p.type === 'number' ? (text.trim() === '' ? null : tryEvalExpr(text)) : text
+}
+
+/** Строки узла с текущими параметрами — то, что ляжет в раздел. */
+const nodePreview = computed(() => {
+  const n = pickedNode.value
+  const ctx = nodeCtx.value
+  if (!n || !ctx) return null
+  const comp = materializeNode(ctx, n, { ...nodeValues })
+  const rows = recalcFotSatellites(comp.rows)
+  return {
+    title: comp.title,
+    rows: rows.map((r) => {
+      const price = r.priceManual ?? r.priceCatalog
+      return {
+        id: r.id,
+        name: r.kind === 'ФОТ' ? '↳ ФОТ' : r.name,
+        qty: r.qtyCalc == null ? '—' : fmt(r.qtyCalc),
+        unit: r.unit,
+        price: price == null ? 'нет цены' : fmtInt(price),
+        missing: price == null && r.qtyCalc !== 0,
+      }
+    }),
+  }
+})
+
+function addNodeFromCatalog() {
+  const n = pickedNode.value
+  if (!n) return
+  const comp = st.addCatalogNode(catalogSec.value, n, { ...nodeValues })
+  if (!comp) { toast('Не удалось добавить узел', 'error'); return }
+  catalogOpen.value = false
+  pickedNode.value = null
+  toast(`Добавлен узел «${comp.title}»`, 'success')
+}
+
+// ── Пересборка по действующему шаблону ──
+
+const rebuilding = ref(false)
+
+async function onRebuildTemplate() {
+  const to = st.activeTemplateVersion
+  const problem = st.rebuildByActiveTemplate()
+  if (problem) { toast(problem, 'error'); return }
+  const conflicts = st.conflictIds.size
+  if (conflicts) filters.conflict = true
+  rebuilding.value = true
+  try {
+    await st.save()
+    toast(
+      `Расчёт пересобран ${templateRef(to)}: ручные правки перенесены` +
+        (conflicts ? ` · конфликтов с расчётным: ${conflicts}` : ''),
+      'success',
+    )
+  } catch (err) {
+    toast(err instanceof Error ? err.message : 'Расчёт пересобран, но сохранить его не удалось', 'error')
+  } finally {
+    rebuilding.value = false
+  }
 }
 
 /** Свободная строка рождается «красной» — без цены (README). */
@@ -821,14 +1009,16 @@ onMounted(() => {
 /* История версий */
 .ver-sub { font-size: 13.2px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
 .ver-state { font-size: 14.4px; color: var(--faint); padding: 12px 0; }
-.ver-tbl { width: 100%; border-collapse: collapse; font-size: 14.4px; }
+.ver-tbl { width: 100%; border-collapse: collapse; font-size: 13.8px; }
 .ver-tbl th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--faint); padding: 4px 8px; border-bottom: 1px solid var(--line); }
-.ver-tbl td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  color: var(--faint); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.ver-tbl td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
 .ver-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ver-tpl { display: block; font-size: 12px; color: var(--muted); }
+.ver-tbl th.ver-thw { white-space: normal; }
 .ver-dl { white-space: nowrap; }
 .ver-dl--none { color: var(--faint); text-align: center; }
-.ver-reason { font-size: 13.2px; color: var(--muted); white-space: nowrap; }
+.ver-reason { font-size: 12.6px; color: var(--muted); white-space: nowrap; }
 .ver-dl .btn-xs { padding: 2px 7px; font-size: 13.2px; line-height: 1.5; }
 .ver-dl .btn-xs + .btn-xs { margin-left: 4px; }
 
@@ -912,6 +1102,20 @@ onMounted(() => {
 .cat-u { font-size: 12px; color: var(--muted); }
 .cat-p { text-align: right; }
 .cat-empty { padding: 10px 4px; font-size: 13.2px; color: var(--faint); }
+.cat-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.cat-tab { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 13.2px; padding: 3px 10px; }
+.cat-tab.on { border-color: var(--acc); color: var(--text); background: var(--acc-bg); }
+.cat-node { display: flex; flex-direction: column; gap: 6px; }
+.cat-nh { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14.4px; }
+.cat-pgrid { display: grid; grid-template-columns: 1fr; gap: 4px; }
+.cat-pf { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 6px; align-items: center; font-size: 13.2px; color: var(--muted); }
+.cat-in { width: 100%; background: var(--cellbg); border: 1px solid var(--line2); color: var(--text); padding: 3px 6px; font-size: 13.8px; font-family: inherit; }
+.cat-in.num { text-align: right; }
+.cat-pr { display: grid; grid-template-columns: minmax(0, 1fr) 56px 40px 72px; gap: 6px; padding: 3px 4px; border-bottom: 1px solid var(--line); font-size: 13.2px; }
+.cat-pr.red .cat-n, .cat-pr.red span:last-child { color: var(--acc); }
+.cat-pr .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ch-del { margin-left: 8px; background: transparent; border: none; color: var(--faint); font-size: 12px; cursor: pointer; }
+.ch-del:hover { color: var(--acc); }
 
 .tb-cust { font-size: 13.8px; color: var(--muted); }
 .tb-zv { font-size: 13.2px; color: var(--faint); }

@@ -3,35 +3,34 @@ import { computed, ref } from 'vue'
 import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type Rates } from '@/engines/economics'
 import { recalcFotSatellites, resolveFotK } from '@/engines/fot'
 import { computeRow, resolveQty } from '@/engines/row'
-import type { CalcComponent } from '@/engines/template-kns'
 import {
   flattenRows,
-  materializeKns,
   sectionEnabledFor,
+  type CalcComponent,
   type CalcRowNode,
+  type CalcSection,
   type CalcTree,
   type KnsSurveyParams,
   type MaterializeContext,
 } from '@/engines/template-kns'
-import {
-  materializeEmk,
-  materializeKol,
-  type EmkSurveyParams,
-  type KolSurveyParams,
-} from '@/engines/template-emk-kol'
-import { matrixLengthBucketMm } from '@/engines/survey-emk-kol'
+import type { EmkSurveyParams, KolSurveyParams } from '@/engines/template-emk-kol'
+import { materializeEmk, materializeKns, materializeKol } from '@/engines/materialize'
+import { materializeNode, type CatalogNode, type NodeParamValues } from '@/engines/node-def'
 import { estimatesApi, type EstimateDetail } from '@/api/estimates'
-import { refsApi } from '@/api/refs'
+import type { ActiveTemplates } from '@/api/refs'
+import {
+  activeTemplateVersion as activeTemplateVersionOf,
+  FALLBACK_RATES,
+  loadMaterializeContext,
+  NO_TEMPLATES,
+  type CatalogItem,
+} from '@/utils/materialize-context'
 import type { PriceBinding, RowResult } from '@/engines/types'
 import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
 import { hasBasketIn, hasGrinderIn, type Grinder } from '@/types/survey'
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
 import { hasPriceDelta, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
-
-/** Ключ цены — тройка в каноническом виде (engines/price-name.ts). */
-const priceKey = (category: string, name: string, unit: string): string =>
-  `${normalizePriceText(category)}|${normalizePriceName(name)}|${normalizePriceText(unit)}`
 
 /**
  * Стор дерева расчёта (§9, Библиотека §6.3).
@@ -43,32 +42,6 @@ const priceKey = (category: string, name: string, unit: string): string =>
  * Вся арифметика делегируется движку `engines/*` — здесь только состояние и
  * загрузка. Никаких confirm() внутри actions (антицель хендоффа).
  */
-
-/**
- * Мс на стыке берётся по МИНИМАЛЬНОМУ давлению из справочника f(Dу, PN).
- *
- * Правило завода (2026-09-09): изделия безнапорные, поэтому считается
- * минимально возможная ламинация. В таблице она задана в атмосферах, и нижняя
- * строка — 4 атм, то есть 0,4 МПа; эталон читает именно её и в КНС (отдельная
- * колонка листа, заполненная только в этой строке), и в ЕМК (точный поиск,
- * попадающий в первую строку группы).
- *
- * Минимум ищется, а не задаётся константой 4, потому что правило звучит как
- * «минимально возможная», а не «строка номер 4»: если технолог заведёт класс
- * ниже, расчёт последует за таблицей, а не за магическим числом.
- *
- * Не путать с поиском ВЕСА трубы: там 0,1 и 0,4 ссылаются на 0,6, потому что
- * по технологии производства это одна и та же труба (`pnForWeightLookup`,
- * engines/survey-kns.ts).
- */
-function jointLayerIndex(rows: ReadonlyArray<{ d: number; pn: number; massKg: number }>): Map<number, number> {
-  const min = new Map<number, { pn: number; massKg: number }>()
-  for (const r of rows) {
-    const cur = min.get(r.d)
-    if (!cur || r.pn < cur.pn) min.set(r.d, { pn: r.pn, massKg: r.massKg })
-  }
-  return new Map([...min].map(([d, v]) => [d, v.massKg]))
-}
 
 /**
  * Узлы, которые до своей связи с тумблером ОЛ строились включёнными всегда:
@@ -90,21 +63,18 @@ const RENAMED_COMPONENTS: Readonly<Record<string, string>> = {
   'Направляющие насосов и работы по нитке': 'Работы по напорному трубопроводу',
 }
 
-/** Ставки по умолчанию — fallback, если позиции нет в прайсе (Механика §9). */
-const FALLBACK_RATES: Rates = {
-  fotRub: 1207.8,
-  overheadRub: 1584.73,
-  acetoneRub: 109.4,
-  ppeRub: 122,
-}
-
 export const useCalcTreeStore = defineStore('calcTree', () => {
   const estimate = ref<EstimateDetail | null>(null)
   const tree = ref<CalcTree | null>(null)
   const rates = ref<Rates>({ ...FALLBACK_RATES })
   const priceListVersion = ref(1)
   /** Плоский прайс — источник для модала «Компонент из каталога». */
-  const catalog = ref<Array<{ category: string; name: string; unit: string; priceRub: number | null }>>([])
+  const catalog = ref<CatalogItem[]>([])
+  /**
+   * Действующие шаблоны изделий и опубликованные узлы каталога (редактор
+   * шаблонов): по ним материализуется расчёт и вставляются узлы вручную.
+   */
+  const templates = ref<ActiveTemplates>(NO_TEMPLATES)
 
   const markup = ref(DEFAULT_MARKUP)
   const tirage = ref(1)
@@ -122,7 +92,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   // ── Загрузка ──────────────────────────────────────────────────────────────
 
   /**
-   * Контекст материализации — справочники и прайс, собранные в индексы.
+   * Контекст материализации — справочники, прайс, действующие шаблоны
+   * изделий и узлы каталога, собранные в индексы (utils/materialize-context.ts).
    *
    * Кешируется на время жизни стора: ОЛ пересчитывает расчёт после каждой
    * правки, и тянуть 1040 позиций прайса и три справочника на каждое нажатие
@@ -132,65 +103,14 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
   async function ensureContext(opts: { fresh?: boolean } = {}): Promise<MaterializeContext> {
     if (ctxCache && !opts.fresh) return ctxCache
-    const [prices, weights, engineering, priceVersion] = await Promise.all([
-      refsApi.nomenclature(),
-      refsApi.pipeWeights(),
-      refsApi.engineering(),
-      refsApi.priceVersion(),
-    ])
+    const loaded = await loadMaterializeContext()
     // Настоящая версия прайса, а не константа: снапшот фиксирует именно её,
     // и топбар обязан показывать то же самое (ТЗ §3).
-    priceListVersion.value = priceVersion.version
-
-    // Индексы справочников: поиск по тройке (категория, наименование, ЕИ)
-    // и по (DN; PN_трубы; SN) — ровно как VLOOKUP эталона. Тройка приводится
-    // к каноническому виду с обеих сторон: невидимая разница в пробелах или
-    // латинская «x» в прайсе не должна делать строку расчёта «красной».
-    const priceIdx = new Map<string, number | null>()
-    const flat: typeof catalog.value = []
-    for (const [category, items] of Object.entries(prices)) {
-      for (const p of items) {
-        priceIdx.set(priceKey(category, p.name, p.unit), p.priceRub)
-        flat.push({ category, name: p.name, unit: p.unit, priceRub: p.priceRub })
-      }
-    }
-    catalog.value = flat
-    const weightIdx = new Map<string, number>()
-    for (const w of weights.grp) weightIdx.set(`${w.dn}|${w.pn}|${w.sn}`, w.kgPerM)
-
-    // Все четыре ставки — позиции прайса (Механика §9): обновление прайса
-    // меняет экономику новых расчётов. Fallback — если позиции в базе нет
-    // (например, БД засеяна до их добавления).
-    rates.value = {
-      fotRub: priceIdx.get(priceKey('ФОТ', 'ФОТ', 'чел. ч')) ?? FALLBACK_RATES.fotRub,
-      overheadRub: priceIdx.get(priceKey('ФОТ', 'Накладные расходы', 'чел. ч')) ?? FALLBACK_RATES.overheadRub,
-      acetoneRub: priceIdx.get(priceKey('Прочие материалы', 'Ацетон', 'кг')) ?? FALLBACK_RATES.acetoneRub,
-      ppeRub: priceIdx.get(priceKey('Прочие материалы', 'СИЗ и РМ', 'ед.')) ?? FALLBACK_RATES.ppeRub,
-    }
-
-    // Нормы патрубков — источник массы формовки гильз (лист «Для расчетов»).
-    // Ключ — DN гильзы; сетка дискретна, промахи дают «красную» строку.
-    const normIdx = new Map(engineering.nozzles.map((n) => [n.dn, n]))
-
-    // Мс — масса формованных слоёв на стыке. Таблица приходит целиком
-    // (Dу × PN), а в расчёт идёт минимальное давление каждого диаметра:
-    // изделия безнапорные, ламинация считается минимально возможная.
-    const jointIdx = jointLayerIndex(engineering.jointLayers ?? [])
-
-    // Эллиптическое днище — ячейка матрицы (DN × строка длины «До 3 м» …
-    // «До 12»). Длина приводится к строке тем же правилом, что в эталоне.
-    const bottomIdx = new Map(
-      (engineering.ellipticBottom ?? []).map((c) => [`${c.d}|${c.lengthMm}`, { massKg: c.massKg, thicknessMm: c.thicknessMm }]),
-    )
-
-    ctxCache = {
-      priceOf: (c, n, u) => priceIdx.get(priceKey(c, n, u)) ?? null,
-      pipeWeightOf: (dn, pn, sn) => weightIdx.get(`${dn}|${pn}|${sn}`) ?? null,
-      nozzleNormOf: (dn) => normIdx.get(dn) ?? null,
-      jointLayerMassOf: (d) => jointIdx.get(d) ?? null,
-      ellipticBottomOf: (dn, lengthMm) => bottomIdx.get(`${dn}|${matrixLengthBucketMm(lengthMm)}`) ?? null,
-      priceListVersion: priceListVersion.value,
-    }
+    priceListVersion.value = loaded.priceListVersion
+    catalog.value = loaded.catalog
+    rates.value = loaded.rates
+    templates.value = loaded.templates
+    ctxCache = loaded.ctx
     return ctxCache
   }
 
@@ -499,21 +419,37 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
    *    подряд инженер должен увидеть то, поверх чего ставил свою цифру.
    */
   function reconcileTrees(oldTree: CalcTree, fresh: CalcTree) {
+    // Раздел ищется по названию, номер — запасной ключ: шаблон технолога
+    // переставляет разделы, и номер у раздела сменится, а название — нет.
+    const sectionOf = (os: CalcSection): CalcSection | undefined =>
+      fresh.sections.find((s) => s.title === os.title) ?? fresh.sections.find((s) => s.code === os.code)
+    // Компонент — по названию в своём разделе, а не нашёлся там — в любом:
+    // узел могли перенести в другой раздел. Сопоставленный второй раз не
+    // берётся: два одноимённых компонента не сливаются в один.
+    const taken = new Set<CalcComponent>()
+    const componentOf = (ns: CalcSection | undefined, title: string): CalcComponent | undefined => {
+      const pick = (list: CalcComponent[]) => list.find((c) => c.title === title && !taken.has(c))
+      return (ns && pick(ns.components)) ?? pick(fresh.sections.flatMap((s) => s.components))
+    }
+
     for (const os of oldTree.sections) {
-      const ns = fresh.sections.find((s) => s.code === os.code)
-      if (!ns) continue
-      ns.enabled = os.enabled
+      const ns = sectionOf(os)
+      if (ns) ns.enabled = os.enabled
 
       for (const oc of os.components) {
-        // Ручные строки не порождаются шаблоном — переносим компонент целиком.
+        // Ручные строки и вставленные вручную узлы шаблоном не порождаются —
+        // переносим компонент целиком. Раздела больше нет — в последний:
+        // ручную работу не теряем.
         if (oc.id.startsWith('custom-')) {
-          ns.components.push({ ...oc, rows: oc.rows.map((r) => ({ ...r })) })
+          const target = ns ?? fresh.sections[fresh.sections.length - 1]
+          target?.components.push({ ...oc, rows: oc.rows.map((r) => ({ ...r })) })
           continue
         }
 
         const title = RENAMED_COMPONENTS[oc.title] ?? oc.title
-        const nc = ns.components.find((c) => c.title === title)
+        const nc = componentOf(ns, title)
         if (!nc) continue
+        taken.add(nc)
         nc.enabled = reconciledEnabled(oc, nc)
 
         const used = new Set<number>()
@@ -804,7 +740,9 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   function customComponentOf(sectionCode: string): CalcComponent | null {
     const sec = tree.value?.sections.find((s) => s.code === sectionCode)
     if (!sec) return null
-    let c = sec.components.find((x) => x.id.startsWith('custom-'))
+    // Вставленный узел каталога — тоже `custom-…`, но у него есть код узла:
+    // свободные строки в него не подмешиваются.
+    let c = sec.components.find((x) => x.id.startsWith('custom-') && !x.nodeCode)
     if (!c) {
       c = { id: `custom-${sectionCode}`, title: 'Добавлено вручную', enabled: true, rows: [] }
       sec.components.push(c)
@@ -834,15 +772,92 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     return id
   }
 
-  /** Удалять можно только строки, добавленные вручную (Механика §12.5). */
+  /**
+   * Удалять можно только строки, добавленные вручную (Механика §12.5).
+   * Вместе с операцией уходит её ФОТ-спутник: без родителя он был бы
+   * часами ни от чего.
+   */
   function removeRow(id: string) {
     if (!tree.value) return
     for (const s of tree.value.sections) {
       for (const c of s.components) {
         const i = c.rows.findIndex((r) => r.id === id && r.isCustom)
-        if (i >= 0) { c.rows.splice(i, 1); return }
+        if (i >= 0) {
+          c.rows = c.rows.filter((r) => r.id !== id && r.parentId !== id)
+          return
+        }
       }
     }
+  }
+
+  // ── Узлы каталога и действующий шаблон (редактор шаблонов) ────────────────
+
+  /** Узлы каталога для вставки в расчёт: опубликованные, вне архива. */
+  const catalogNodes = computed<CatalogNode[]>(() => templates.value.nodes)
+
+  /** Версия действующего шаблона изделия этого расчёта: 0 — встроенный. */
+  const activeTemplateVersion = computed(() =>
+    tree.value ? activeTemplateVersionOf(templates.value, tree.value.deviceType) : 0,
+  )
+
+  /**
+   * Состав расчёта собран не по действующему шаблону: технолог опубликовал
+   * версию или откатил шаблон после сборки. Дерево без отметки собрано
+   * встроенным шаблоном своего релиза — это версия 0.
+   */
+  const templateOutdated = computed(
+    () => !!tree.value && (tree.value.templateVersion ?? 0) !== activeTemplateVersion.value,
+  )
+
+  /**
+   * Пересобрать расчёт по действующему шаблону: свежая материализация из
+   * сохранённого ОЛ, ручные правки переносятся так же, как при правке ОЛ
+   * (reconcileTrees). Цены строк свежее дерево берёт из действующего прайса.
+   *
+   * @returns текст проблемы; `null` — пересобрано
+   */
+  function rebuildByActiveTemplate(): string | null {
+    if (!estimate.value || !ctxCache) return 'Расчёт не загружен'
+    const saved = estimate.value.surveyData as Record<string, unknown>
+    return rebuildTree(ctxCache, estimate.value.deviceType, saved, tree.value, { force: true })
+  }
+
+  let nodeSeq = 0
+  /**
+   * Вставить узел каталога в раздел: материализация с параметрами из формы
+   * вставки. Компонент ручной (`custom-…`): пересборка по ОЛ переносит его
+   * целиком, строки удаляются, как добавленные вручную.
+   *
+   * Id строк — свои (`cn-…`), не из счётчика материализации: счётчик после
+   * перезагрузки страницы начинается заново, и строки вставленного узла
+   * совпали бы по id со строками следующей пересборки.
+   */
+  function addCatalogNode(sectionCode: string, node: CatalogNode, values: NodeParamValues): CalcComponent | null {
+    const sec = tree.value?.sections.find((s) => s.code === sectionCode)
+    if (!sec || !ctxCache) return null
+    const built = materializeNode(ctxCache, node, values)
+    const stamp = `${++nodeSeq}${Date.now().toString(36)}`
+    const ids = new Map(built.rows.map((r, i) => [r.id, `cn-${stamp}-${i}`]))
+    const comp: CalcComponent = {
+      ...built,
+      id: `custom-n${stamp}`,
+      rows: built.rows.map((r) => ({
+        ...r,
+        id: ids.get(r.id)!,
+        ...(r.parentId ? { parentId: ids.get(r.parentId) } : {}),
+        isCustom: true,
+      })),
+    }
+    sec.components.push(comp)
+    recalcAll()
+    return comp
+  }
+
+  /** Убрать вставленный вручную узел целиком. Узлы шаблона только выключаются. */
+  function removeComponent(sectionCode: string, componentId: string) {
+    const sec = tree.value?.sections.find((s) => s.code === sectionCode)
+    if (!sec || !componentId.startsWith('custom-')) return
+    sec.components = sec.components.filter((c) => c.id !== componentId)
   }
 
   /** Коэффициент ФОТ строки-спутника — для метки «ФОТ · k=0,28». */
@@ -995,5 +1010,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     setQtyManual, setPriceManual, resetQty, resetPrice,
     toggleSection, toggleComponent, keepOverride, dropOverride, fotKOf,
     addRow, removeRow,
+    // Шаблоны изделий и узлы каталога (редактор шаблонов).
+    templates, catalogNodes, activeTemplateVersion, templateOutdated, rebuildByActiveTemplate,
+    addCatalogNode, removeComponent,
   }
 })

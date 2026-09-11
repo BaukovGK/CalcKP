@@ -3,14 +3,8 @@ import { computeRow } from './row'
 import type { NozzleNorm } from './formulas'
 import { __resetIds, flattenRows, type MaterializeContext } from './template-kns'
 import { PRESSURE_PIPE_KITS } from './pressure-pipe-kit'
-import {
-  EMK_SECTIONS,
-  KOL_SECTIONS,
-  materializeEmk,
-  materializeKol,
-  type EmkSurveyParams,
-  type KolSurveyParams,
-} from './template-emk-kol'
+import { EMK_SECTIONS, KOL_SECTIONS, type EmkSurveyParams, type KolSurveyParams } from './template-emk-kol'
+import { materializeEmk, materializeKol } from './materialize'
 import {
   computeEmkGeometry,
   computeKolGeometry,

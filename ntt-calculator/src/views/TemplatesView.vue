@@ -4,9 +4,9 @@
     <header class="tpl-top">
       <button class="btn" @click="router.push('/')">← Проекты</button>
       <div class="tpl-head">
-        <div class="tpl-title">Шаблоны — справочники материализации</div>
+        <div class="tpl-title">Шаблоны изделий, узлы каталога и справочники</div>
         <div class="tpl-sub">
-          Нормы и веса, из которых строятся расчёты. Правка действует на новые
+          Из чего и по каким нормам собираются расчёты. Правка действует на новые
           материализации; сохранённые деревья расчётов не меняются.
         </div>
       </div>
@@ -23,7 +23,7 @@
         :class="{ on: tab === t.k }"
         @click="tab = t.k"
       >
-        {{ t.label }} <span class="tpl-cnt">{{ countOf(t.k) }}</span>
+        <span v-hint="t.hint ?? null">{{ t.label }}</span> <span v-if="countOf(t.k) != null" class="tpl-cnt">{{ countOf(t.k) }}</span>
       </button>
     </nav>
 
@@ -31,8 +31,31 @@
     <div v-else-if="loadError" class="tpl-state tpl-state--err">{{ loadError }}</div>
 
     <main v-else class="tpl-body">
+      <!-- ═══ Шаблоны изделий ═══ -->
+      <template v-if="tab === 'products'">
+        <p class="tpl-hint">
+          Разделы и узлы, из которых собирается изделие. Встроенные узлы — формулы
+          из кода, сверенные по листам эталона; узлы каталога технолог собирает сам
+          на вкладке «Узлы каталога». Правка идёт в черновик, расчёты видят только
+          опубликованную версию; готовые расчёты предложат пересборку.
+        </p>
+        <div v-if="catalogError" class="tpl-state tpl-state--err">{{ catalogError }}</div>
+        <ProductTemplateEditor v-else :products="products" :nodes="catalogNodes" :base="base" @changed="reloadCatalog" />
+      </template>
+
+      <!-- ═══ Узлы каталога ═══ -->
+      <template v-else-if="tab === 'nodes'">
+        <p class="tpl-hint">
+          Узел — строки с формулами количеств от своих параметров. Формулы — функции
+          реестра (те же, что считают встроенные узлы) и арифметика; новая функция —
+          релиз, новый узел из имеющихся — без релиза.
+        </p>
+        <div v-if="catalogError" class="tpl-state tpl-state--err">{{ catalogError }}</div>
+        <NodeCatalogEditor v-else :nodes="catalogNodes" :products="products" :base="base" @changed="reloadCatalog" />
+      </template>
+
       <!-- ═══ Нормы патрубков ═══ -->
-      <template v-if="tab === 'nozzles'">
+      <template v-else-if="tab === 'nozzles'">
         <p class="tpl-hint">
           Нормы простого патрубка = ƒ(DN) — источник массы формовки гильз и фланцев
           (Библиотека A5/A6). Ключ — DN.
@@ -199,27 +222,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
+import ProductTemplateEditor from '@/components/templates/ProductTemplateEditor.vue'
+import NodeCatalogEditor from '@/components/templates/NodeCatalogEditor.vue'
 import { toast } from '@/composables/useToast'
 import { refsApi } from '@/api/refs'
-import { templatesApi, type MatrixKind } from '@/api/templates'
+import { templatesApi, type CatalogNodeInfo, type MatrixKind, type ProductTemplateInfo } from '@/api/templates'
+import { loadMaterializeContext, type LoadedContext } from '@/utils/materialize-context'
+import { TEMPLATE_HINTS } from '@/hints/templates'
+import type { Hint } from '@/directives/hint'
 
 /**
- * Редактор шаблонов (роль TECHNOLOG, ТЗ §2) — этап 1.
+ * Редактор шаблонов (роль TECHNOLOG, ТЗ §2; Библиотека §6.2).
  *
- * Шаблон = формулы (в коде) × данные (в БД). Здесь правятся ДАННЫЕ: нормы
- * патрубков, веса труб, инженерные матрицы. Конфигуратор читает их при каждой
- * материализации, поэтому правка немедленно влияет на новые расчёты; уже
+ * Этап 2 — шаблоны изделий из узлов (встроенных и узлов каталога) и сам
+ * каталог узлов: черновик, предпросмотр на примере ОЛ, публикация версии,
+ * откат. Этап 1 — ДАННЫЕ, из которых считают формулы: нормы патрубков, веса
+ * труб, инженерные матрицы. Конфигуратор читает всё это при каждой
+ * материализации, поэтому опубликованная правка влияет на новые расчёты; уже
  * материализованные деревья не трогаются (самодостаточность расчёта, §9.1).
  */
 
 const router = useRouter()
 
-type Tab = 'nozzles' | 'weights' | 'joints' | 'shell' | 'bottom'
-const TABS: Array<{ k: Tab; label: string }> = [
+type Tab = 'products' | 'nodes' | 'nozzles' | 'weights' | 'joints' | 'shell' | 'bottom'
+const TABS: Array<{ k: Tab; label: string; hint?: Hint }> = [
+  { k: 'products', label: 'Шаблоны изделий', hint: TEMPLATE_HINTS.tabProducts },
+  { k: 'nodes', label: 'Узлы каталога', hint: TEMPLATE_HINTS.tabNodes },
   { k: 'nozzles', label: 'Нормы патрубков' },
   { k: 'weights', label: 'Веса труб GRP' },
   { k: 'joints', label: 'Мс на стыке' },
@@ -234,7 +266,7 @@ const TABS: Array<{ k: Tab; label: string }> = [
  * чтобы пометка не разошлась с расчётом, если таблицу пополнят снизу.
  */
 const usedJointPn = computed(() => Math.min(...shownJoints.value.map((r) => r.pn)))
-const tab = ref<Tab>('nozzles')
+const tab = ref<Tab>('products')
 
 const loading = ref(true)
 const loadError = ref<string | null>(null)
@@ -414,8 +446,10 @@ async function saveJoint(r: JointRow) {
 
 // ── Загрузка ───────────────────────────────────────────────────────────────
 
-function countOf(t: Tab): number {
+function countOf(t: Tab): number | null {
   switch (t) {
+    case 'products': return null
+    case 'nodes': return catalogNodes.value.filter((n) => !n.archived).length
     case 'nozzles': return nozzleRows.value.length
     case 'weights': return weightRows.value.length
     case 'joints': return jointRows.value.length
@@ -442,7 +476,48 @@ async function reload() {
   if (!jointDFilter.value) jointDFilter.value = String(jointRows.value[0]?.d ?? '')
 }
 
+// ── Шаблоны изделий и каталог узлов (этап 2) ─────────────────────────────
+
+const products = ref<ProductTemplateInfo[]>([])
+const catalogNodes = ref<CatalogNodeInfo[]>([])
+const catalogError = ref<string | null>(null)
+/** Прайс и справочники для предпросмотра — те же, по которым считает калькулятор. */
+const base = ref<LoadedContext | null>(null)
+
+async function reloadCatalog() {
+  try {
+    const [p, n] = await Promise.all([templatesApi.listProducts(), templatesApi.listNodes()])
+    products.value = p
+    catalogNodes.value = n
+    catalogError.value = null
+  } catch (e) {
+    catalogError.value = e instanceof Error ? e.message : 'Не удалось загрузить шаблоны и каталог'
+  }
+}
+
+async function reloadBase() {
+  try {
+    base.value = await loadMaterializeContext()
+  } catch {
+    toast('Прайс для предпросмотра не загрузился — обновите страницу', 'error')
+  }
+}
+
+// Справочники правят на соседних вкладках: вернулись к шаблонам — предпросмотр
+// пересобирается на свежих нормах и весах.
+let baseStale = false
+watch(tab, (t) => {
+  if (t === 'products' || t === 'nodes') {
+    if (baseStale) void reloadBase()
+    baseStale = false
+  } else {
+    baseStale = true
+  }
+})
+
 onMounted(async () => {
+  void reloadCatalog()
+  void reloadBase()
   try {
     await reload()
   } catch (e) {

@@ -10,6 +10,7 @@ import { pricesRouter }    from './routes/prices.routes'
 import { refsRouter }      from './routes/refs.routes'
 import { purchaseRouter }  from './routes/purchase.routes'
 import { templatesRouter } from './routes/templates.routes'
+import { catalogRouter }   from './routes/catalog.routes'
 import { pumpStationRouter } from './routes/pump-station.routes'
 
 /**
@@ -90,6 +91,9 @@ app.use('/api/refs',      refsRouter)
 // Редактор шаблонов (TECHNOLOG): запись в справочники, из которых
 // материализуются шаблоны; чтение — через /api/refs.
 app.use('/api/templates', templatesRouter)
+// Каталог узлов и шаблоны изделий (редактор шаблонов, этап 2); калькулятор
+// читает действующие версии через /api/refs/templates.
+app.use('/api/templates', catalogRouter)
 app.use('/api/pump-station', pumpStationRouter)
 
 app.get('/api/health', (_req, res) => {

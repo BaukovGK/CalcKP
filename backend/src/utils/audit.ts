@@ -53,6 +53,19 @@ export type AuditAction =
   | 'template.engineering.upsert'
   /** Мс — масса формованных слоёв на стыке, f(Dу, PN). */
   | 'template.joint_layer.upsert'
+  /**
+   * Каталог узлов (редактор шаблонов, этап 2): новый узел, публикация версии,
+   * откат к прежней, архив, отмена черновика. Сохранения черновика не пишутся.
+   */
+  | 'template.node.create'
+  | 'template.node.publish'
+  | 'template.node.activate'
+  | 'template.node.archive'
+  | 'template.node.discard'
+  /** Шаблон изделия: публикация версии, откат (к версии или встроенному), отмена черновика. */
+  | 'template.product.publish'
+  | 'template.product.activate'
+  | 'template.product.discard'
 
 export async function audit(
   userId: string | null | undefined,

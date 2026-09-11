@@ -43,12 +43,26 @@
 │       │                        шаблонах запрещён правилом ESLint
 │       ├── hints/               тексты сносок: survey.ts (поля трёх ОЛ),
 │       │                        calc.ts (строка расчёта, итоги, фильтры),
-│       │                        prices.ts (реестр цен)
+│       │                        prices.ts (реестр цен), templates.ts
+│       │                        (редактор шаблонов)
 │       ├── engines/             ЧИСТАЯ расчётная библиотека (покрыта тестами):
 │       │   ├── types.ts         контракт расчёта строки (EngineRow, RowResult)
 │       │   ├── row.ts           расчёт строки (qty/price/sum, overrides)
 │       │   ├── formulas.ts      реестр именованных формул количеств
-│       │   │                    (DSL не вводится — формулы живут в коде)
+│       │   │                    (формулы живут в коде)
+│       │   ├── node-expr.ts     выражения узлов каталога: арифметика и
+│       │   │                    сравнения над параметрами + вызовы функций
+│       │   │                    реестра FORMULA_FNS (обёртки formulas.ts)
+│       │   ├── node-def.ts      узел каталога технолога: параметры, строки,
+│       │   │                    проверка, материализация в компонент
+│       │   ├── code-nodes.ts    встроенные узлы (строители из template-*) и
+│       │   │                    встроенные шаблоны КНС/ЕМК/КОЛ данными
+│       │   ├── template-def.ts  шаблон изделия данными: разделы и ссылки на
+│       │   │                    узлы, биндинги на поля ОЛ, проверка,
+│       │   │                    интерпретатор materializeTemplate
+│       │   ├── materialize.ts   materializeKns/Emk/Kol: действующий шаблон
+│       │   │                    из контекста либо встроенный
+│       │   ├── template-samples.ts примеры ОЛ для предпросмотра редактора
 │       │   ├── economics.ts     экономический хвост (корзины, ПЗР/СИЗ/ацетон,
 │       │   │                    наценка, цена продажи)
 │       │   ├── fot.ts           ФОТ-спутники (k = 0,28 / 0,56 / 1,0)
@@ -57,9 +71,9 @@
 │       │   ├── format.ts        форматирование чисел
 │       │   ├── survey-kns.ts    формулы ОЛ КНС (Нподз, SN по глубине…)
 │       │   ├── survey-emk-kol.ts формулы ОЛ ЕМК/КОЛ (геометрия, длина из объёма)
-│       │   ├── template-kns.ts  материализация дерева КНС (7 разделов)
-│       │   ├── template-emk-kol.ts материализация ЕМК (8) и КОЛ (7);
-│       │   │                    общие узлы переиспользуются из template-kns
+│       │   ├── template-kns.ts  узлы КНС (build*), типы дерева, makeRow
+│       │   ├── template-emk-kol.ts узлы корпуса ЕМК и КОЛ; общие узлы
+│       │   │                    переиспользуются из template-kns
 │       │   ├── basket-grinder.ts корзина и дробилка по эталону — общие
 │       │   │                    для трёх изделий, такелаж у каждого свой
 │       │   ├── pressure-pipe-kit.ts комплекты нитки напорного по DN
@@ -72,7 +86,12 @@
 │       ├── stores/              Pinia: auth, projects, estimates
 │       │   └── calcTree.ts      ГЛАВНЫЙ стор: загрузка расчёта, материализация,
 │       │                        рематериализация при изменении ОЛ, overrides,
-│       │                        конфликты, экономика, сохранение
+│       │                        конфликты, экономика, сохранение; версия
+│       │                        шаблона, пересборка по действующему, вставка
+│       │                        узла каталога
+│       ├── utils/materialize-context.ts контекст материализации из
+│       │                        справочников сервера (общий для калькулятора
+│       │                        и предпросмотра редактора шаблонов)
 │       ├── types/               survey.ts (SurveyCommonForm, KnsSurveyForm),
 │       │                        survey-emk-kol.ts (Emk/KolSurveyForm),
 │       │                        device.ts (DeviceType), ui.ts
@@ -84,7 +103,9 @@
 │           ├── CalculatorTreeView конфигуратор расчёта /calculator/:id?
 │           ├── PurchaseRequestView заявка на закупку /calculator/:id/purchase
 │           ├── PricesView       реестр цен + импорт xlsx
-│           ├── TemplatesView    редактор шаблонов /templates (TECHNOLOG)
+│           ├── TemplatesView    редактор шаблонов /templates (TECHNOLOG):
+│           │                    components/templates/ — ProductTemplateEditor,
+│           │                    NodeCatalogEditor, TreePreview, FormulaPalette
 │           └── AdminView        пользователи, аудит
 │
 ├── backend/
@@ -92,7 +113,7 @@
 │   │   ├── app.ts               Express, монтирование роутеров
 │   │   ├── middleware/          auth (JWT), rbac, validate (Zod), errorHandler
 │   │   ├── routes/              auth, estimates, projects, prices, purchase,
-│   │   │                        refs, templates, pump-station, admin
+│   │   │                        refs, templates, catalog, pump-station, admin
 │   │   └── utils/               prisma, jwt, audit, logger, nn-sheet (импорт
 │   │                            прайса), estimate-tree (обход дерева: гейты и
 │   │                            спецификация КП), kp-document + kp-docx/kp-pdf
@@ -248,7 +269,7 @@ ROUNDUP до 100 ₽ → рентабельность. ПЗР входит в «
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Проекты, ОЛ, расчёты (создание/правка) | ✓ | ✓ | — | — | — | ✓ |
 | Просмотр чужих расчётов | ✓ | — | — | — | ✓ | ✓ |
-| Редактор шаблонов (нормы, веса, матрицы) | — | — | ✓ | — | — | ✓ |
+| Редактор шаблонов (шаблоны изделий, узлы каталога, нормы, веса, матрицы) | — | — | ✓ | — | — | ✓ |
 | Прайс: правка, импорт xlsx | — | — | — | ✓ | — | ✓ |
 | Заявка на закупку (просмотр/выгрузка) | ✓ | ✓ | — | ✓ | — | ✓ |
 | Пользователи, аудит | — | — | — | — | — | ✓ |
@@ -289,11 +310,19 @@ GET    /api/prices/export             выгрузка xlsx: лист «НН» �
 
 GET    /api/refs/nomenclature | /pipe-weights | /engineering
 GET    /api/refs/price-version        активная версия прайса = MAX(version)
+GET    /api/refs/templates            действующие шаблоны изделий и узлы каталога
 
 Редактор шаблонов (TECHNOLOG/ADMIN; чтение — через /api/refs):
 PUT|DELETE /api/templates/nozzle-norms/:dn    нормы патрубков (upsert по DN)
 PUT|DELETE /api/templates/pipe-weights        веса GRP (ключ dn+pn+sn)
 PUT    /api/templates/engineering             ячейка матрицы (kind+d+lengthMm)
+GET|POST /api/templates/catalog               узлы каталога; новый — черновиком
+PUT|DELETE /api/templates/catalog/:code/draft черновик узла
+POST   /api/templates/catalog/:code/publish|activate|archive
+GET    /api/templates/products                шаблоны КНС/ЕМК/КОЛ с историей
+PUT|DELETE /api/templates/products/:device/draft
+POST   /api/templates/products/:device/publish|activate  (version: null —
+                                      встроенный шаблон)
 
 Подбор насосной станции (любая авторизованная роль, §4):
 POST   /api/pump-station/dimensions              габарит корпуса (DN, Нподз)
@@ -341,7 +370,11 @@ AuditLog         аудит действий (append-only)
   ручная фиксация, выгрузка КП по каждой редакции)
 - Редактор шаблонов `/templates` (TECHNOLOG): нормы патрубков, веса труб GRP,
   матрица корпуса, эллиптические днища — upsert с аудитом; удаление есть
-  только у норм патрубков и весов труб (у матриц DELETE-роута нет, §8)
+  только у норм патрубков и весов труб (у матриц DELETE-роута нет, §8).
+  Этап 2: шаблоны изделий из встроенных узлов и узлов каталога с биндингами
+  на поля ОЛ, каталог узлов-формул, предпросмотр на примере ОЛ, версии
+  «черновик → опубликован → откат»; калькулятор помнит версию шаблона и
+  вставляет узлы каталога
 - Подбор насосной станции на бэке (§4): габарит корпуса, SN по правилу завода,
   гидравлика напорного трубопровода, каталог насосов
 - Backend: авторизация JWT, RBAC, все роутеры, аудит, сид справочников

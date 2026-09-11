@@ -1,13 +1,19 @@
 /**
- * Шаблон изделия КНС и материализация из опросного листа
+ * Узлы изделия КНС и типы материализованного дерева
  * (§9.1 ТЗ, Механика §7.1, Библиотека §3).
  *
  * Реальный расчёт — не свободное дерево, а шаблонная спецификация: каркас
- * фиксирован, количества считаются формулами из ОЛ, цены тянутся из прайса,
- * инженер точечно переопределяет (§9.1).
+ * задан шаблоном, количества считаются формулами из ОЛ, цены тянутся из
+ * прайса, инженер точечно переопределяет (§9.1).
  *
  * КНС/ЛНС/ДНС — ОДИН шаблон: изделия конструктивно идентичны, тип НС влияет
  * на подписи и входы, не на структуру (Реверс §1).
+ *
+ * Здесь — узлы (обечайка, днище, патрубки, лестница, перекрытие…): каждая
+ * функция `build*` строит компоненты одного узла каталога. Какие узлы в каком
+ * разделе и в каком порядке, решает шаблон изделия: встроенный
+ * (engines/code-nodes.ts) либо опубликованный технологом в редакторе
+ * шаблонов (engines/template-def.ts). Сборку ведёт engines/materialize.ts.
  *
  * Материализация (Библиотека §6.2): вставка копирует состав в расчёт с
  * ЗАФИКСИРОВАННЫМИ расчётными значениями, применёнными ценами и
@@ -52,11 +58,11 @@ import {
   sleeveDiameter,
 } from './survey-kns'
 import type { EngineRow, PriceBinding } from './types'
-import { buildBasket, buildGrinder, type BasketDevice } from './basket-grinder'
-import { buildMountingLoops } from './mounting-loops'
+import type { CatalogNode } from './node-def'
+import type { ProductTemplate } from './template-def'
+import type { BasketDevice } from './basket-grinder'
 import {
   buildAutomation,
-  buildPumpMounting,
   buildServiceEquipment,
   floatSwitchRow,
   STATION_WORKS,
@@ -241,6 +247,12 @@ export interface CalcComponent {
   id: string
   /** Код узла каталога (A1…D5) — справочно, для аудита состава. */
   nodeCode?: string
+  /**
+   * Версия узла каталога, из которой собран компонент, — у узлов, заведённых
+   * технологом в редакторе шаблонов (engines/node-def.ts). У встроенных узлов
+   * версии нет: их формулы — код, и версию им задаёт релиз.
+   */
+  nodeVersion?: number
   title: string
   enabled: boolean
   /**
@@ -285,6 +297,13 @@ export interface CalcTree {
   survey: Record<string, unknown>
   /** Версия прайса, применённая при материализации (ТЗ §3). */
   priceListVersion: number
+  /**
+   * Версия шаблона изделия, по которой собран состав: 0 — встроенный шаблон
+   * из кода, N — опубликованная технологом версия. Нет поля — дерево собрано
+   * до появления редактора шаблонов, то есть встроенным шаблоном своего
+   * релиза.
+   */
+  templateVersion?: number
   sections: CalcSection[]
 }
 
@@ -319,6 +338,13 @@ export interface MaterializeContext {
    * нет: сетка дискретна, интерполировать массу формовки нельзя.
    */
   ellipticBottomOf?(dn: number, lengthMm: number): { massKg: number; thicknessMm: number | null } | null
+  /**
+   * Действующий шаблон изделия — опубликованный в редакторе шаблонов.
+   * `null` (или нет функции) — встроенный шаблон из кода, версия 0.
+   */
+  templateOf?(device: DeviceType): ProductTemplate | null
+  /** Опубликованный узел каталога по коду; `null` — такого нет или он в архиве. */
+  catalogNodeOf?(code: string): CatalogNode | null
   priceListVersion: number
 }
 
@@ -338,7 +364,10 @@ export function stationHeightM(s: Pick<KnsSurveyParams, 'depthMm' | 'elevationMm
 
 const fmtNum = (n: number, digits = 2) => n.toLocaleString('ru-RU', { maximumFractionDigits: digits })
 
-/** Каркас 7 разделов КНС — порядок фиксирован (§9.1 ТЗ). */
+/**
+ * Каркас 7 разделов КНС (§9.1 ТЗ) — разделы встроенного шаблона
+ * (engines/code-nodes.ts) и заготовка дерева до первой материализации.
+ */
 export const KNS_SECTIONS: ReadonlyArray<{ code: string; title: string }> = [
   { code: '1', title: 'Корпус' },
   { code: '2', title: 'Лестница' },
@@ -415,7 +444,13 @@ export function operationWithFot(
 
 // ─── Раздел 1: Корпус ────────────────────────────────────────────────────────
 
-function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+// Раздел 1 «Корпус» собирается из встроенных узлов (engines/code-nodes.ts):
+// каждая функция ниже — один узел каталога (Библиотека §2), а порядок узлов
+// в разделе задаёт шаблон изделия. Петли A10, дробилка D4 и корзина D3 —
+// общие узлы трёх изделий (mounting-loops.ts, basket-grinder.ts).
+
+/** A1 — обечайка корпуса; при исполнении «частями» — ещё сегменты и стыки. */
+export function buildKnsShell(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
   const lengthM = pipeLengthM(s.depthMm)
   const components: CalcComponent[] = []
 
@@ -537,32 +572,45 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
     })
   }
 
-  // A2 — Днище формованное + ламинирование, каждое со своим ФОТ.
-  const bottom = bottomMassKg(s.dn)
-  components.push({
-    id: nextId('c'),
-    nodeCode: 'A2',
-    title: 'Днище',
-    enabled: true,
-    rows: [
-      ...operationWithFot(ctx, {
-        category: 'Собственное производство',
-        name: 'Механическое формованное дно',
-        unit: 'кг',
-        qtyCalc: bottom,
-        fotK: FOT_K_MECH,
-      }),
-      ...operationWithFot(ctx, {
-        category: 'Собственное производство',
-        name: 'Ламинирование дна к фальшполу',
-        unit: 'кг',
-        qtyCalc: laminationMassKg(bottom),
-        fotK: FOT_K_LAMIN,
-      }),
-    ],
-  })
+  return components
+}
 
-  // A5 — Патрубки: подводящие и напорные, каждый со своей гильзой.
+/** A2 — днище: формованное дно и его ламинирование, каждое со своим ФОТ. */
+export function buildKnsBottom(ctx: MaterializeContext, s: Pick<KnsSurveyParams, 'dn'>): CalcComponent[] {
+  const bottom = bottomMassKg(s.dn)
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'A2',
+      title: 'Днище',
+      enabled: true,
+      rows: [
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Механическое формованное дно',
+          unit: 'кг',
+          qtyCalc: bottom,
+          fotK: FOT_K_MECH,
+        }),
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ламинирование дна к фальшполу',
+          unit: 'кг',
+          qtyCalc: laminationMassKg(bottom),
+          fotK: FOT_K_LAMIN,
+        }),
+      ],
+    },
+  ]
+}
+
+/** A5 — патрубки: подводящие и напорные, каждый со своей гильзой. */
+export function buildKnsNozzles(
+  ctx: MaterializeContext,
+  s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
+): CalcComponent[] {
+  const components: CalcComponent[] = []
+
   // Наименования и категории — ДОСЛОВНО из прайса НН: ключ поиска это тройка
   // (категория, наименование, ЕИ), и любое расхождение даёт «красную» строку.
   const nozzles: Array<{ title: string; dn: number; count: number; cutoutName: string }> = [
@@ -623,6 +671,14 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
     })
   }
 
+  return components
+}
+
+/** A6 — фланцевый патрубок под задвижку на подводящем. */
+export function buildKnsInletFlange(
+  ctx: MaterializeContext,
+  s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount' | 'valveOnInlet'>,
+): CalcComponent[] {
   // A6 — Фланцевый патрубок под задвижку на подводящем (лист, строки 32–38).
   //
   // Номинал диктует подводящий патрубок: течение там безнапорное, но задвижка
@@ -637,38 +693,43 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
   const inletFlangeMass =
     inletFlangeNorm?.flangeMassKg != null ? inletFlangeNorm.flangeMassKg * inletFlanges : null
 
-  components.push({
-    id: nextId('c'),
-    nodeCode: 'A6',
-    title: `Фланцевый патрубок под задвижку на подводящем DN${s.inletDn}`,
-    ...surveyToggled(s.valveOnInlet),
-    rows: [
-      ...operationWithFot(ctx, {
-        category: 'Собственное производство',
-        name: 'Ручная формовка фланца для задвижки на подводящем трубопроводе',
-        unit: 'кг',
-        qtyCalc: inletFlangeMass,
-        // В листе у этой строки k = 1 («*руч*» → 1), а не 0,56.
-        fotK: FOT_K_MANUAL,
-        note:
-          inletFlangeMass == null
-            ? `Мф фланца для DN${s.inletDn} в нормах «Для расчетов» нет — введите массу вручную`
-            : `ƒ Мф фланца(DN${s.inletDn}) × ${inletFlanges} = ${inletFlangeMass.toFixed(2)} кг`,
-      }),
-      ...operationWithFot(ctx, {
-        category: 'Собственное производство',
-        name: 'Ламинирование патрубка к корпусу',
-        unit: 'кг',
-        qtyCalc: inletFlangeMass == null ? null : laminationMassKg(inletFlangeMass),
-        fotK: FOT_K_LAMIN,
-        note:
-          inletFlangeMass == null
-            ? 'ƒ масса фланца × 3/10 — введите после массы фланца'
-            : `ƒ ${inletFlangeMass.toFixed(2)} кг × 3/10`,
-      }),
-    ],
-  })
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'A6',
+      title: `Фланцевый патрубок под задвижку на подводящем DN${s.inletDn}`,
+      ...surveyToggled(s.valveOnInlet),
+      rows: [
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ручная формовка фланца для задвижки на подводящем трубопроводе',
+          unit: 'кг',
+          qtyCalc: inletFlangeMass,
+          // В листе у этой строки k = 1 («*руч*» → 1), а не 0,56.
+          fotK: FOT_K_MANUAL,
+          note:
+            inletFlangeMass == null
+              ? `Мф фланца для DN${s.inletDn} в нормах «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф фланца(DN${s.inletDn}) × ${inletFlanges} = ${inletFlangeMass.toFixed(2)} кг`,
+        }),
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ламинирование патрубка к корпусу',
+          unit: 'кг',
+          qtyCalc: inletFlangeMass == null ? null : laminationMassKg(inletFlangeMass),
+          fotK: FOT_K_LAMIN,
+          note:
+            inletFlangeMass == null
+              ? 'ƒ масса фланца × 3/10 — введите после массы фланца'
+              : `ƒ ${inletFlangeMass.toFixed(2)} кг × 3/10`,
+        }),
+      ],
+    },
+  ]
+}
 
+/** A7 — кабельный ввод. */
+export function buildKnsCableEntry(ctx: MaterializeContext): CalcComponent[] {
   // A7 — Кабельный ввод (лист, строки 46–48 и 89): гильза под кабели
   // ручной формовки, два гермоввода и прорезка отверстия Ø100.
   //
@@ -676,39 +737,47 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
   // в образце вписано 6. Гермоввод в листе назван «Гермоввод 110
   // (комплектация 1)» — в прайсе он «для труб 89/110», той же комплектации.
   const CABLE_SLEEVE_D = 100
-  components.push({
-    id: nextId('c'),
-    nodeCode: 'A7',
-    title: 'Кабельный ввод',
-    enabled: true,
-    rows: [
-      ...operationWithFot(ctx, {
-        category: 'Собственное производство',
-        name: 'Ручная формовка гильз для ввода кабелей',
-        unit: 'кг',
-        qtyCalc: 0.5,
-        fotK: FOT_K_MANUAL,
-        note: 'ƒ норма эталона 0,5 кг · в образце вписано 6 кг — уточните по чертежу',
-      }),
-      makeRow(ctx, {
-        kind: 'МАТЕРИАЛ',
-        category: 'Прочие материалы',
-        name: 'Гермоввод для труб 89/110 (комплектация 1)',
-        unit: 'шт',
-        qtyCalc: 2,
-        note: 'ƒ два на ввод, как в эталоне',
-      }),
-      makeRow(ctx, {
-        kind: 'ОПЕРАЦИЯ',
-        category: 'Собственное производство',
-        name: 'Прорезка отверстия под гильзу ввода кабелей',
-        unit: 'чел. ч',
-        qtyCalc: cutoutHours(CABLE_SLEEVE_D, 1),
-        note: `ƒ Ø${CABLE_SLEEVE_D}·π/1000 × 0,5 чел.ч`,
-      }),
-    ],
-  })
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'A7',
+      title: 'Кабельный ввод',
+      enabled: true,
+      rows: [
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ручная формовка гильз для ввода кабелей',
+          unit: 'кг',
+          qtyCalc: 0.5,
+          fotK: FOT_K_MANUAL,
+          note: 'ƒ норма эталона 0,5 кг · в образце вписано 6 кг — уточните по чертежу',
+        }),
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: 'Прочие материалы',
+          name: 'Гермоввод для труб 89/110 (комплектация 1)',
+          unit: 'шт',
+          qtyCalc: 2,
+          note: 'ƒ два на ввод, как в эталоне',
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Прорезка отверстия под гильзу ввода кабелей',
+          unit: 'чел. ч',
+          qtyCalc: cutoutHours(CABLE_SLEEVE_D, 1),
+          note: `ƒ Ø${CABLE_SLEEVE_D}·π/1000 × 0,5 чел.ч`,
+        }),
+      ],
+    },
+  ]
+}
 
+/** A9 — теплоизоляция корпуса, по тумблеру ОЛ. */
+export function buildKnsInsulation(
+  ctx: MaterializeContext,
+  s: Pick<KnsSurveyParams, 'dn' | 'insulationDepthMm' | 'insulationEnabled'>,
+): CalcComponent[] {
   // A9 — Теплоизоляция: включается флагом ОЛ (Механика §7.2).
   //
   // По листу КНС (строки 58–60, 92): боковая площадь вверх до 0,01 м² плюс
@@ -716,70 +785,49 @@ function buildKorpus(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent
   // площади. У ёмкости и колодца горловин в формуле нет (engines/formulas.ts).
   const ins = knsInsulation(s.dn, s.insulationDepthMm, INSULATION_LAYER_MM / 1000)
   const sideM2 = ins.verticalM2 - KNS_NECK_INSULATION_M2
-  components.push({
-    id: nextId('c'),
-    nodeCode: 'A9',
-    title: 'Теплоизоляция корпуса',
-    // Выключённый узел не удаляется: строки остаются «призраками», включение
-    // обратно восстанавливает всё, включая overrides (Механика §7.2).
-    ...surveyToggled(s.insulationEnabled),
-    rows: [
-      makeRow(ctx, {
-        kind: 'МАТЕРИАЛ',
-        category: 'Прочие материалы',
-        // Наименование в НН — с префиксом «Теплоизоляция - » (750 ₽/м²).
-        // README хендоффа приводит его без префикса и с ценой 890 — это данные
-        // мок-прототипа, а не прайса.
-        name: 'Теплоизоляция - Изофом ППЭ ОР 15 1,5х40',
-        unit: 'м²',
-        qtyCalc: ins.totalM2,
-        note:
-          `ƒ бок π·DN·h ↑0,01 (${fmtNum(sideM2)}) + горловины люков ${fmtNum(KNS_NECK_INSULATION_M2)} + ` +
-          `крышка π·(DN/2)² (${fmtNum(ins.lidM2)}) = ${fmtNum(ins.totalM2)} м²`,
-      }),
-      // В прайсе две позиции, различающиеся толщиной слоя: «5 мм» и «4 мм».
-      // Это подтверждает Реверс §4.3 (S·0,005·1850 у КНС, 0,004 у колодца) —
-      // толщина зашита в наименование, поэтому имя выводится из параметра.
-      ...operationWithFot(ctx, {
-        category: 'Собственное производство',
-        name: `Защитный слой ламинации ${INSULATION_LAYER_MM} мм на теплоизоляцию`,
-        unit: 'кг',
-        qtyCalc: ins.protectiveLayerKg,
-        fotK: FOT_K_LAMIN,
-      }),
-      makeRow(ctx, {
-        kind: 'ОПЕРАЦИЯ',
-        category: 'Собственное производство',
-        name: 'Монтаж теплоизоляции',
-        unit: 'чел. ч',
-        qtyCalc: ins.mountingHours,
-        note: 'ƒ 1 чел.ч на 1 м²',
-      }),
-    ],
-  })
-
-  // A10 — Монтажные петли: четыре, вариант по DN (mounting-loops.ts).
-  components.push(buildMountingLoops(ctx, s.dn))
-
-  // D4, D3 — дробилка и корзина. У КНС оба узла живут в «Корпусе» (лист,
-  // строки 74–113): отдельного раздела, как у ёмкости и колодца, нет.
-  components.push(
-    buildGrinder(ctx, {
-      device: 'KNS',
-      trayDepthMm: s.inletTrayDepthMm,
-      inletDn: s.inletDn,
-      enabled: Boolean(s.hasGrinder),
-    }),
-    buildBasket(ctx, {
-      device: 'KNS',
-      dn: s.dn,
-      trayDepthMm: s.inletTrayDepthMm,
-      enabled: Boolean(s.hasBasket),
-      withGrinder: Boolean(s.hasGrinder),
-    }),
-  )
-
-  return components
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'A9',
+      title: 'Теплоизоляция корпуса',
+      // Выключённый узел не удаляется: строки остаются «призраками», включение
+      // обратно восстанавливает всё, включая overrides (Механика §7.2).
+      ...surveyToggled(s.insulationEnabled),
+      rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: 'Прочие материалы',
+          // Наименование в НН — с префиксом «Теплоизоляция - » (750 ₽/м²).
+          // README хендоффа приводит его без префикса и с ценой 890 — это данные
+          // мок-прототипа, а не прайса.
+          name: 'Теплоизоляция - Изофом ППЭ ОР 15 1,5х40',
+          unit: 'м²',
+          qtyCalc: ins.totalM2,
+          note:
+            `ƒ бок π·DN·h ↑0,01 (${fmtNum(sideM2)}) + горловины люков ${fmtNum(KNS_NECK_INSULATION_M2)} + ` +
+            `крышка π·(DN/2)² (${fmtNum(ins.lidM2)}) = ${fmtNum(ins.totalM2)} м²`,
+        }),
+        // В прайсе две позиции, различающиеся толщиной слоя: «5 мм» и «4 мм».
+        // Это подтверждает Реверс §4.3 (S·0,005·1850 у КНС, 0,004 у колодца) —
+        // толщина зашита в наименование, поэтому имя выводится из параметра.
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: `Защитный слой ламинации ${INSULATION_LAYER_MM} мм на теплоизоляцию`,
+          unit: 'кг',
+          qtyCalc: ins.protectiveLayerKg,
+          fotK: FOT_K_LAMIN,
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: 'Монтаж теплоизоляции',
+          unit: 'чел. ч',
+          qtyCalc: ins.mountingHours,
+          note: 'ƒ 1 чел.ч на 1 м²',
+        }),
+      ],
+    },
+  ]
 }
 
 // ─── Раздел 2: Лестница (Библиотека B1) ─────────────────────────────────────
@@ -1381,10 +1429,9 @@ export function inletGateValveName(inletDn: number, trayDepthMm: number | null |
   return `${base} L=${stemMm} мм (высота штока указана от оси трубы)`
 }
 
-function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+/** C4 — узел запорной арматуры: задвижки, обратные клапаны и их монтаж. */
+export function buildKnsValves(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
   const pumps = s.pumpsWorking + s.pumpsReserve
-  const spare = s.pumpsSpare && s.pumpsSpare > 0 ? s.pumpsSpare : 0
-  const heightM = stationHeightM(s)
   const W = STATION_WORKS
   const gatesCalc = gateValveCount(s.inletCount, s.valveOnInlet)
   const pressureGatesCalc = pressureGateValveCount(s.pumpsWorking, s.pumpsReserve, s.outletCount)
@@ -1457,6 +1504,17 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
         work(ctx, W.checkValveMount, checkValves.qty, 'ƒ 1 чел.ч на обратный клапан'),
       ],
     },
+  ]
+}
+
+/** D1 — насосная группа: насосы, трубные муфты, поплавки и их монтаж. */
+export function buildKnsPumps(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+  const pumps = s.pumpsWorking + s.pumpsReserve
+  const spare = s.pumpsSpare && s.pumpsSpare > 0 ? s.pumpsSpare : 0
+  const heightM = stationHeightM(s)
+  const W = STATION_WORKS
+
+  return [
     {
       id: nextId('c'),
       nodeCode: 'D1',
@@ -1508,75 +1566,34 @@ function buildEquipment(ctx: MaterializeContext, s: KnsSurveyParams): CalcCompon
         work(ctx, W.floatsMount, floatSwitchCount(s.pumpsWorking, s.pumpsReserve), 'ƒ 1 чел.ч — 1 выключатель'),
       ],
     },
-    // D2 — шкаф управления, датчики, расходомер: каждый под своим тумблером ОЛ.
-    ...buildAutomation(ctx, {
-      heightM,
-      depthM: pipeLengthM(s.depthMm),
-      outletDn: s.outletDn,
-      outletCount: s.outletCount,
-      pumps,
-      controlCabinet: Boolean(s.hasControlCabinet),
-      cabinetType: s.controlCabinetType,
-      cabinetStart: s.controlCabinetStart,
-      pressureSensors: Boolean(s.hasPressureSensors),
-      levelSensor: Boolean(s.hasLevelSensor),
-      flowMeter: Boolean(s.hasFlowMeter),
-    }),
-    // D5 — тренога, таль по высоте станции, газоанализатор.
-    buildServiceEquipment(ctx, { heightM }),
   ]
 }
 
-// ─── Материализация ──────────────────────────────────────────────────────────
-
-/**
- * «Создать расчёт» из ОЛ: материализует шаблон КНС в дерево расчёта.
- *
- * Материализуется всё, что ВЫВОДИТСЯ из опросного листа. То, чего в ОЛ нет
- * (схема ниток напорного трубопровода, кол-во люков, состав площадки),
- * инженер добавляет из каталога: «число строк внутри разделов — прежде всего
- * "Напорный трубопровод" и "Оборудование" — меняется от расчёта к расчёту»
- * (Реверс §10). Раздел 5 в реальных файлах занимает 55–109 строк, и вывести
- * их из ОЛ нечем.
- */
-export function materializeKns(ctx: MaterializeContext, survey: KnsSurveyParams): CalcTree {
-  const byCode: Record<string, CalcComponent[]> = {
-    '1': buildKorpus(ctx, survey),
-    // Лестница — на всю длину трубы корпуса (лист, H122 + H123 = J14).
-    '2': buildLadder(ctx, { depthMm: survey.depthMm, device: 'KNS' }),
-    '3': [
-      ...buildSlab(ctx, { dn: survey.dn, depthMm: survey.depthMm, frame: true }),
-      // Крепление и подъём насосов лежат в листе в разделе 3 (строки 189–197).
-      ...buildPumpMounting(ctx, {
-        device: 'KNS',
-        dn: survey.dn,
-        guideHeightM: pipeLengthM(survey.depthMm),
-        liftHeightM: stationHeightM(survey),
-        pumpsWorking: survey.pumpsWorking,
-        pumpsReserve: survey.pumpsReserve,
-      }),
-    ],
-    '4': buildVent(ctx),
-    '5': buildPressurePipe(ctx, survey),
-    '6': buildFasteners(ctx, survey),
-    '7': buildEquipment(ctx, survey),
-  }
-
-  const sections: CalcSection[] = KNS_SECTIONS.map((s) => ({
-    id: nextId('s'),
-    code: s.code,
-    title: s.title,
-    enabled: true,
-    components: byCode[s.code] ?? [],
-  }))
-
-  return {
-    deviceType: 'KNS',
-    survey: survey as unknown as Record<string, unknown>,
-    priceListVersion: ctx.priceListVersion,
-    sections,
-  }
+/** D2 — шкаф управления, датчики, расходомер: каждый под своим тумблером ОЛ. */
+export function buildKnsAutomation(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+  const pumps = s.pumpsWorking + s.pumpsReserve
+  const heightM = stationHeightM(s)
+  return buildAutomation(ctx, {
+    heightM,
+    depthM: pipeLengthM(s.depthMm),
+    outletDn: s.outletDn,
+    outletCount: s.outletCount,
+    pumps,
+    controlCabinet: Boolean(s.hasControlCabinet),
+    cabinetType: s.controlCabinetType,
+    cabinetStart: s.controlCabinetStart,
+    pressureSensors: Boolean(s.hasPressureSensors),
+    levelSensor: Boolean(s.hasLevelSensor),
+    flowMeter: Boolean(s.hasFlowMeter),
+  })
 }
+
+/** D5 — тренога, таль по высоте станции, газоанализатор. */
+export function buildKnsService(ctx: MaterializeContext, s: KnsSurveyParams): CalcComponent[] {
+  return [buildServiceEquipment(ctx, { heightM: stationHeightM(s) })]
+}
+
+// ─── Дерево ──────────────────────────────────────────────────────────────────
 
 /** Все строки дерева единым списком — вход агрегатора экономики. */
 export function flattenRows(tree: CalcTree): CalcRowNode[] {

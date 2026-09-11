@@ -40,6 +40,11 @@ export interface EstimateSnapshotInfo {
    * КП по нему не печатается), MANUAL — ручная фиксация, KP — выпуск КП.
    */
   reason?: SnapshotReason
+  /**
+   * Версия шаблона изделия, по которой собран состав: 0 — встроенный, N —
+   * опубликованная технологом. `null` — слепок снят до появления отметки.
+   */
+  templateVersion?: number | null
 }
 
 export type SnapshotReason = 'CREATE' | 'MANUAL' | 'KP'

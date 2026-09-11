@@ -22,7 +22,10 @@ App.vue → RouterView
 ├── PurchaseRequestView           /calculator/:id/purchase
 ├── PricesView                    /prices
 ├── TemplatesView                 /templates  редактор шаблонов (TECHNOLOG):
-│                                 4 вкладки справочников материализации
+│   ├── ProductTemplateEditor     шаблоны изделий: разделы, узлы, биндинги,
+│   │                             предпросмотр, публикация
+│   ├── NodeCatalogEditor         узлы каталога: параметры, строки, формулы
+│   └── + вкладки справочников материализации (нормы, веса, Мс, матрицы)
 └── AdminView                     /admin
 ui/: BaseModal, ThemeToggle, ToastHost
 ```

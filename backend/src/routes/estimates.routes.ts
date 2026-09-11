@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { isStaleTreeWrite, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
-import { rowsWithoutPrice, treePriceListVersion } from '../utils/estimate-tree'
+import { rowsWithoutPrice, treePriceListVersion, treeTemplateVersion } from '../utils/estimate-tree'
 import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
@@ -208,6 +208,9 @@ async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub
             estimateId,
             version: (last?.version ?? 0) + 1,
             priceListVersion: treePriceListVersion(bundlesJson) ?? priceList?.version ?? 1,
+            // Каким составом собрано дерево: встроенный шаблон (0) или
+            // опубликованная технологом версия. null — дерево без отметки.
+            templateVersion: treeTemplateVersion(bundlesJson),
             totalRub,
             bundlesJson: bundlesJson as never,
             reason,
@@ -535,7 +538,7 @@ estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunct
       orderBy: { version: 'desc' },
       // bundlesJson не отдаём в списке: снимок дерева на 300–450 строк
       // раздул бы ответ. Полное содержимое — отдельным запросом при need.
-      select: { id: true, version: true, priceListVersion: true, totalRub: true, createdAt: true, reason: true },
+      select: { id: true, version: true, priceListVersion: true, templateVersion: true, totalRub: true, createdAt: true, reason: true },
     })
     res.json(snapshots)
   } catch (e) { next(e) }

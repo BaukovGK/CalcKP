@@ -1,5 +1,7 @@
 /**
- * Шаблоны изделий ЕМК (ёмкость) и КОЛ (колодец).
+ * Узлы изделий ЕМК (ёмкость) и КОЛ (колодец): корпус по частям — обечайка,
+ * днища, шахта или горловина, патрубки, теплоизоляция. Разделы и порядок
+ * узлов задаёт шаблон изделия (встроенный — engines/code-nodes.ts).
  *
  * Структура разделов у трёх изделий РАЗНАЯ — сверено с первоисточником
  * («Шаблон 3.0.xlsx», листы «Калькулятор ЕМК» и «Калькулятор колодца»):
@@ -18,7 +20,8 @@
  *
  * Общие узлы (лестница, перекрытие, вентстояк, крепёж) переиспользуются из
  * шаблона КНС — формулы этих компонентов побайтово совпадают во всех трёх
- * калькуляторах (Библиотека, основание).
+ * калькуляторах (Библиотека, основание); в шаблоны ЕМК и КОЛ их ставит
+ * engines/code-nodes.ts.
  */
 
 import {
@@ -32,11 +35,6 @@ import {
 } from './formulas'
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import {
-  buildFasteners,
-  buildLadder,
-  buildPressurePipe,
-  buildSlab,
-  buildVent,
   boundPrice,
   makeRow,
   nextId,
@@ -44,8 +42,6 @@ import {
   surveyToggled,
   type CalcComponent,
   type CalcRowNode,
-  type CalcSection,
-  type CalcTree,
   type MaterializeContext,
 } from './template-kns'
 import {
@@ -62,9 +58,6 @@ import {
   type TankType,
 } from './survey-emk-kol'
 import { pnForWeightLookup, sleeveDiameter } from './survey-kns'
-import { buildBasket, buildGrinder } from './basket-grinder'
-import { buildMountingLoops } from './mounting-loops'
-import { buildPumpMounting } from './station-equipment'
 
 // ─── Каркасы разделов ────────────────────────────────────────────────────────
 
@@ -299,24 +292,41 @@ function buildInsulation(
 
 // ─── ЕМК: корпус ёмкости ─────────────────────────────────────────────────────
 
-function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+/**
+ * Труба корпуса ёмкости — общая для обечайки, днищ и шахты: длина, жёсткость
+ * и материал. Длина — из объёма либо из ОЛ; у цилиндрических днищ трубы на
+ * 1,5 м больше: концы делаются из неё же (эталон I13).
+ */
+function emkPipe(s: EmkSurveyParams) {
   const geo = computeEmkGeometry(s)
   const lengthMm = geo.pipeLengthMm ?? 0
   const horizontal = s.placement === 'горизонтальное'
   const bottomType: EmkBottomType = s.bottomType ?? 'эллиптические'
-  // Цилиндрические днища — из той же трубы: её больше на 1,5 м (эталон I13).
   const extraMm = horizontal && bottomType === 'цилиндрические' ? CYLINDRICAL_BOTTOMS_PIPE_MM : 0
-  const lengthM = (lengthMm + extraMm) / 1000
-  const sn = s.sn ?? geo.sn ?? 2500
+  return {
+    geo,
+    lengthMm,
+    horizontal,
+    bottomType,
+    extraMm,
+    lengthM: (lengthMm + extraMm) / 1000,
+    sn: s.sn ?? geo.sn ?? 2500,
+    // Материал зависит от среды: химстойкая -> СК/ВЭС (эталон D8).
+    material: tankMaterial(s.tankType),
+  }
+}
 
+// Раздел 1 ёмкости собирается из встроенных узлов (engines/code-nodes.ts),
+// как и корпус КНС: функция — узел, порядок задаёт шаблон изделия.
+
+/** A1 — обечайка корпуса ёмкости. */
+export function buildEmkShell(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  const { lengthMm, extraMm, lengthM, sn, material } = emkPipe(s)
   const pnPipe = pnForWeightLookup(s.pnSurvey, s.dn, sn)
   const kgPerM = ctx.pipeWeightOf(s.dn, pnPipe, sn)
-  // Материал зависит от среды: химстойкая -> СК/ВЭС (эталон D8).
-  const material = tankMaterial(s.tankType)
   const pipeName = `Труба ${material}-К ${s.dn}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`
-  const jointMass = ctx.jointLayerMassOf?.(s.dn) ?? null
 
-  const components: CalcComponent[] = [
+  return [
     {
       id: nextId('c'),
       nodeCode: 'A1',
@@ -354,6 +364,13 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
       ],
     },
   ]
+}
+
+/** A2/A3 — днища: плоское у вертикальной, два эллиптических или цилиндрических у горизонтальной. */
+export function buildEmkBottoms(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  const { lengthMm, horizontal, bottomType } = emkPipe(s)
+  const jointMass = ctx.jointLayerMassOf?.(s.dn) ?? null
+  const components: CalcComponent[] = []
 
   // A2/A3 — днища. У горизонтальной ёмкости их два, по одному на каждом
   // конце трубы: эллиптические либо цилиндрические (из той же трубы) — по
@@ -440,9 +457,16 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
     })
   }
 
-  // Шахта обслуживания — только при флаге ОЛ.
-  if (s.hasShaft) {
-    components.push({
+  return components
+}
+
+/** A8 — шахта обслуживания, по флагу ОЛ. */
+export function buildEmkShaft(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  if (!s.hasShaft) return []
+  const { geo, sn, material } = emkPipe(s)
+
+  return [
+    {
       id: nextId('c'),
       nodeCode: 'A8',
       title: `Шахта обслуживания Ø${geo.shaftDiameterMm} h${geo.shaftHeightMm}`,
@@ -493,35 +517,45 @@ function buildEmkKorpus(ctx: MaterializeContext, s: EmkSurveyParams): CalcCompon
           note: `ƒ Ø${geo.shaftDiameterMm}·π/1000 × 0,5 чел.ч`,
         }),
       ],
-    })
-  }
+    },
+  ]
+}
 
-  components.push(
-    ...buildNozzles(ctx, [
-      { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName: 'Прорезка отверстия под гильзу входящего патрубка' },
-      { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)' },
-    ]),
-  )
+/** A5 — патрубки ёмкости: подводящие и отводящие, каждый со своей гильзой. */
+export function buildEmkNozzles(
+  ctx: MaterializeContext,
+  s: Pick<EmkSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
+): CalcComponent[] {
+  return buildNozzles(ctx, [
+    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName: 'Прорезка отверстия под гильзу входящего патрубка' },
+    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)' },
+  ])
+}
 
-  components.push(buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 5))
-  components.push(buildMountingLoops(ctx, s.dn))
-
-  return components
+/** A9 — теплоизоляция ёмкости: защитный слой 5 мм, как у КНС. */
+export function buildEmkInsulation(
+  ctx: MaterializeContext,
+  s: Pick<EmkSurveyParams, 'dn' | 'insulationDepthMm' | 'insulationEnabled'>,
+): CalcComponent[] {
+  return [buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 5)]
 }
 
 // ─── КОЛ: корпус колодца ─────────────────────────────────────────────────────
 
-function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcComponent[] {
+/** Труба корпуса колодца: полная глубина с горловиной и жёсткость. */
+function kolPipe(s: KolSurveyParams) {
   const geo = computeKolGeometry(s)
-  const lengthM = geo.totalDepthMm / 1000
-  const sn = s.sn ?? geo.sn ?? 2500
+  return { geo, lengthM: geo.totalDepthMm / 1000, sn: s.sn ?? geo.sn ?? 2500 }
+}
 
+/** A1 — обечайка корпуса колодца. */
+export function buildKolShell(ctx: MaterializeContext, s: KolSurveyParams): CalcComponent[] {
+  const { geo, lengthM, sn } = kolPipe(s)
   const pnPipe = pnForWeightLookup(s.pnSurvey, s.dn, sn)
   const kgPerM = ctx.pipeWeightOf(s.dn, pnPipe, sn)
   const pipeName = `Труба СК/НПС-К ${s.dn}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`
-  const bottom = bottomMassKg(s.dn)
 
-  const components: CalcComponent[] = [
+  return [
     {
       id: nextId('c'),
       nodeCode: 'A1',
@@ -556,6 +590,14 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
         pipePrepRow(ctx, s.dn, lengthM),
       ],
     },
+  ]
+}
+
+/** A2 — плоское днище колодца и его ламинирование. */
+export function buildKolBottom(ctx: MaterializeContext, s: Pick<KolSurveyParams, 'dn'>): CalcComponent[] {
+  const bottom = bottomMassKg(s.dn)
+
+  return [
     {
       id: nextId('c'),
       nodeCode: 'A2',
@@ -581,11 +623,16 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
       ],
     },
   ]
+}
 
-  // A8 — Горловина: включается флагом ОЛ (Механика §7.2).
-  if (s.hasNeck) {
-    const coverMass = neckCoverMassKg(s.neckDiameterMm)
-    components.push({
+/** A8 — горловина, по флагу ОЛ (Механика §7.2). */
+export function buildKolNeck(ctx: MaterializeContext, s: KolSurveyParams): CalcComponent[] {
+  if (!s.hasNeck) return []
+  const { sn } = kolPipe(s)
+  const coverMass = neckCoverMassKg(s.neckDiameterMm)
+
+  return [
+    {
       id: nextId('c'),
       nodeCode: 'A8',
       title: `Горловина Ø${s.neckDiameterMm} h${s.neckHeightMm}`,
@@ -635,37 +682,30 @@ function buildKolKorpus(ctx: MaterializeContext, s: KolSurveyParams): CalcCompon
           note: `ƒ Ø${s.neckDiameterMm}·π/1000 × 0,5 чел.ч`,
         }),
       ],
-    })
-  }
-
-  components.push(
-    ...buildNozzles(ctx, [
-      { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName: 'Прорезка отверстия под гильзу входящего патрубка' },
-      { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)' },
-    ]),
-  )
-
-  // У колодца защитный слой ламинации 4 мм, а не 5 (Реверс §4.3).
-  components.push(buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 4))
-  components.push(buildMountingLoops(ctx, s.dn))
-
-  return components
+    },
+  ]
 }
 
-// ─── Материализация ──────────────────────────────────────────────────────────
-
-function assemble(
-  sections: ReadonlyArray<{ code: string; title: string }>,
-  byCode: Record<string, CalcComponent[]>,
-): CalcSection[] {
-  return sections.map((s) => ({
-    id: nextId('s'),
-    code: s.code,
-    title: s.title,
-    enabled: true,
-    components: byCode[s.code] ?? [],
-  }))
+/** A5 — патрубки колодца: подводящие и отводящие, каждый со своей гильзой. */
+export function buildKolNozzles(
+  ctx: MaterializeContext,
+  s: Pick<KolSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
+): CalcComponent[] {
+  return buildNozzles(ctx, [
+    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName: 'Прорезка отверстия под гильзу входящего патрубка' },
+    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)' },
+  ])
 }
+
+/** A9 — теплоизоляция колодца: защитный слой ламинации 4 мм, а не 5 (Реверс §4.3). */
+export function buildKolInsulation(
+  ctx: MaterializeContext,
+  s: Pick<KolSurveyParams, 'dn' | 'insulationDepthMm' | 'insulationEnabled'>,
+): CalcComponent[] {
+  return [buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 4)]
+}
+
+// ─── Геометрия узлов ─────────────────────────────────────────────────────────
 
 /**
  * Высота лестницы ёмкости, мм (эталон I114 листа «Калькулятор ЕМК»).
@@ -677,93 +717,4 @@ function assemble(
  */
 export function emkLadderHeightMm(survey: Pick<EmkSurveyParams, 'placement' | 'dn'>, geo: EmkGeometry): number {
   return survey.placement === 'горизонтальное' ? survey.dn + geo.shaftHeightMm : (geo.overallLengthMm ?? 0)
-}
-
-/** «Создать расчёт» из ОЛ ёмкости. */
-export function materializeEmk(ctx: MaterializeContext, survey: EmkSurveyParams): CalcTree {
-  const geo = computeEmkGeometry(survey)
-  const depthMm = geo.overallLengthMm ?? 0
-  const ladderMm = emkLadderHeightMm(survey, geo)
-
-  const byCode: Record<string, CalcComponent[]> = {
-    '1': buildEmkKorpus(ctx, survey),
-    // Дробилки в листе ёмкости нет — ни строк, ни формул: тумблер ОЛ у ЕМК
-    // ни на что не влияет, узел добавляется вручную.
-    '2': [
-      buildBasket(ctx, { device: 'EMK', dn: survey.dn, trayDepthMm: survey.inletTrayDepthMm, enabled: survey.hasBasket }),
-    ],
-    '3': buildLadder(ctx, { depthMm: ladderMm, enabled: survey.hasLadder ?? true, device: 'EMK' }),
-    '4': [
-      ...buildSlab(ctx, { dn: survey.dn, depthMm }),
-      // Крепление и подъём насосов — только при насосах (лист ЕМК, строки
-      // 163–171 и 195–198: всё под `IF(ОЛ!E54="нет";0;…)`). Направляющие и
-      // цепь — на высоту лестницы, как в листе.
-      ...(survey.hasPumps
-        ? buildPumpMounting(ctx, {
-            device: 'EMK',
-            dn: survey.dn,
-            guideHeightM: ladderMm / 1000,
-            liftHeightM: ladderMm / 1000,
-            pumpsWorking: survey.pumpsWorking,
-            pumpsReserve: survey.pumpsReserve,
-          })
-        : []),
-    ],
-    '5': buildVent(ctx, { enabled: survey.ventilation ?? true }),
-    // Напорный трубопровод — ТОЛЬКО при насосном оборудовании (Реверс §5:
-    // «есть разделы "Напорный трубопровод" и "Насосное оборудование", когда
-    // ёмкость с насосами»). Без насосов раздел остаётся пустым каркасом.
-    '6': survey.hasPumps
-      ? buildPressurePipe(ctx, {
-          depthMm,
-          pumpsWorking: survey.pumpsWorking,
-          pumpsReserve: survey.pumpsReserve,
-          outletDn: survey.outletDn,
-          outletCount: survey.outletCount,
-        })
-      : [],
-    '7': buildFasteners(ctx, { outletDn: survey.outletDn, outletCount: survey.outletCount }),
-    // Оборудование ёмкости (ШУ, датчики, насосы) зависит от гидравлики и
-    // подбора по каталогу АШУ — из ОЛ не выводится, добавляется вручную.
-    '8': [],
-  }
-
-  return {
-    deviceType: 'EMK',
-    survey: survey as unknown as Record<string, unknown>,
-    priceListVersion: ctx.priceListVersion,
-    sections: assemble(EMK_SECTIONS, byCode),
-  }
-}
-
-/** «Создать расчёт» из ОЛ колодца. */
-export function materializeKol(ctx: MaterializeContext, survey: KolSurveyParams): CalcTree {
-  const geo = computeKolGeometry(survey)
-  const depthMm = geo.totalDepthMm
-
-  const byCode: Record<string, CalcComponent[]> = {
-    '1': [
-      ...buildKolKorpus(ctx, survey),
-      buildGrinder(ctx, { device: 'KOL', trayDepthMm: survey.inletTrayDepthMm, enabled: Boolean(survey.hasGrinder) }),
-    ],
-    '2': [
-      buildBasket(ctx, { device: 'KOL', dn: survey.dn, trayDepthMm: survey.inletTrayDepthMm, enabled: survey.hasBasket }),
-    ],
-    // Лестница — по полной глубине корпуса с горловиной (эталон I113 листа
-    // «Калькулятор колодца»). Вентиляции в ОЛ колодца нет — стояк всегда.
-    '3': buildLadder(ctx, { depthMm, enabled: survey.hasLadder ?? true, device: 'KOL' }),
-    '4': buildSlab(ctx, { dn: survey.dn, depthMm }),
-    '5': buildVent(ctx),
-    '6': buildFasteners(ctx, { outletDn: survey.outletDn, outletCount: survey.outletCount }),
-    // У колодца из оборудования — только запорная арматура; её состав
-    // задаётся в ОЛ поэлементно и добавляется вручную.
-    '7': [],
-  }
-
-  return {
-    deviceType: 'KOL',
-    survey: survey as unknown as Record<string, unknown>,
-    priceListVersion: ctx.priceListVersion,
-    sections: assemble(KOL_SECTIONS, byCode),
-  }
 }

@@ -43,11 +43,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  projects      Project[]
-  estimates     Estimate[]
-  auditLogs     AuditLog[]
-  priceChanges  PriceHistory[]
-  priceVersions PriceListVersion[]
+  projects         Project[]
+  estimates        Estimate[]
+  auditLogs        AuditLog[]
+  priceChanges     PriceHistory[]
+  priceVersions    PriceListVersion[]
+  nodeVersions     NodeDefVersion[]
+  templateVersions ProductTemplateVersion[]
 }
 
 // ── Projects ───────────────────────────────────────────────────────────────
@@ -102,6 +104,10 @@ model EstimateSnapshot {
   /// (utils/snapshot-reason.ts). По умолчанию KP: до появления поля все
   /// снапшоты снимались выпуском КП или ручной фиксацией и печатались как КП.
   reason           SnapshotReason @default(KP)
+  /// Версия шаблона изделия, по которой собран состав дерева: 0 — встроенный
+  /// шаблон из кода, N — опубликованная технологом. null — слепок снят до
+  /// появления редактора шаблонов или с дерева без отметки версии.
+  templateVersion  Int?
   createdAt        DateTime @default(now())
 
   @@unique([estimateId, version])
@@ -334,6 +340,82 @@ model PumpCurvePoint {
 
   @@unique([pumpId, idx])
   @@index([pumpId, q])
+}
+
+// ── Каталог узлов и шаблоны изделий (редактор шаблонов, этап 2) ────────────
+
+/// Узел каталога, заведённый технологом (Библиотека §1.1, §4, §6.2):
+/// параметры, строки состава с формулами количеств и генераторами
+/// наименований. Встроенные узлы — обечайка, лестница, напорный
+/// трубопровод… — в БД не хранятся: их формулы и реестр — код
+/// (ntt-calculator/src/engines/code-nodes.ts).
+///
+/// «Черновик → опубликован»: технолог правит `draft`, публикация пишет
+/// новую неизменяемую версию в NodeDefVersion и делает её действующей.
+/// Материализованный компонент помнит версию узла (`nodeVersion`) — по ней
+/// видно, каким составом он собран.
+model NodeDef {
+  id            String   @id @default(uuid())
+  /// Код каталога: «B5», «C7». Уникален; коды встроенных узлов заняты.
+  code          String   @unique
+  /// Черновик — тело узла; null — черновика нет.
+  draft         Json?
+  /// Действующая версия; null — узел ещё не публиковался.
+  activeVersion Int?
+  /// В архиве: не предлагается в шаблоны и в расчёт. Шаблон, который его
+  /// использует, не даст убрать узел в архив.
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  versions NodeDefVersion[]
+}
+
+/// Опубликованная версия узла каталога — неизменяема.
+model NodeDefVersion {
+  id            String   @id @default(uuid())
+  nodeId        String
+  node          NodeDef  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  version       Int
+  body          Json
+  /// Что изменилось — пишет технолог при публикации.
+  note          String?
+  publishedById String?
+  publishedBy   User?    @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+  publishedAt   DateTime @default(now())
+
+  @@unique([nodeId, version])
+}
+
+/// Шаблон изделия (Библиотека §1.5: сборка верхнего уровня с биндингами
+/// параметров на поля ОЛ) — один на тип изделия. Версия 0 — встроенный
+/// шаблон из кода: пока `activeVersion` пуст, расчёты собираются им.
+model ProductTemplate {
+  id            String     @id @default(uuid())
+  deviceType    DeviceType @unique
+  /// Черновик — разделы и узлы; null — черновика нет.
+  draft         Json?
+  /// Действующая версия; null — встроенный шаблон (версия 0).
+  activeVersion Int?
+  updatedAt     DateTime   @updatedAt
+
+  versions ProductTemplateVersion[]
+}
+
+/// Опубликованная версия шаблона изделия — неизменяема; снапшот КП хранит
+/// её номер (`EstimateSnapshot.templateVersion`).
+model ProductTemplateVersion {
+  id            String          @id @default(uuid())
+  templateId    String
+  template      ProductTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version       Int
+  body          Json
+  note          String?
+  publishedById String?
+  publishedBy   User?           @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+  publishedAt   DateTime        @default(now())
+
+  @@unique([templateId, version])
 }
 
 // ── Audit log ──────────────────────────────────────────────────────────────

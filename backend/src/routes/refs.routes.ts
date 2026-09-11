@@ -44,6 +44,36 @@ refsRouter.get('/nomenclature', async (_req, res, next) => {
  * Пустая таблица (БД засеяна до появления версий) → version 1: то же значение,
  * что подставляет снапшот (`estimates.routes.ts`, createSnapshot).
  */
+/**
+ * GET /api/refs/templates — действующие шаблоны изделий и опубликованные узлы
+ * каталога (редактор шаблонов, этап 2; Библиотека §6.2).
+ *
+ * Калькулятор материализует изделие по действующему шаблону его типа, а без
+ * него — встроенным (код, версия 0). Узлы — действующие версии всех узлов
+ * вне архива: их читают шаблоны и вставка «Компонент из каталога».
+ * Черновики сюда не попадают — расчёты видят только опубликованное.
+ */
+refsRouter.get('/templates', async (_req, res, next) => {
+  try {
+    const [templates, nodes] = await Promise.all([
+      prisma.productTemplate.findMany({ where: { activeVersion: { not: null } }, include: { versions: true } }),
+      prisma.nodeDef.findMany({ where: { activeVersion: { not: null }, archived: false }, include: { versions: true } }),
+    ])
+    const products: Record<string, { version: number; body: unknown }> = {}
+    for (const t of templates) {
+      const v = t.versions.find((x) => x.version === t.activeVersion)
+      if (v) products[t.deviceType] = { version: v.version, body: v.body }
+    }
+    const catalog = nodes.flatMap((n) => {
+      const v = n.versions.find((x) => x.version === n.activeVersion)
+      return v ? [{ code: n.code, version: v.version, body: v.body }] : []
+    })
+    res.json({ products, nodes: catalog })
+  } catch (e) {
+    next(e)
+  }
+})
+
 refsRouter.get('/price-version', async (_req, res, next) => {
   try {
     const active = await prisma.priceListVersion.findFirst({
