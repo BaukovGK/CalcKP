@@ -86,8 +86,18 @@ jobs:
           --from-config-datasource
           --to-schema prisma/schema.prisma
           --exit-code
-      # Сид проверяет, что справочники и прайс грузятся в свежую БД.
+      # Сид на пустой базе — строго: любое расхождение с JSON здесь — ошибка
+      # данных или ключей (prisma/seed.ts, SEED_STRICT).
       - run: npm run db:seed
+        env:
+          SEED_STRICT: '1'
+      # Повторный сид на базе, где правили справочники, — как при каждом
+      # старте контейнера: не падает и правок технолога не трогает
+      # (doc/План_устранения.md, 0.1).
+      - name: Повторный сид на изменённой базе
+        run: node tools/seed-rerun-check.cjs
+        env:
+          SEED_RERUN_CHECK: '1'
       # tsc собирает src/** — компиляция без ошибок типов.
       - run: npm run build
       # Юнит-тесты чистых модулей (vitest) — не требуют БД.

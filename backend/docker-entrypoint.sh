@@ -70,6 +70,8 @@ echo "entrypoint: применяю миграции"
 npx prisma migrate deploy
 
 if [ "${RUN_SEED:-1}" = "1" ]; then
+  # Мягкий режим (без SEED_STRICT): расхождения с мастер-шаблоном — только
+  # предупреждения, справочники, которые ведёт технолог, сид не трогает.
   echo "entrypoint: сид справочников"
   node dist-seed/seed.js
 fi

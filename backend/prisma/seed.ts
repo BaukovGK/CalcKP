@@ -1,3 +1,13 @@
+/**
+ * Сид — начальные данные: первый администратор, прайс, справочники
+ * материализации, каталог насосов. Выполняется при каждом старте контейнера
+ * (`docker-entrypoint.sh`) и в CI.
+ *
+ * Правило: сид досоздаёт недостающее и не спорит с тем, что ведётся в
+ * приложении. Прайс и насосы досоздаются построчно; справочники
+ * материализации заливаются только в пустую таблицу (`seedReference`).
+ * Строгие сверки с JSON — только в CI, на пустой базе (`SEED_STRICT=1`).
+ */
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
@@ -25,6 +35,30 @@ function load<T>(file: string): T {
         `он извлекает справочники из мастер-шаблона.`,
     )
   }
+}
+
+// ─── Режим: строгий (CI) или мягкий (старт контейнера) ────────────────────────
+
+/**
+ * Строгий режим — CI на пустой базе (`SEED_STRICT=1`): любое расхождение с
+ * JSON там — ошибка данных или ключей, и сид падает.
+ *
+ * Без флага режим мягкий. Так сид работает при каждом старте контейнера:
+ * база живая, справочники в ней ведёт технолог, и расхождение с JSON — его
+ * правки, а не поломка. Прежде сид падал и на них — норма патрубка,
+ * добавленная на экране «Шаблоны», останавливала запуск бэкенда. Мягкий режим
+ * предупреждает и не падает.
+ */
+const STRICT = process.env.SEED_STRICT === '1'
+
+/** Предупреждения мягкого режима — сводкой в конце. */
+const warnings: string[] = []
+
+/** Расхождение с ожидаемым: в строгом режиме — ошибка, в мягком — предупреждение. */
+function mismatch(message: string): void {
+  if (STRICT) throw new Error(message)
+  warnings.push(message)
+  console.warn(`  ⚠ ${message}`)
 }
 
 interface PriceSeed {
@@ -152,22 +186,53 @@ async function seedPrices() {
   console.log(`  прайс: ${count} позиций (версия 1)`)
 }
 
-// ─── Справочники весов ───────────────────────────────────────────────────────
+// ─── Справочники материализации ─────────────────────────────────────────────
+
+/**
+ * Справочник материализации заливается только в пустую таблицу.
+ *
+ * JSON — стартовое состояние. После первого запуска справочники ведёт
+ * технолог на экране «Шаблоны» (`/api/templates`): добавляет, правит и удаляет
+ * строки. Прежде сид при каждом старте досоздавал строки из JSON и сверял их
+ * число с файлом — добавленная технологом строка останавливала запуск
+ * бэкенда, удалённая возвращалась. Теперь непустой справочник сид не трогает;
+ * новые справочные данные будущих релизов доставляются миграцией.
+ *
+ * Опустевший целиком справочник сид заполнит заново: без него расчёт не
+ * соберётся.
+ *
+ * @returns сколько строк залито; `null` — справочник не пуст и не тронут
+ */
+async function seedReference<T>(
+  label: string,
+  rows: T[],
+  count: () => Promise<number>,
+  insert: (rows: T[]) => Promise<unknown>,
+): Promise<number | null> {
+  const before = await count()
+  if (before > 0) {
+    console.log(`  ${label}: ${before} строк в базе — справочник ведётся в приложении, сид его не трогает`)
+    return null
+  }
+  await insert(rows)
+  // skipDuplicates молчалив: сверяем количество, иначе потеря строк пройдёт
+  // незамеченной (так уже случилось с ПЭ ⌀140 из-за неверного ключа по dn).
+  const after = await count()
+  if (after !== rows.length) mismatch(`${label}: в JSON ${rows.length}, залито ${after} — потеря при сиде`)
+  console.log(`  ${label}: залито ${after}`)
+  return after
+}
 
 async function seedPipeWeights() {
   const grp = load<PipeWeightSeed[]>('pipe-weights-grp.json')
   const pe = load<PePipeSeed[]>('pipe-weights-pe.json')
 
-  await prisma.pipeWeight.createMany({ data: grp, skipDuplicates: true })
-  await prisma.pePipe.createMany({ data: pe, skipDuplicates: true })
-
-  // skipDuplicates молчалив: сверяем количество, иначе потеря строк пройдёт
-  // незамеченной (так уже случилось с ПЭ ⌀140 из-за неверного ключа по dn).
-  const [grpCount, peCount] = [await prisma.pipeWeight.count(), await prisma.pePipe.count()]
-  if (grpCount !== grp.length) throw new Error(`GRP-трубы: в JSON ${grp.length}, в БД ${grpCount} — потеря при сиде`)
-  if (peCount !== pe.length) throw new Error(`ПЭ-трубы: в JSON ${pe.length}, в БД ${peCount} — потеря при сиде`)
-
-  console.log(`  веса труб: GRP ${grpCount}, ПЭ ${peCount}`)
+  await seedReference('веса GRP-труб', grp, () => prisma.pipeWeight.count(), (data) =>
+    prisma.pipeWeight.createMany({ data, skipDuplicates: true }),
+  )
+  await seedReference('ПЭ-трубы', pe, () => prisma.pePipe.count(), (data) =>
+    prisma.pePipe.createMany({ data, skipDuplicates: true }),
+  )
 }
 
 // ─── Инженерные матрицы (лист «Для расчетов») ────────────────────────────────
@@ -175,25 +240,19 @@ async function seedPipeWeights() {
 async function seedEngineering() {
   const eng = load<EngineeringSeed>('engineering.json')
 
-  await prisma.engineeringMatrix.createMany({
-    data: [
-      ...eng.shell.map((c) => ({ kind: 'SHELL' as const, ...c })),
-      ...eng.ellipticBottom.map((c) => ({ kind: 'ELLIPTIC_BOTTOM' as const, ...c })),
-    ],
-    skipDuplicates: true,
-  })
-  await prisma.nozzleNorm.createMany({ data: eng.nozzles, skipDuplicates: true })
-
-  // skipDuplicates молчалив — сверяем количества (как с ПЭ-трубами).
-  const expected = eng.shell.length + eng.ellipticBottom.length
-  const [matrixCount, nozzleCount] = [
-    await prisma.engineeringMatrix.count(),
-    await prisma.nozzleNorm.count(),
-  ]
-  if (matrixCount !== expected) throw new Error(`матрицы: в JSON ${expected}, в БД ${matrixCount} — потеря при сиде`)
-  if (nozzleCount !== eng.nozzles.length) throw new Error(`нормы патрубков: в JSON ${eng.nozzles.length}, в БД ${nozzleCount}`)
-
-  console.log(`  инженерные матрицы: корпус ${eng.shell.length}, днища ${eng.ellipticBottom.length}, патрубки ${nozzleCount}`)
+  // Обе матрицы лежат в одной таблице — пустоту проверяем по каждой.
+  const matrices = [
+    { kind: 'SHELL', cells: eng.shell, label: 'матрица корпуса' },
+    { kind: 'ELLIPTIC_BOTTOM', cells: eng.ellipticBottom, label: 'матрица эллиптических днищ' },
+  ] as const
+  for (const { kind, cells, label } of matrices) {
+    await seedReference(label, cells, () => prisma.engineeringMatrix.count({ where: { kind } }), (data) =>
+      prisma.engineeringMatrix.createMany({ data: data.map((c) => ({ kind, ...c })), skipDuplicates: true }),
+    )
+  }
+  await seedReference('нормы патрубков', eng.nozzles, () => prisma.nozzleNorm.count(), (data) =>
+    prisma.nozzleNorm.createMany({ data, skipDuplicates: true }),
+  )
 }
 
 /**
@@ -203,13 +262,9 @@ async function seedEngineering() {
  */
 async function seedJointLayers() {
   const rows = load<JointLayerSeed[]>('joint-layers.json')
-
-  await prisma.jointLayerNorm.createMany({ data: rows, skipDuplicates: true })
-
-  const count = await prisma.jointLayerNorm.count()
-  if (count !== rows.length) throw new Error(`Мс на стыке: в JSON ${rows.length}, в БД ${count} — потеря при сиде`)
-
-  console.log(`  Мс на стыке: ${count} строк (Dу × PN)`)
+  await seedReference('Мс на стыке (Dу × PN)', rows, () => prisma.jointLayerNorm.count(), (data) =>
+    prisma.jointLayerNorm.createMany({ data, skipDuplicates: true }),
+  )
 }
 
 // ─── Каталог насосов (utils/pump-selection.ts) ────────────────────────────────
@@ -231,7 +286,7 @@ async function seedPumps() {
   await prisma.pump.createMany({ data: pumps, skipDuplicates: true })
 
   const count = await prisma.pump.count()
-  if (count !== pumps.length) throw new Error(`насосы: в JSON ${pumps.length}, в БД ${count} — потеря при сиде`)
+  if (count !== pumps.length) mismatch(`насосы: в JSON ${pumps.length}, в БД ${count}`)
 
   console.log(`  каталог насосов: ${count} позиций`)
   await seedPumpCurves()
@@ -292,7 +347,10 @@ async function seedPumpCurves() {
   let points = 0
   for (const c of curves) {
     const pumpId = byName.get(c.name)
-    if (pumpId == null) throw new Error(`кривая для «${c.name}»: такого насоса нет в каталоге`)
+    if (pumpId == null) {
+      mismatch(`кривая для «${c.name}»: такого насоса нет в каталоге`)
+      continue
+    }
 
     await prisma.pump.update({
       where: { id: pumpId },
@@ -311,13 +369,16 @@ async function seedPumpCurves() {
   }
 
   const total = await prisma.pumpCurvePoint.count()
-  if (total !== points) throw new Error(`кривые насосов: в JSON ${points} точек, в БД ${total} — потеря при сиде`)
+  if (total !== points) mismatch(`кривые насосов: в JSON ${points} точек, в БД ${total}`)
 
   const withoutCurve = (await prisma.pump.count()) - seeded
   console.log(`  кривые насосов: ${seeded} моделей, ${total} точек (без кривой — ${withoutCurve})`)
 }
 
 // ─── Проверки: сид обязан оставить БД пригодной для расчёта ──────────────────
+//
+// Контрольные значения — числа мастер-шаблона. На живой базе их может
+// поменять технолог или закупка: в мягком режиме расхождение — предупреждение.
 
 async function verify() {
   const errors: string[] = []
@@ -342,7 +403,7 @@ async function verify() {
   // Мс при PN 4 — то самое значение, которое берут оба калькулятора.
   // В эталонном листе КНС для DN3000 ячейка I20 показывает ровно 112 кг.
   const joint = await prisma.jointLayerNorm.findUnique({ where: { d_pn: { d: 3000, pn: 4 } } })
-  if (joint?.massKg !== 112) errors.push(`Мс(DN3000, PN4) = ${joint?.massKg ?? '—'}, ожидалось 112 кг`)
+  if (joint?.massKg !== 112) errors.push(`Мс(DN3000, PN4) = ${joint?.massKg ?? '—'}, в мастер-шаблоне 112 кг`)
   else console.log(`  контроль Мс DN3000 при PN4 = ${joint.massKg} кг ✓`)
 
   // Контроль паспортной кривой: подбор идёт по ней, а не по диапазонам, и
@@ -377,10 +438,12 @@ async function verify() {
   const pumpCount = await prisma.pump.count()
   if (pumpCount !== 61) errors.push(`каталог насосов: ожидалось 61 позиция, в БД ${pumpCount}`)
 
-  if (errors.length) {
+  if (errors.length === 0) return
+  if (STRICT) {
     errors.forEach((e) => console.error(`  ✗ ${e}`))
     throw new Error('Сид завершился, но проверки не пройдены')
   }
+  for (const e of errors) mismatch(e)
 }
 
 async function main() {
@@ -392,6 +455,10 @@ async function main() {
   await seedJointLayers()
   await seedPumps()
   await verify()
+
+  if (warnings.length) {
+    console.warn(`\nСид завершён с предупреждениями (${warnings.length}) — запуск продолжается.`)
+  }
 
   console.log('\nГотово. Заведённые учётные записи:')
   USERS.forEach((u) => console.log(`  ${u.email.padEnd(20)} / ${u.password}  [${u.role}]`))
