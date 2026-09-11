@@ -10,6 +10,7 @@ import { parseNnSheet } from '../utils/nn-sheet'
 import { buildPriceWorkbook } from '../utils/nn-export'
 import { findPriceIssues } from '../utils/price-issues'
 import { applyImport, importSummary, loadExisting, planImport } from '../utils/price-import'
+import { applyPriceEdit } from '../utils/price-edit'
 import ExcelJS from 'exceljs'
 import multer from 'multer'
 import type { Response, NextFunction } from 'express'
@@ -82,35 +83,28 @@ const patchSchema = z.object({
   supplier: z.string().optional(),
 })
 
-// PATCH /api/prices/:id
+/**
+ * PATCH /api/prices/:id — правка цены и поставщика с экрана прайса.
+ *
+ * Смена цены пишет PriceHistory и создаёт новую версию прайса — одной
+ * транзакцией (utils/price-edit.ts): расчёты на прежней версии увидят, что
+ * цены под ними сдвинулись. Правка одного поставщика версии не создаёт.
+ */
 pricesRouter.patch('/:id', requireRole('ADMIN', 'BUYER'), validate(patchSchema), async (req, res: Response, next: NextFunction) => {
   try {
-    const id      = String(req.params.id)
-    const current = await prisma.priceItem.findUnique({ where: { id } })
-    if (!current) { res.status(404).json({ message: 'Позиция не найдена' }); return }
     const auth = req as AuthRequest
-    const updated = await prisma.priceItem.update({ where: { id }, data: req.body })
+    const result = await applyPriceEdit(prisma, String(req.params.id), req.body, auth.userId ?? null)
+    if (!result) { res.status(404).json({ message: 'Позиция не найдена' }); return }
+    const { before, item, version } = result
 
-    // PriceHistory пишем только при фактическом изменении цены: правка одного
-    // лишь поставщика не создаёт ценовое событие.
-    if (req.body.priceRub != null && req.body.priceRub !== current.priceRub) {
-      await prisma.priceHistory.create({
-        data: {
-          priceItemId: current.id,
-          oldPrice: current.priceRub,
-          newPrice: req.body.priceRub,
-          changedById: auth.userId,
-        },
-      })
-    }
-
-    await audit(auth.userId, 'prices.update', 'PriceItem', current.id, {
-      name: current.name,
-      oldPrice: current.priceRub,
-      newPrice: req.body.priceRub ?? current.priceRub,
+    await audit(auth.userId, 'prices.update', 'PriceItem', before.id, {
+      name: before.name,
+      oldPrice: before.priceRub,
+      newPrice: item.priceRub,
+      ...(version != null ? { priceListVersion: version } : {}),
     })
 
-    res.json(updated)
+    res.json(item)
   } catch (e) { next(e) }
 })
 
@@ -125,7 +119,8 @@ pricesRouter.patch('/:id', requireRole('ADMIN', 'BUYER'), validate(patchSchema),
  * наименование, ЕИ) в каноническом виде, позиции без строки в файле не
  * удаляются, пустая цена в файле цену базы не стирает. Каждое изменение цены
  * пишется в PriceHistory; если цены поменялись, создаётся новая версия
- * прайса: «прайс версионируется целиком» (ТЗ §3).
+ * прайса: «прайс версионируется целиком» (ТЗ §3). Версию создаёт и ручная
+ * правка цены (PATCH выше).
  */
 pricesRouter.post(
   '/import',

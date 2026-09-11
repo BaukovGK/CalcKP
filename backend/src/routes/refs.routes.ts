@@ -30,21 +30,6 @@ refsRouter.get('/nomenclature', async (_req, res, next) => {
 })
 
 /**
- * GET /api/refs/price-version — активная версия прайса (ТЗ §3).
- *
- * «Прайс версионируется целиком… активная версия фиксируется в snapshot
- * расчёта». Активная = MAX(version); импорт прайса создаёт новую
- * (см. `prices.routes.ts`, POST /import).
- *
- * Нужен калькулятору: до этого фронт держал `priceListVersion = ref(1)`
- * захардкоженной константой, поэтому топбар всегда показывал «НН v1», какой бы
- * прайс ни был импортирован. Снапшот при этом писал настоящую версию — и
- * расходился с тем, что видел инженер.
- *
- * Пустая таблица (БД засеяна до появления версий) → version 1: то же значение,
- * что подставляет снапшот (`estimates.routes.ts`, createSnapshot).
- */
-/**
  * GET /api/refs/templates — действующие шаблоны изделий и опубликованные узлы
  * каталога (редактор шаблонов, этап 2; Библиотека §6.2).
  *
@@ -74,16 +59,33 @@ refsRouter.get('/templates', async (_req, res, next) => {
   }
 })
 
+/**
+ * GET /api/refs/price-version — активная версия прайса (ТЗ §3).
+ *
+ * «Прайс версионируется целиком… активная версия фиксируется в snapshot
+ * расчёта». Активная = MAX(version); новую создают импорт прайса и ручная
+ * правка цены (`prices.routes.ts`, utils/price-version.ts). `note` — чем
+ * версия создана: импорт какого файла или правка какой позиции.
+ *
+ * Нужен калькулятору: до этого фронт держал `priceListVersion = ref(1)`
+ * захардкоженной константой, поэтому топбар всегда показывал «НН v1», какой бы
+ * прайс ни был импортирован. Снапшот при этом писал настоящую версию — и
+ * расходился с тем, что видел инженер.
+ *
+ * Пустая таблица (БД засеяна до появления версий) → version 1: то же значение,
+ * что подставляет снапшот (`estimates.routes.ts`, createSnapshot).
+ */
 refsRouter.get('/price-version', async (_req, res, next) => {
   try {
     const active = await prisma.priceListVersion.findFirst({
       orderBy: { version: 'desc' },
-      select: { version: true, label: true, createdAt: true },
+      select: { version: true, label: true, note: true, createdAt: true },
     })
 
     res.json({
       version: active?.version ?? 1,
       label: active?.label ?? 'НН v1',
+      note: active?.note ?? null,
       createdAt: active?.createdAt ?? null,
     })
   } catch (e) {

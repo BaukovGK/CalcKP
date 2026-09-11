@@ -1021,6 +1021,58 @@ describe('стор calcTree: пересчёт по новой версии пр�
     expect(store.priceOutdated).toBe(false)
     expect(store.repricePreview).toBeNull()
   })
+
+  /**
+   * План_устранения, 1.2: версию прайса поднимает и правка одной цены. Прайс
+   * v5 отличается от v2 позицией, которой в расчёте нет, — пересчитывать нечего.
+   */
+  const SAME_PRICES = {
+    Металлопрокат: [
+      { name: 'Полоса', unit: 'м', priceRub: 100 },
+      { name: 'Лист', unit: 'шт', priceRub: 200 },
+      { name: 'Уголок', unit: 'м', priceRub: 50 },
+      { name: 'Швеллер', unit: 'м', priceRub: 900 },
+    ],
+  }
+
+  it('версия прайса выросла, а цены строк расчёта те же — пересчёт не предлагается', async () => {
+    estimatesGet.mockResolvedValue(oldEstimate())
+    nomenclature.mockResolvedValue(SAME_PRICES)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    expect(store.priceOutdated).toBe(false)
+    expect(store.repricePreview).toBeNull()
+  })
+
+  it('такой расчёт при сохранении переходит на действующую версию прайса', async () => {
+    const est = oldEstimate()
+    estimatesGet.mockResolvedValue(est)
+    patchSurvey.mockResolvedValue(est)
+    nomenclature.mockResolvedValue(SAME_PRICES)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: { priceListVersion: number } }]
+    expect(body.tree.priceListVersion).toBe(5)
+    expect(store.tree!.priceListVersion).toBe(5)
+  })
+
+  it('цены разошлись — сохранение версию дерева не трогает: выпуск КП спросит, по какой', async () => {
+    const est = oldEstimate()
+    estimatesGet.mockResolvedValue(est)
+    patchSurvey.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: { priceListVersion: number } }]
+    expect(body.tree.priceListVersion).toBe(2)
+    expect(store.priceOutdated).toBe(true)
+  })
 })
 
 describe('стор calcTree: шаблон технолога и узлы каталога', () => {

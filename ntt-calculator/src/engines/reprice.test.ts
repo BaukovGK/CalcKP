@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasPriceDelta, isContractualRow, priceMarkAfter, repriceTree, type PriceLookup } from './reprice'
+import { hasPriceDelta, hasPriceDrift, isContractualRow, priceMarkAfter, repriceTree, type PriceLookup } from './reprice'
 import type { CalcRowNode, CalcTree } from './template-kns'
 
 function row(over: Partial<CalcRowNode>): CalcRowNode {
@@ -124,5 +124,34 @@ describe('отметка «цена была» при пересборке', () 
   it('у ФОТ-спутника и договорной трубы отметок не бывает', () => {
     expect(priceMarkAfter(row({ kind: 'ФОТ', priceCatalog: 1207.8 }), 1250)).toBeUndefined()
     expect(priceMarkAfter(row({ priceBinding: 'servicePipePrice', priceCatalog: null }), 5)).toBeUndefined()
+  })
+})
+
+// План_устранения, 1.2: версию прайса поднимает и правка одной цены — к
+// пересчёту зовёт расхождение цен, а не номер версии.
+describe('пересчёт что-то изменит', () => {
+  const summary = { changed: 0, changedUnderManual: 0, notFound: 0, fotRate: null }
+
+  it('сменится цена строки или ставка ФОТ — да', () => {
+    expect(hasPriceDrift({ ...summary, changed: 1 })).toBe(true)
+    expect(hasPriceDrift({ ...summary, changed: 1, changedUnderManual: 1 })).toBe(true)
+    expect(hasPriceDrift({ ...summary, fotRate: { from: 1207.8, to: 1250 } })).toBe(true)
+  })
+
+  it('позиций нет в прайсе, а остальное совпадает — нет: их цена не изменится', () => {
+    expect(hasPriceDrift(summary)).toBe(false)
+    expect(hasPriceDrift({ ...summary, notFound: 3 })).toBe(false)
+  })
+
+  it('прайс с новыми позициями, но прежними ценами строк — нет', () => {
+    const tree = {
+      priceListVersion: 2,
+      sections: [{ id: 's', code: '1', title: 'Корпус', enabled: true, components: [
+        { id: 'c', title: 'Узел', enabled: true, rows: [row({ id: 'a', name: 'Лист', priceCatalog: 200 })] },
+      ] }],
+    } as unknown as CalcTree
+    const prices: PriceLookup = (_c, name) => ({ Лист: 200, Швеллер: 900 } as Record<string, number>)[name] ?? null
+
+    expect(hasPriceDrift(repriceTree(tree, prices, 3).summary)).toBe(false)
   })
 })

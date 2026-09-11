@@ -33,7 +33,7 @@ import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
 import { hasBasketIn, hasGrinderIn, PIPE_MATERIALS, type Grinder, type PipeMaterial } from '@/types/survey'
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
-import { hasPriceDelta, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
+import { hasPriceDelta, hasPriceDrift, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
 
 /**
  * Стор дерева расчёта (§9, Библиотека §6.3).
@@ -103,6 +103,12 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
    * клавиши незачем — они меняются сменой версии прайса, а не вводом в ОЛ.
    */
   let ctxCache: MaterializeContext | null = null
+  /**
+   * Счётчик загрузок контекста. Сам `ctxCache` не реактивен, и вычисления,
+   * которые читают его цены (priceDrift), зависят от этого счётчика: иначе
+   * свежий прайс при тех же дереве и номере версии их бы не пересчитал.
+   */
+  const ctxLoads = ref(0)
 
   async function ensureContext(opts: { fresh?: boolean } = {}): Promise<MaterializeContext> {
     if (ctxCache && !opts.fresh) return ctxCache
@@ -114,6 +120,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     rates.value = loaded.rates
     templates.value = loaded.templates
     ctxCache = loaded.ctx
+    ctxLoads.value++
     return ctxCache
   }
 
@@ -769,23 +776,38 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   // ── Версия прайса (Механика §5.2) ─────────────────────────────────────────
 
   /**
-   * Цены строк посчитаны по прайсу старше действующего.
+   * Дерево посчитано по прайсу старше действующего — что изменит пересчёт:
+   * новое дерево и сводка. `null` — дерево на действующей версии.
+   */
+  const priceDrift = computed(() => {
+    void ctxLoads.value
+    const ctx = ctxCache
+    if (!tree.value || !ctx || (tree.value.priceListVersion ?? 1) >= priceListVersion.value) return null
+    return repriceTree(tree.value, ctx.priceOf, priceListVersion.value)
+  })
+
+  /**
+   * Цены строк расходятся с действующим прайсом.
    *
    * Материализация фиксирует цены вместе с версией прайса, и после импорта
    * нового прайса старый расчёт продолжал показывать прежние — ничего об этом
    * не говоря. Теперь экран предлагает пересчёт, а выпуск КП спрашивает, по
    * какой версии его выпускать.
+   *
+   * Решает фактическое расхождение, а не номер версии: версию поднимает и
+   * правка одной цены (План_устранения, 1.2), и расчёт, где этой позиции
+   * нет, пересчитывать незачем.
    */
-  const priceOutdated = computed(() => !!tree.value && (tree.value.priceListVersion ?? 1) < priceListVersion.value)
+  const priceOutdated = computed(() => !!priceDrift.value && hasPriceDrift(priceDrift.value.summary))
 
   /**
    * Что даст пересчёт по действующему прайсу — до того, как его сделать:
    * сколько строк сменит цену и как сдвинутся себестоимость и цена продажи.
    */
   const repricePreview = computed(() => {
-    const ctx = ctxCache
-    if (!priceOutdated.value || !tree.value || !ctx) return null
-    const { tree: next, summary } = repriceTree(tree.value, ctx.priceOf, priceListVersion.value)
+    const drift = priceDrift.value
+    if (!drift || !hasPriceDrift(drift.summary)) return null
+    const { tree: next, summary } = drift
     const after = computeEconomics(
       aggregateRows(flattenRows(next), { sectionEnabled: sectionEnabledFor(next), tirage: tirage.value }),
       rates.value,
@@ -1189,8 +1211,19 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     return enqueue(saveNow)
   }
 
+  /**
+   * Прайс обновился, а цены строк с ним совпадают — дерево переходит на
+   * действующую версию: пересчитывать нечего, а подпись «прайс vN» в КП и
+   * снапшоте не должна отставать от прайса, по которому цены верны.
+   */
+  function catchUpPriceVersion() {
+    const drift = priceDrift.value
+    if (tree.value && drift && !hasPriceDrift(drift.summary)) tree.value.priceListVersion = priceListVersion.value
+  }
+
   async function saveNow() {
     if (!estimate.value || !tree.value) return
+    catchUpPriceVersion()
     const current = estimate.value
     let updated: EstimateDetail
     try {

@@ -471,13 +471,20 @@ async function load(opts: { silent?: boolean } = {}) {
   }
 }
 
-async function loadVersion() {
+/** Подпись действующей версии прайса; её номер — для тоста после правки цены. */
+async function loadVersion(): Promise<number | null> {
   try {
     const v = await refsApi.priceVersion()
     versionLabel.value = `прайс v${v.version}${v.label ? ' · ' + v.label : ''}`
-    versionTitle.value = v.createdAt ? `Версия прайса от ${new Date(v.createdAt).toLocaleString('ru-RU')}` : ''
+    // Когда и чем создана версия: импорт файла или правка позиции.
+    versionTitle.value = [
+      v.createdAt ? `Версия прайса от ${new Date(v.createdAt).toLocaleString('ru-RU')}` : '',
+      v.note ?? '',
+    ].filter(Boolean).join(' — ')
+    return v.version
   } catch {
     // Подпись версии — справочно; без неё экран работает.
+    return null
   }
 }
 
@@ -530,6 +537,7 @@ async function saveEdit(id: string) {
     return
   }
   saving.value = true
+  const before = items.value.find((i) => i.id === id)?.priceRub ?? null
   try {
     const updated = await pricesApi.patch(id, {
       priceRub: price,
@@ -541,6 +549,15 @@ async function saveEdit(id: string) {
     // Замечания к ценам (лист против м², цена без скидки) считает сервер —
     // перечитываем тихо, без экрана загрузки.
     void load({ silent: true })
+    // Смена цены — новая версия прайса (План_устранения, 1.2): расчёты, где
+    // эта позиция стоит, предложат пересчитать.
+    if (price !== undefined && price !== before) {
+      const version = await loadVersion()
+      toast(
+        version != null ? `Цена сохранена · прайс v${version}: расчёты с этой позицией предложат пересчитать` : 'Цена сохранена',
+        'success',
+      )
+    }
   } catch (err) {
     toast(errorMessage(err, 'Не удалось сохранить цену'), 'error')
   } finally {

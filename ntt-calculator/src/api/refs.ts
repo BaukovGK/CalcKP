@@ -85,6 +85,8 @@ export interface EngineeringRefs {
 export interface PriceVersionInfo {
   version: number
   label: string
+  /** Чем создана версия: импорт какого файла или правка какой позиции. */
+  note?: string | null
   createdAt: string | null
 }
 

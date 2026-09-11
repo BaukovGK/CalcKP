@@ -1,4 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
+import { logger } from './logger'
+import { createPriceVersion, withPriceVersionRetry } from './price-version'
 import { lookupKeyOf, type NnDuplicate, type NnParseResult, type NnRow } from './nn-sheet'
 
 /**
@@ -146,7 +148,9 @@ export function planImport(parsed: NnParseResult, existing: ExistingPrice[]): Im
  * половина с новыми хуже любого из двух состояний.
  *
  * Версия прайса создаётся, только если что-то поменялось: пустой импорт не
- * должен плодить «новые» версии, на которые потом сошлются снапшоты.
+ * должен плодить «новые» версии, на которые потом сошлются снапшоты. Номер
+ * версии заняла параллельная запись (правка цены) — импорт повторяется
+ * (utils/price-version.ts).
  *
  * @returns номер новой версии прайса или `null`, если менять было нечего
  */
@@ -159,38 +163,37 @@ export async function applyImport(
   if (plan.writes.length === 0) return null
   const byId = new Map(existing.map((p) => [p.id, p]))
 
-  return prisma.$transaction(
-    async (tx) => {
-      for (const w of plan.writes) {
-        const prev = w.existingId ? byId.get(w.existingId) ?? null : null
-        const data = importedFields(w.row, prev)
-        if (!w.existingId) {
-          await tx.priceItem.create({ data })
-          continue
-        }
-        await tx.priceItem.update({ where: { id: w.existingId }, data })
-        // История — только при фактической смене цены: иначе каждый импорт
-        // плодил бы сотни пустых событий.
-        if (w.priceChanged) {
-          await tx.priceHistory.create({
-            data: { priceItemId: w.existingId, oldPrice: w.oldPrice, newPrice: data.priceRub, changedById: opts.userId },
-          })
-        }
-      }
+  return withPriceVersionRetry(
+    () =>
+      prisma.$transaction(
+        async (tx) => {
+          for (const w of plan.writes) {
+            const prev = w.existingId ? byId.get(w.existingId) ?? null : null
+            const data = importedFields(w.row, prev)
+            if (!w.existingId) {
+              await tx.priceItem.create({ data })
+              continue
+            }
+            await tx.priceItem.update({ where: { id: w.existingId }, data })
+            // История — только при фактической смене цены: иначе каждый импорт
+            // плодил бы сотни пустых событий.
+            if (w.priceChanged) {
+              await tx.priceHistory.create({
+                data: { priceItemId: w.existingId, oldPrice: w.oldPrice, newPrice: data.priceRub, changedById: opts.userId },
+              })
+            }
+          }
 
-      if (plan.created.length === 0 && plan.changed.length === 0) return null
+          if (plan.created.length === 0 && plan.changed.length === 0) return null
 
-      // Новая версия прайса: снапшоты расчётов ссылаются на неё (ТЗ §3).
-      const last = await tx.priceListVersion.findFirst({ orderBy: { version: 'desc' } })
-      const version = (last?.version ?? 0) + 1
-      await tx.priceListVersion.create({
-        data: { version, label: opts.label || `НН v${version}`, note: opts.note, createdById: opts.userId },
-      })
-      return version
-    },
-    // ~1000 строк последовательными запросами — дольше пяти секунд по
-    // умолчанию у интерактивной транзакции Prisma.
-    { timeout: 120_000, maxWait: 10_000 },
+          // Новая версия прайса: снапшоты расчётов ссылаются на неё (ТЗ §3).
+          return createPriceVersion(tx, { label: opts.label, note: opts.note, userId: opts.userId })
+        },
+        // ~1000 строк последовательными запросами — дольше пяти секунд по
+        // умолчанию у интерактивной транзакции Prisma.
+        { timeout: 120_000, maxWait: 10_000 },
+      ),
+    (attempt) => logger.warn('Гонка за номер версии прайса при импорте, повтор', { attempt }),
   )
 }
 
