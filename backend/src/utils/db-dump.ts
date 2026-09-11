@@ -37,6 +37,12 @@ export const BACKUP_DIR = process.env.BACKUP_DIR ?? '/backups'
 /** Миграции Prisma, которые знает эта версия программы (в образе — /app/prisma/migrations). */
 export const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR ?? path.resolve(process.cwd(), 'prisma/migrations')
 
+/**
+ * Сколько последних дампов КАЖДОГО вида хранить (План_устранения 3.4) —
+ * тот же `BACKUP_KEEP`, что у скрипта `scripts/db-backup.sh`.
+ */
+export const BACKUP_KEEP = Number(process.env.BACKUP_KEEP ?? 30)
+
 /** Максимальный размер загружаемого дампа, байт. */
 export const MAX_DUMP_BYTES = 200 * 1024 * 1024
 
@@ -123,7 +129,7 @@ export async function listDumps(): Promise<DumpInfo[]> {
         name,
         sizeBytes: s.size,
         createdAt: s.mtime,
-        label: name.replace(/^ntt-\d{8}-\d{6}Z-/, '').replace(/\.dump$/, ''),
+        label: labelOf(name),
       }
     }),
   )
@@ -174,7 +180,36 @@ export async function createDump(label = 'manual', now = new Date()): Promise<Du
   }
 
   const s = await stat(file)
+  // Дампы из админки подчиняются тем же правилам хранения, что и скрипт.
+  await rotateDumps(label)
   return { name, sizeBytes: s.size, createdAt: s.mtime, label }
+}
+
+/** Метка дампа из имени: manual, pre-migrate, pre-restore, uploaded. */
+export function labelOf(name: string): string {
+  return name.replace(/^ntt-\d{8}-\d{6}Z-/, '').replace(/\.dump$/, '')
+}
+
+/**
+ * Какие дампы метки `label` лишние: хранится `keep` последних — по имени,
+ * в нём время снятия. Ротация по видам (План_устранения 3.4): прежде
+ * скрипт держал 30 последних файлов всех видов разом, и серия ручных дампов
+ * вытесняла предмиграционные — единственную точку отката миграции.
+ */
+export function staleDumps(names: readonly string[], label: string, keep: number): string[] {
+  if (!(keep > 0)) return []
+  return names
+    .filter((n) => isValidDumpName(n) && labelOf(n) === label)
+    .sort()
+    .reverse()
+    .slice(keep)
+}
+
+/** Удалить лишние дампы метки `label`. Возвращает удалённые имена. */
+export async function rotateDumps(label: string, keep = BACKUP_KEEP): Promise<string[]> {
+  const stale = staleDumps(await readdir(BACKUP_DIR).catch(() => []), label, keep)
+  for (const name of stale) await unlink(path.join(BACKUP_DIR, name)).catch(() => {})
+  return stale
 }
 
 export async function deleteDump(name: string): Promise<void> {
@@ -393,5 +428,6 @@ export async function acceptUpload(tmpFile: string, now = new Date()): Promise<D
   await rename(tmpFile, dest)
 
   const s = await stat(dest)
+  await rotateDumps('uploaded')
   return { name, sizeBytes: s.size, createdAt: s.mtime, label: 'uploaded' }
 }
