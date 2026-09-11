@@ -13,6 +13,7 @@ import { mount } from '@vue/test-utils'
 import type { Component } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SYNC_DELAY_MS } from '@/composables/useSurveySync'
+import { CalcDeferredError } from '@/stores/calc-errors'
 
 const applySurvey = vi.fn()
 /** Ручные правки, которые пересборка не смогла перенести (стор отдаёт массив). */
@@ -131,6 +132,21 @@ describe.each(VIEWS)('ОЛ $label: автосохранение', ({ view, key, 
     const [id, payload] = applySurvey.mock.calls[0] as [string, Record<string, Record<string, unknown>>]
     expect(id).toBe('e1')
     expect(payload[key]!.dn).toBe(2500)
+  })
+
+  // План_устранения, 1.4: справочники или шаблоны не загрузились — лист
+  // записан, расчёт нет, и статус говорит об этом, а не «пересчитан».
+  it('расчёт отложен — статус говорит, что он пересоберётся позже', async () => {
+    applySurvey.mockRejectedValueOnce(new CalcDeferredError('шаблоны изделий не загрузились — расчёт пересоберётся позже'))
+    const wrapper = mountView()
+    const label = wrapper.findAll('label.fld').find((l) => l.text().startsWith(dnLabel))!
+    await label.find('select').setValue('2500')
+    await vi.advanceTimersByTimeAsync(SYNC_DELAY_MS + 10)
+
+    const status = wrapper.find('.ol-draft')
+    expect(status.text()).toContain('шаблоны изделий не загрузились — расчёт пересоберётся позже')
+    expect(status.text()).not.toContain('расчёт пересчитан')
+    expect(status.classes()).toContain('ol-draft--deferred')
   })
 
   // План_устранения, 1.1: список непереносимых правок — на экране расчёта,

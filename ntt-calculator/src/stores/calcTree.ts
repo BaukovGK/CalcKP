@@ -26,8 +26,10 @@ import {
   FALLBACK_RATES,
   loadMaterializeContext,
   NO_TEMPLATES,
+  TemplatesUnavailableError,
   type CatalogItem,
 } from '@/utils/materialize-context'
+import { CalcDeferredError } from './calc-errors'
 import type { PriceBinding, RowResult } from '@/engines/types'
 import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
@@ -288,7 +290,22 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   }
 
   async function applySurveyNow(id: string, payload: Record<string, unknown>): Promise<number | null> {
-    const ctx = await ensureContext()
+    let ctx: MaterializeContext
+    try {
+      ctx = await ensureContext()
+    } catch (e) {
+      // Справочники или шаблоны не загрузились — дерево не строится:
+      // собранное встроенным шаблоном вместо действующего, оно ушло бы в базу
+      // молча. Сохраняется только ОЛ; ревизия ОЛ растёт, ревизия дерева —
+      // нет, и расчёт пересоберётся при следующей правке или открытии
+      // (План_устранения, 1.4). Контекст не закеширован — следующая попытка
+      // загрузит его заново.
+      const updated = await estimatesApi.patchSurvey(id, payload)
+      if (estimate.value?.id === id) estimate.value = mergeEstimate(estimate.value, updated)
+      throw new CalcDeferredError(
+        `${e instanceof TemplatesUnavailableError ? 'шаблоны изделий' : 'справочники'} не загрузились — расчёт пересоберётся позже`,
+      )
+    }
 
     // Первый пересчёт в сессии ОЛ: поднимаем расчёт с сервера — нужны его
     // ручные правки, иначе перенести было бы нечего.

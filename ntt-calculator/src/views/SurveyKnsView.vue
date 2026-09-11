@@ -564,6 +564,7 @@ const syncLabel = computed(() => {
     case 'saving': return 'сохраняем и пересчитываем…'
     case 'invalid': return 'не сохранено: исправьте поля, выделенные красным'
     case 'saved': return sync.savedLabel()
+    case 'deferred': return sync.savedLabel()
     case 'error': return `не сохранено: ${sync.error.value ?? 'ошибка'}`
     default: return 'сохранено · расчёт актуален'
   }
@@ -919,6 +920,8 @@ async function createEstimate() {
    сохранение — приглушённо, оно штатное. */
 .ol-draft--saving, .ol-draft--pending { color: var(--muted); }
 .ol-draft--error, .ol-draft--invalid { color: var(--acc); }
+/* ОЛ сохранён, расчёт отложен: справочники или шаблоны не загрузились */
+.ol-draft--deferred { color: var(--amber); }
 
 .ol-body { flex: 1; display: flex; min-height: 0; }
 

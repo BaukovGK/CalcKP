@@ -1,12 +1,17 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useCalcTreeStore } from '@/stores/calcTree'
+import { CalcDeferredError } from '@/stores/calc-errors'
 import { hasInvalidNumericField } from '@/utils/numeric-input'
 
 /**
  * Где сейчас правка ОЛ: ждёт паузы в вводе, уходит на сервер, сохранена, упала
  * или ждёт исправления числового поля, которое не разобралось.
  */
-export type SyncStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'invalid'
+/**
+ * `deferred` — ОЛ сохранён, а расчёт по нему нет: справочники или шаблоны
+ * не загрузились (stores/calc-errors.ts). Пересчитается при следующей правке.
+ */
+export type SyncStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'deferred' | 'error' | 'invalid'
 
 /**
  * Пауза после последней правки, мс. Меньше — запрос на каждую букву в поле
@@ -85,6 +90,15 @@ export function useSurveySync(opts: {
   /** Подпись последней сохранённой нагрузки; `null` — ещё не сравнивали. */
   let lastSaved: string | null = null
 
+  /** Почему последнее сохранение записало лист без расчёта; `null` — с расчётом. */
+  const deferredReason = ref<string | null>(null)
+
+  /** Статус покоя: после сохранения — «сохранено» или «расчёт отложен». */
+  function restingStatus(): SyncStatus {
+    if (!savedAt.value) return 'idle'
+    return deferredReason.value ? 'deferred' : 'saved'
+  }
+
   /**
    * Подпись сохранённого на момент открытия — по тем же ключам, что шлёт ОЛ:
    * в surveyData есть и дерево, и итоги, к правкам ОЛ они не относятся.
@@ -109,7 +123,7 @@ export function useSurveySync(opts: {
     }
     const payload = opts.payload()
     if (isUnchanged(payload)) {
-      if (status.value === 'pending') status.value = savedAt.value ? 'saved' : 'idle'
+      if (status.value === 'pending') status.value = restingStatus()
       return
     }
     // Поле с неразобранным числом — ждём исправления: исправление изменит
@@ -128,8 +142,19 @@ export function useSurveySync(opts: {
       lastSaved = stableStringify(payload)
       savedAt.value = new Date()
       error.value = null
+      deferredReason.value = null
       status.value = 'saved'
     } catch (e) {
+      if (e instanceof CalcDeferredError) {
+        // Лист записан, расчёт — нет: повторять ту же нагрузку незачем, он
+        // пересоберётся со следующей правкой или при открытии расчёта.
+        lastSaved = stableStringify(payload)
+        savedAt.value = new Date()
+        error.value = e.message
+        deferredReason.value = e.message
+        status.value = 'deferred'
+        return
+      }
       error.value = e instanceof Error ? e.message : 'Не удалось сохранить опросный лист'
       status.value = 'error'
     } finally {
@@ -152,7 +177,7 @@ export function useSurveySync(opts: {
           clearTimeout(timer)
           timer = null
         }
-        if (status.value === 'pending') status.value = savedAt.value ? 'saved' : 'idle'
+        if (status.value === 'pending') status.value = restingStatus()
         return
       }
       status.value = 'pending'
@@ -180,9 +205,13 @@ export function useSurveySync(opts: {
    */
   const lostEdits = computed(() => store.lostEdits.length)
 
-  /** Статус «сохранено» — время и предупреждение о непереносимых правках. */
+  /**
+   * Статус «сохранено» — время и предупреждение о непереносимых правках; у
+   * отложенного расчёта — почему он не пересчитан.
+   */
   function savedLabel(): string {
     const at = savedAt.value?.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) ?? ''
+    if (status.value === 'deferred') return `сохранено ${at} · ${deferredReason.value ?? 'расчёт пересоберётся позже'}`
     const lost = lostEdits.value
     return `сохранено ${at} · расчёт пересчитан` + (lost ? ` · не перенесено ручных правок: ${lost} — список в расчёте` : '')
   }

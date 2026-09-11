@@ -19,6 +19,7 @@ import { DEFAULT_MARKUP } from '@/engines/economics'
 import { BUILTIN_TEMPLATES } from '@/engines/code-nodes'
 import { BUILTIN_REVISIONS, builtinRevision } from '@/engines/builtin-revisions'
 import type { CatalogNode } from '@/engines/node-def'
+import { CalcDeferredError } from './calc-errors'
 
 const estimatesGet = vi.fn()
 const priceVersion = vi.fn()
@@ -1389,14 +1390,38 @@ describe('стор calcTree: шаблон технолога и узлы кат�
     expect(store.builtinChanges).toEqual([])
   })
 
-  it('сервер без шаблонов — расчёт собирается встроенным', async () => {
-    templates.mockRejectedValue(new Error('404'))
+  it('сервер ответил, что своих шаблонов нет, — расчёт собирается встроенным', async () => {
+    templates.mockResolvedValue({ products: {}, nodes: [] })
     const est = freshEstimate()
     estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
     echoPatch(est)
     const store = useCalcTreeStore()
     await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
     expect(store.tree!.templateVersion).toBe(0)
+    expect(store.tree!.sections).toHaveLength(7)
+  })
+
+  // План_устранения, 1.4: сбой запроса — не «своих шаблонов нет». Прежде
+  // изделие молча собиралось встроенным шаблоном, и автосохранение ОЛ
+  // записывало такое дерево в базу.
+  it('шаблоны не загрузились — дерево не строится и не сохраняется, ОЛ сохраняется', async () => {
+    templates.mockRejectedValueOnce(new Error('Network Error'))
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+
+    const first = store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    await expect(first).rejects.toBeInstanceOf(CalcDeferredError)
+    await expect(first).rejects.toThrow('шаблоны изделий не загрузились — расчёт пересоберётся позже')
+    const [, body] = patchSurvey.mock.calls[0] as [string, Record<string, unknown>]
+    expect(body).not.toHaveProperty('tree')
+    expect(body).not.toHaveProperty('treeSurveyRev')
+    expect(body.surveyRev).toBe(2)
+    expect(store.tree).toBeNull()
+
+    // Сбой не закеширован: следующая правка загрузит шаблоны и соберёт расчёт.
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 3 })
     expect(store.tree!.sections).toHaveLength(7)
   })
 })

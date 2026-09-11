@@ -105,6 +105,8 @@ defineExpose({ formEl })
 .ol-draft { font-size: 13.2px; color: var(--faint); }
 .ol-draft--saving, .ol-draft--pending { color: var(--muted); }
 .ol-draft--error, .ol-draft--invalid { color: var(--acc); }
+/* ОЛ сохранён, расчёт отложен: справочники или шаблоны не загрузились */
+.ol-draft--deferred { color: var(--amber); }
 
 .ol-body { flex: 1; display: flex; min-height: 0; }
 

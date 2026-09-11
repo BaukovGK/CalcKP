@@ -143,10 +143,26 @@ export function buildMaterializeContext(refs: RefsData): LoadedContext {
 }
 
 /**
+ * Шаблоны изделий не загрузились (План_устранения, 1.4).
+ *
+ * Прежде сбой запроса превращался в «своих шаблонов нет», и изделие молча
+ * собиралось встроенным шаблоном вместо действующего, а автосохранение ОЛ
+ * записывало такое дерево в базу. Встроенный шаблон — только когда сервер
+ * ответил, что своих шаблонов нет.
+ */
+export class TemplatesUnavailableError extends Error {
+  constructor(readonly reason: unknown) {
+    super('Шаблоны изделий не загрузились — обновите страницу позже')
+    this.name = 'TemplatesUnavailableError'
+  }
+}
+
+/**
  * Загружает справочники и собирает контекст.
  *
- * Шаблоны читаются мягко: сервер без редактора шаблонов (или сбой этого
- * запроса) не должен ломать расчёт — изделие соберётся встроенным шаблоном.
+ * Любой сбой — и справочников, и шаблонов — отказ: собранный наполовину
+ * контекст дал бы расчёт не по тем данным. Сбой шаблонов —
+ * {@link TemplatesUnavailableError}.
  */
 export async function loadMaterializeContext(): Promise<LoadedContext> {
   const [prices, weights, engineering, priceVersion, templates] = await Promise.all([
@@ -154,7 +170,9 @@ export async function loadMaterializeContext(): Promise<LoadedContext> {
     refsApi.pipeWeights(),
     refsApi.engineering(),
     refsApi.priceVersion(),
-    refsApi.templates().catch(() => NO_TEMPLATES),
+    refsApi.templates().catch((e: unknown) => {
+      throw new TemplatesUnavailableError(e)
+    }),
   ])
   return buildMaterializeContext({ prices, weights, engineering, priceVersion, templates })
 }
