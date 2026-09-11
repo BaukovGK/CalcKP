@@ -4,8 +4,9 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '../utils/prisma'
 import { signAccess, signRefresh, verifyRefresh } from '../utils/jwt'
 import { validate } from '../middleware/validate'
-import { requireAuth, type AuthRequest } from '../middleware/auth'
+import { requireAuthForPasswordChange, type AuthRequest } from '../middleware/auth'
 import { audit } from '../utils/audit'
+import { MIN_PASSWORD_LENGTH } from '../utils/password'
 import type { Response } from 'express'
 
 export const authRouter = Router()
@@ -35,7 +36,8 @@ authRouter.post('/login', validate(loginSchema), async (req, res, next) => {
     res.json({
       accessToken,
       refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      // mustChangePassword — экран ведёт на смену пароля, API до неё закрыт.
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, mustChangePassword: user.mustChangePassword },
     })
   } catch (e) { next(e) }
 })
@@ -56,12 +58,12 @@ authRouter.post('/refresh', async (req, res, next) => {
   }
 })
 
-// GET /api/auth/me
-authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response, next) => {
+// GET /api/auth/me — открыт и до обязательной смены пароля.
+authRouter.get('/me', requireAuthForPasswordChange, async (req: AuthRequest, res: Response, next) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, mustChangePassword: true },
     })
     if (!user) { res.status(401).json({ message: 'Пользователь не найден' }); return }
     res.json(user)
@@ -76,15 +78,16 @@ authRouter.get('/me', requireAuth, async (req: AuthRequest, res: Response, next)
  * Меняет пароль ТОЛЬКО себе и только после подтверждения текущего — чтобы
  * забытая открытая сессия не превращалась в захват учётной записи.
  *
- * Токены при этом не отзываются: JWT stateless, blacklist не реализован
- * (см. logout ниже). Прежние токены доживут до своего срока.
+ * Открыт и до обязательной смены пароля — ради неё и открыт: пароль,
+ * заданный не самим пользователем, меняется здесь же, и отметка снимается
+ * (План_устранения 2.1).
  */
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8),
+  newPassword: z.string().min(MIN_PASSWORD_LENGTH),
 })
 
-authRouter.post('/password', requireAuth, validate(changePasswordSchema), async (req: AuthRequest, res: Response, next) => {
+authRouter.post('/password', requireAuthForPasswordChange, validate(changePasswordSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { currentPassword, newPassword } = req.body as z.infer<typeof changePasswordSchema>
 
@@ -102,7 +105,7 @@ authRouter.post('/password', requireAuth, validate(changePasswordSchema), async 
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10), mustChangePassword: false },
     })
     await audit(user.id, 'user.password_change', 'User', user.id, {})
 
@@ -110,8 +113,8 @@ authRouter.post('/password', requireAuth, validate(changePasswordSchema), async 
   } catch (e) { next(e) }
 })
 
-// DELETE /api/auth/logout
-authRouter.delete('/logout', requireAuth, async (_req: AuthRequest, res: Response, next) => {
+// DELETE /api/auth/logout — открыт и до обязательной смены пароля.
+authRouter.delete('/logout', requireAuthForPasswordChange, async (_req: AuthRequest, res: Response, next) => {
   try {
     // Stateless JWT — на клиенте просто удалить токены.
     // TODO: token blacklist через Redis (SET ntt:bl:<jti> EX <ttl>) — jti в

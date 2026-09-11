@@ -40,6 +40,13 @@ model User {
   role         Role     @default(VIEWER)
   passwordHash String
   isActive     Boolean  @default(true)
+  /// Пароль задан не самим пользователем — первый администратор, создание или
+  /// сброс администратором: до смены API пускает только к смене пароля
+  /// (План_устранения 2.1).
+  mustChangePassword Boolean @default(false)
+  /// Версия токенов: растёт при смене и сбросе пароля, блокировке и «Выйти на
+  /// всех устройствах» — токены прежней версии не принимаются (2.3).
+  tokenVersion Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

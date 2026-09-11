@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { authenticate, AuthError, type AuthUser, type FindAuthUser } from './auth-check'
+import { authenticate, AuthError, PasswordChangeRequired, type AuthUser, type FindAuthUser } from './auth-check'
 import { signAccess, signRefresh } from './jwt'
 
 beforeAll(() => {
@@ -52,5 +52,28 @@ describe('authenticate', () => {
     const err = await authenticate(token, broken).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(Error)
     expect(err).not.toBeInstanceOf(AuthError)
+  })
+})
+
+// План_устранения 2.1: пароль задан не самим пользователем (первый
+// администратор, создание, сброс) — до смены API закрыт, кроме смены пароля.
+describe('обязательная смена пароля', () => {
+  const pending = { id: 'u1', role: 'ADMIN', isActive: true, mustChangePassword: true }
+
+  it('обычный маршрут — отказ «смените пароль», а не 401', async () => {
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    await expect(authenticate(token, users(pending))).rejects.toBeInstanceOf(PasswordChangeRequired)
+  })
+
+  it('маршруты смены пароля пропускают', async () => {
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    await expect(authenticate(token, users(pending), { allowPasswordChange: true })).resolves.toEqual({ userId: 'u1', role: 'ADMIN' })
+  })
+
+  it('заблокированный — отказ 401, даже на смене пароля', async () => {
+    const token = await signAccess({ userId: 'u1', role: 'ADMIN' })
+    await expect(
+      authenticate(token, users({ ...pending, isActive: false }), { allowPasswordChange: true }),
+    ).rejects.toBeInstanceOf(AuthError)
   })
 })

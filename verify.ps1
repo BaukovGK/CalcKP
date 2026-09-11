@@ -222,7 +222,7 @@ Write-Host '   backend:        cd backend && npm run dev          → :3000'
 Write-Host '   ntt-calculator: cd ntt-calculator && npm run dev   → :5173'
 Write-Host ''
 Write-Host ' Учётные записи (только для локальной разработки):' -ForegroundColor White
-Write-Host '   admin@ntt.local    / admin123     [ADMIN]'
+Write-Host '   admin@ntt.local    / пароль из ADMIN_INITIAL_PASSWORD или лога бэкенда, смена при входе [ADMIN]'
 Write-Host '   manager@ntt.local  / manager123   [MANAGER]'
 Write-Host '   engineer@ntt.local / engineer123  [ENGINEER]'
 Write-Host ''

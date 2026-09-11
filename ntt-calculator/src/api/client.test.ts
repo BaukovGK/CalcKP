@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios, { AxiosError, type AxiosAdapter, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
-import { api, refreshAccessToken, sessionLost, SESSION_KEYS } from './client'
+import { api, passwordChangeRequired, refreshAccessToken, sessionLost, SESSION_KEYS } from './client'
 
 /** Сервер теста: 401 на токен `old`, остальным — 200 с заголовком, который пришёл. */
 function server(opts: { always401?: boolean } = {}): AxiosAdapter {
@@ -77,5 +77,25 @@ describe('клиент API: обновление токена на 401', () => {
     const post = vi.spyOn(axios, 'post')
     await expect(refreshAccessToken()).resolves.toBeNull()
     expect(post).not.toHaveBeenCalled()
+  })
+})
+
+// План_устранения 2.1: сервер закрыл API до смены пароля — клиент ведёт на
+// экран смены, а кэш пользователя помечает: после перезагрузки роутер держит там же.
+describe('клиент API: сервер требует сменить пароль', () => {
+  it('403 PASSWORD_CHANGE_REQUIRED — на экран смены пароля, сессия цела', async () => {
+    api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+      const response = { status: 403, statusText: '403', data: { code: 'PASSWORD_CHANGE_REQUIRED', message: 'Сначала смените пароль' }, headers: {}, config } as AxiosResponse
+      throw new AxiosError('Forbidden', AxiosError.ERR_BAD_REQUEST, config, null, response)
+    }
+    const toPassword = vi.fn()
+    passwordChangeRequired.redirect = toPassword
+
+    await expect(api.get('/projects')).rejects.toBeInstanceOf(AxiosError)
+
+    expect(toPassword).toHaveBeenCalledTimes(1)
+    expect(redirect).not.toHaveBeenCalled()
+    expect(JSON.parse(localStorage.getItem(SESSION_KEYS.user)!)).toEqual({ id: 'u1', mustChangePassword: true })
+    expect(localStorage.getItem(SESSION_KEYS.access)).toBe('old')
   })
 })

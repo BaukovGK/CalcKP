@@ -7,6 +7,8 @@ export interface AdminUser {
   name:      string
   role:      UserRole
   isActive:  boolean
+  /** Пароль задан не им — сменит при входе (План_устранения 2.1). */
+  mustChangePassword?: boolean
   createdAt: string
 }
 
@@ -53,6 +55,14 @@ export const adminApi = {
 
   patchUser(id: string, dto: { role?: UserRole; isActive?: boolean; name?: string }): Promise<AdminUser> {
     return api.patch<AdminUser>(`/admin/users/${id}`, dto).then((r) => r.data)
+  },
+
+  /**
+   * Сбросить пароль пользователю: сервер выдаёт временный пароль ОДИН раз,
+   * при входе пользователь обязан его сменить (План_устранения 2.1).
+   */
+  resetPassword(id: string): Promise<{ temporaryPassword: string }> {
+    return api.post<{ temporaryPassword: string }>(`/admin/users/${id}/password-reset`).then((r) => r.data)
   },
 
   listAudit(): Promise<AuditEntry[]> {

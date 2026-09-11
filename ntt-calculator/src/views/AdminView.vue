@@ -48,7 +48,10 @@
           </thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
-              <td>{{ u.name }}</td>
+              <td>
+                {{ u.name }}
+                <span v-if="u.mustChangePassword" v-hint="ADMIN_PASSWORD_HINTS.mustChange" class="adm-badge">сменит пароль при входе</span>
+              </td>
               <td class="adm-email">{{ u.email }}</td>
               <td>
                 <select
@@ -67,7 +70,15 @@
                 >{{ u.isActive ? 'Да' : 'Нет' }}</button>
               </td>
               <td class="adm-date">{{ fmtDate(u.createdAt) }}</td>
-              <td></td>
+              <td>
+                <!-- Свой пароль — «Сменить пароль» в меню: сброс обошёл бы проверку текущего. -->
+                <button
+                  v-if="u.id !== auth.user?.id"
+                  v-hint="ADMIN_PASSWORD_HINTS.reset"
+                  class="btn btn-g adm-reset"
+                  @click="resetTarget = u"
+                >Сбросить пароль</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -159,6 +170,35 @@
       </template>
     </BaseModal>
 
+    <!-- Сброс пароля: подтверждение (План_устранения 2.1) -->
+    <BaseModal :show="!!resetTarget && !resetPassword" title="Сбросить пароль" @close="closeReset">
+      <p class="adm-p">
+        Сбросить пароль пользователю «{{ resetTarget?.name }}» ({{ resetTarget?.email }})? Текущий пароль перестанет
+        действовать, а система выдаст временный — он покажется один раз.
+      </p>
+      <div v-if="resetError" class="auth-err">{{ resetError }}</div>
+      <template #footer>
+        <button class="btn btn-g" @click="closeReset">Отмена</button>
+        <button class="btn btn-am" :disabled="resetting" @click="doReset">{{ resetting ? 'Сбрасываем…' : 'Сбросить' }}</button>
+      </template>
+    </BaseModal>
+
+    <!-- Сброс пароля: временный пароль — один раз -->
+    <BaseModal :show="!!resetPassword" title="Временный пароль" @close="closeReset">
+      <p class="adm-p">Временный пароль для «{{ resetTarget?.name }}»:</p>
+      <div class="adm-temp">
+        <code class="adm-temp-pw">{{ resetPassword }}</code>
+        <button class="btn btn-g" @click="copyReset">{{ copied ? 'Скопировано' : 'Скопировать' }}</button>
+      </div>
+      <p class="adm-p adm-muted">
+        Передайте его пользователю: при входе он задаст свой пароль. Больше этот пароль нигде не показывается — в
+        журнал аудита он не пишется.
+      </p>
+      <template #footer>
+        <button class="btn btn-am" @click="closeReset">Готово</button>
+      </template>
+    </BaseModal>
+
     <!-- Новый пользователь -->
     <BaseModal :show="newUserOpen" title="Новый пользователь" @close="closeNewUser">
       <div class="ff">
@@ -197,8 +237,11 @@ import { adminApi, type AdminUser, type AuditEntry, type DumpInfo } from '@/api/
 import BaseModal   from '@/components/ui/BaseModal.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
+import { ADMIN_PASSWORD_HINTS } from '@/hints/account'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
 const tab = ref<'users' | 'audit' | 'db'>('users')
 const tabTitle = computed(
   () => ({ users: 'Пользователи', audit: 'Аудит-лог', db: 'База данных' })[tab.value],
@@ -228,6 +271,50 @@ async function patchUser(id: string, dto: Parameters<typeof adminApi.patchUser>[
     const idx = users.value.findIndex(u => u.id === id)
     if (idx !== -1) users.value[idx] = updated
   } catch { /* silent — user sees no feedback, but role/active didn't change */ }
+}
+
+// ── Сброс пароля (План_устранения 2.1) ──────────────────────────────────────
+const resetTarget   = ref<AdminUser | null>(null)
+/** Временный пароль из ответа сервера — живёт, пока открыто окно. */
+const resetPassword = ref('')
+const resetting     = ref(false)
+const resetError    = ref('')
+const copied        = ref(false)
+
+/** Закрыть и забыть временный пароль: в памяти экрана он не задерживается. */
+function closeReset() {
+  resetTarget.value = null
+  resetPassword.value = ''
+  resetError.value = ''
+  copied.value = false
+}
+
+async function doReset() {
+  const target = resetTarget.value
+  if (!target || resetting.value) return
+  resetting.value = true
+  resetError.value = ''
+  try {
+    resetPassword.value = (await adminApi.resetPassword(target.id)).temporaryPassword
+    const idx = users.value.findIndex((u) => u.id === target.id)
+    if (idx !== -1) users.value[idx] = { ...users.value[idx]!, mustChangePassword: true }
+  } catch (e: unknown) {
+    const r = (e as { response?: { data?: { message?: string } } }).response
+    resetError.value = r?.data?.message ?? 'Не удалось сбросить пароль'
+  } finally {
+    resetting.value = false
+  }
+}
+
+async function copyReset() {
+  try {
+    await navigator.clipboard.writeText(resetPassword.value)
+    copied.value = true
+  } catch {
+    // Буфер обмена недоступен (не https) — пароль выделен, его можно скопировать вручную.
+    const el = document.querySelector('.adm-temp-pw')
+    if (el) window.getSelection()?.selectAllChildren(el)
+  }
 }
 
 // ── New user form ─────────────────────────────────────────────────────────────
@@ -403,6 +490,16 @@ onMounted(loadUsers)
 .adm-action { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--accent); }
 
 .adm-role-sel { padding: 2px 5px; height: 24px; font-size: 12px; width: 140px; }
+
+/* Пароль задан не самим пользователем — сменит при входе (2.1) */
+.adm-badge { margin-left: 6px; font-size: 10.8px; padding: 1px 6px; border-radius: 10px; white-space: nowrap;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.adm-reset { padding: 2px 8px; height: 24px; font-size: 12px; white-space: nowrap; }
+.adm-p { margin: 0 0 10px; font-size: 13.2px; line-height: 1.5; color: var(--tx2); }
+.adm-muted { color: var(--tx3); }
+.adm-temp { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.adm-temp-pw { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 18px; letter-spacing: .06em;
+  padding: 6px 10px; border: 1px solid var(--border); background: var(--bg3); color: var(--tx1); user-select: all; }
 
 .adm-toggle {
   font-size: 10.8px; font-weight: 700; padding: 2px 8px; border-radius: 10px; border: none; cursor: pointer; transition: all .15s;

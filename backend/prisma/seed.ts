@@ -12,6 +12,7 @@ import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcryptjs'
+import { randomInt } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -111,18 +112,56 @@ interface EngineeringSeed {
 }
 
 // ─── Пользователи ────────────────────────────────────────────────────────────
-// Пароли демонстрационные и предназначены только для локальной разработки.
 
-type SeedUser = { email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'VIEWER'; password: string }
+type SeedRole = 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'VIEWER'
+type SeedUser = { email: string; name: string; role: SeedRole; password: string }
+
+/** Минимальная длина пароля — как в приложении (src/utils/password.ts). */
+const MIN_PASSWORD_LENGTH = 8
+
+/**
+ * Случайный пароль — копия `temporaryPassword` из src/utils/password.ts: сид
+ * собирается отдельно от src (Dockerfile), и импорт оттуда сдвинул бы его
+ * место в сборке. Без похожих знаков, 14 из 55 — около 80 бит.
+ */
+function randomPassword(length = 14): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  let s = ''
+  for (let i = 0; i < length; i++) s += alphabet[randomInt(alphabet.length)]
+  return s
+}
 
 /**
  * Первый администратор. Заводится всегда: без него в свежую систему было бы
  * не войти и некому создать остальных.
  *
- * Пароль надо сменить сразу после первого входа — кнопка «Сменить пароль»
- * в подвале боковой панели (`components/ui/UserMenu.vue`).
+ * Пароль (План_устранения 2.1) — из `ADMIN_INITIAL_PASSWORD`, без неё —
+ * случайный, и он печатается в лог один раз, в момент создания учётной
+ * записи. В обоих случаях при первом входе его обязательно сменить: до смены
+ * API пускает только к смене пароля.
  */
-const ADMIN: SeedUser = { email: 'admin@ntt.local', name: 'Администратор', role: 'ADMIN', password: 'admin123' }
+const ADMIN_EMAIL = 'admin@ntt.local'
+
+function initialAdminPassword(): { password: string; generated: boolean } {
+  const fromEnv = process.env.ADMIN_INITIAL_PASSWORD ?? ''
+  if (fromEnv.length >= MIN_PASSWORD_LENGTH) return { password: fromEnv, generated: false }
+  if (fromEnv) console.warn(`  ADMIN_INITIAL_PASSWORD короче ${MIN_PASSWORD_LENGTH} знаков — пароль сгенерирован`)
+  return { password: randomPassword(), generated: true }
+}
+
+/**
+ * Пароли учётных записей из прежних сидов — общеизвестные: они лежали в коде и
+ * в README. Учётная запись, у которой такой пароль так и остался, обязана
+ * сменить его при входе. Демо-учёток это не касается, пока они включены
+ * (`SEED_DEMO_USERS=1`, локальная разработка).
+ */
+const KNOWN_DEFAULT_PASSWORDS: Readonly<Record<string, string>> = {
+  'admin@ntt.local': 'admin123',
+  'manager@ntt.local': 'manager123',
+  'engineer@ntt.local': 'engineer123',
+  'technolog@ntt.local': 'technolog123',
+  'viewer@ntt.local': 'viewer123',
+}
 
 /**
  * Демонстрационные учётки остальных ролей. Заводятся ТОЛЬКО при
@@ -141,35 +180,71 @@ const DEMO_USERS: SeedUser[] = [
   { email: 'viewer@ntt.local', name: 'Наблюдатель', role: 'VIEWER', password: 'viewer123' },
 ]
 
-const USERS: SeedUser[] = process.env.SEED_DEMO_USERS === '1' ? [ADMIN, ...DEMO_USERS] : [ADMIN]
+const DEMO_MODE = process.env.SEED_DEMO_USERS === '1'
 
 /**
- * Досоздаёт учётные записи. Существующие не трогает: смена пароля и
- * выключение учётки переживают деплой.
+ * Досоздаёт учётные записи. Существующие не трогает — кроме отметки
+ * «сменить пароль» у тех, чей пароль так и остался общеизвестным.
  *
- * Пароли в лог не пишутся: лог контейнера читают не только администраторы, а
- * прежде сид печатал пары «логин / пароль» при каждом старте — и после смены
- * пароля тоже. О созданной учётной записи — одна строка, в момент создания.
+ * Пароли в лог не пишутся — кроме случайного пароля первого администратора,
+ * один раз, в момент создания: без него в свежую систему не войти.
  */
 async function seedUsers() {
   let created = 0
-  for (const u of USERS) {
-    if (await prisma.user.findUnique({ where: { email: u.email }, select: { id: true } })) continue
-    const passwordHash = await bcrypt.hash(u.password, 10)
+  let existing = 0
+
+  /** Завести учётную запись, если её ещё нет. */
+  async function ensure(u: Omit<SeedUser, 'password'>, password: () => { password: string; generated: boolean }, mustChangePassword: boolean) {
+    if (await prisma.user.findUnique({ where: { email: u.email }, select: { id: true } })) {
+      existing++
+      return
+    }
+    const p = password()
+    const passwordHash = await bcrypt.hash(p.password, 10)
     // upsert, а не create: второй экземпляр, стартующий одновременно, не
     // должен падать на уникальном email.
     await prisma.user.upsert({
       where: { email: u.email },
       update: {},
-      create: { email: u.email, name: u.name, role: u.role, passwordHash },
+      create: { email: u.email, name: u.name, role: u.role, passwordHash, mustChangePassword },
     })
     created++
     console.log(`  создана учётная запись ${u.email} [${u.role}]`)
     if (u.role === 'ADMIN') {
-      console.log('  пароль первого администратора — из документации (README); смените его после первого входа')
+      console.log(
+        p.generated
+          ? `  пароль первого администратора: ${p.password} — показан один раз; при первом входе его нужно сменить`
+          : '  пароль первого администратора — из ADMIN_INITIAL_PASSWORD; при первом входе его нужно сменить',
+      )
     }
   }
-  console.log(`  пользователи: создано ${created}, уже были ${USERS.length - created}`)
+
+  // Пароль генерируется, только когда администратора действительно заводят.
+  await ensure({ email: ADMIN_EMAIL, name: 'Администратор', role: 'ADMIN' }, initialAdminPassword, true)
+  if (DEMO_MODE) {
+    for (const d of DEMO_USERS) await ensure(d, () => ({ password: d.password, generated: false }), false)
+  }
+  console.log(`  пользователи: создано ${created}, уже были ${existing}`)
+
+  await flagKnownDefaultPasswords()
+}
+
+/**
+ * Учётные записи с общеизвестным паролем прежних сидов — обязательная смена
+ * при входе (План_устранения 2.1). Пароль сверяется по хешу; сам пароль в
+ * лог не пишется. Демо-учётки в демо-режиме не трогаются — они для
+ * локальной разработки и проверок.
+ */
+async function flagKnownDefaultPasswords() {
+  const demoEmails = new Set(DEMO_USERS.map((d) => d.email))
+  for (const [email, known] of Object.entries(KNOWN_DEFAULT_PASSWORDS)) {
+    if (DEMO_MODE && demoEmails.has(email)) continue
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true, passwordHash: true, mustChangePassword: true } })
+    if (!user || user.mustChangePassword) continue
+    if (!(await bcrypt.compare(known, user.passwordHash))) continue
+    await prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: true } })
+    console.warn(`  ${email}: пароль общеизвестный — при следующем входе его нужно сменить`)
+  }
 }
 
 // ─── Прайс ───────────────────────────────────────────────────────────────────

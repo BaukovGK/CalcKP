@@ -10,6 +10,12 @@ export interface AuthUser {
   name: string
   email: string
   role: UserRole
+  /**
+   * Пароль задан не самим пользователем — при установке или администратором
+   * (План_устранения 2.1): до смены сервер закрывает API, роутер держит на
+   * экране смены пароля.
+   */
+  mustChangePassword?: boolean
 }
 
 /**
@@ -26,6 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!user.value)
   const role = computed(() => user.value?.role ?? null)
+  const mustChangePassword = computed(() => !!user.value?.mustChangePassword)
 
   function _persist(u: AuthUser | null, token: string | null) {
     user.value = u
@@ -79,6 +86,8 @@ export const useAuthStore = defineStore('auth', () => {
    */
   async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await api.post('/auth/password', { currentPassword, newPassword })
+    // Пароль теперь свой — экран смены больше не держит.
+    if (user.value?.mustChangePassword) _persist({ ...user.value, mustChangePassword: false }, accessToken.value)
   }
 
   // ── Refresh ───────────────────────────────────────────────────────────────
@@ -113,5 +122,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, accessToken, isLoggedIn, role, login, loginDemo, logout, changePassword, refresh, checkAuth }
+  return { user, accessToken, isLoggedIn, role, mustChangePassword, login, loginDemo, logout, changePassword, refresh, checkAuth }
 })

@@ -30,6 +30,24 @@ export const sessionLost = {
   },
 }
 
+/**
+ * Куда уходить, когда сервер требует сменить пароль (403
+ * `PASSWORD_CHANGE_REQUIRED`, План_устранения 2.1): на экран смены. Кэш
+ * пользователя помечается — после перезагрузки роутер держит там же.
+ */
+export const passwordChangeRequired = {
+  redirect: () => {
+    if (window.location.pathname !== '/password') window.location.href = '/password'
+  },
+}
+
+function markPasswordChangeRequired(): void {
+  try {
+    const cached = JSON.parse(localStorage.getItem(SESSION_KEYS.user) ?? 'null') as Record<string, unknown> | null
+    if (cached) localStorage.setItem(SESSION_KEYS.user, JSON.stringify({ ...cached, mustChangePassword: true }))
+  } catch { /* кэш испорчен — роутер сверит сессию с сервером */ }
+}
+
 /** Сессии больше нет: токены и кэш пользователя стираются. */
 export function clearSession(): void {
   localStorage.removeItem(SESSION_KEYS.access)
@@ -80,6 +98,11 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config
+    if (error.response?.status === 403 && error.response.data?.code === 'PASSWORD_CHANGE_REQUIRED') {
+      markPasswordChangeRequired()
+      passwordChangeRequired.redirect()
+      return Promise.reject(error)
+    }
     if (error.response?.status !== 401 || !original || original._retry || original.skipAuthRefresh) {
       return Promise.reject(error)
     }

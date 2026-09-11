@@ -137,3 +137,28 @@ describe('стор авторизации', () => {
     expect(auth.user?.id).toBe('demo')
   })
 })
+
+// План_устранения 2.1: пароль задан не самим пользователем — стор знает об
+// этом со входа и снимает отметку после смены.
+describe('стор авторизации: обязательная смена пароля', () => {
+  it('вход с паролем, заданным не самим пользователем, — отметка в сессии', async () => {
+    post.mockResolvedValue({ data: { accessToken: 'a1', refreshToken: 'r1', user: { ...ENGINEER, mustChangePassword: true } } })
+    const auth = useAuthStore()
+    await auth.login('eng@ntt.local', 'временный-пароль')
+
+    expect(auth.mustChangePassword).toBe(true)
+    expect(JSON.parse(localStorage.getItem(SESSION_KEYS.user)!).mustChangePassword).toBe(true)
+  })
+
+  it('смена пароля снимает отметку', async () => {
+    post.mockResolvedValueOnce({ data: { accessToken: 'a1', refreshToken: 'r1', user: { ...ENGINEER, mustChangePassword: true } } })
+    const auth = useAuthStore()
+    await auth.login('eng@ntt.local', 'временный-пароль')
+    post.mockResolvedValueOnce({ data: undefined })
+
+    await auth.changePassword('временный-пароль', 'новый-пароль-1')
+
+    expect(auth.mustChangePassword).toBe(false)
+    expect(JSON.parse(localStorage.getItem(SESSION_KEYS.user)!).mustChangePassword).toBe(false)
+  })
+})

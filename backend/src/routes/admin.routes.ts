@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { stat, unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { logger } from '../utils/logger'
+import { temporaryPassword } from '../utils/password'
 import {
   acceptUpload, BACKUP_DIR, createDump, deleteDump, dumpPath, dumpStream, DumpError,
   isValidDumpName, listDumps, MAX_DUMP_BYTES, restoreDump,
@@ -33,7 +34,7 @@ adminRouter.use('/', requireRole('ADMIN'))
 adminRouter.get('/users', async (_req, res: Response, next: NextFunction) => {
   try {
     const users = await prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+      select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     })
     res.json(users)
@@ -52,9 +53,11 @@ adminRouter.post('/users', validate(createUserSchema), async (req, res: Response
   try {
     const { email, name, role, password } = req.body
     const passwordHash = await bcrypt.hash(password, 10)
+    // Пароль задал администратор — пользователь сменит его при первом входе
+    // (План_устранения 2.1).
     const user = await prisma.user.create({
-      data: { email, name, role, passwordHash },
-      select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+      data: { email, name, role, passwordHash, mustChangePassword: true },
+      select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
     })
     await audit((req as AuthRequest).userId, 'user.create', 'User', user.id, {
       email: user.email,
@@ -73,9 +76,8 @@ const patchUserSchema = z.object({
 /**
  * PATCH /api/admin/users/:id (ADMIN).
  *
- * Две защиты от необратимого состояния: сбросить пароль другому
- * пользователю в системе нельзя, поэтому потерять доступ администратора —
- * значит потерять управление совсем.
+ * Две защиты от необратимого состояния: без администратора управлять
+ * пользователями — назначать роли, сбрасывать пароли — некому.
  *  1. нельзя снять роль или деактивировать ПОСЛЕДНЕГО активного ADMIN;
  *  2. нельзя понизить или деактивировать самого себя — даже если админов
  *     несколько: это делается чужими руками и осознанно.
@@ -109,8 +111,8 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
       if (activeAdmins <= 1) {
         res.status(422).json({
           message:
-            'Это последний активный администратор. Сбросить пароль другому пользователю в системе нельзя, ' +
-            'поэтому снятие прав сделало бы её неуправляемой. Сначала назначьте другого администратора.',
+            'Это последний активный администратор: без него назначать роли и сбрасывать пароли будет некому. ' +
+            'Сначала назначьте другого администратора.',
           code: 'LAST_ADMIN',
         })
         return
@@ -120,10 +122,43 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
     const user = await prisma.user.update({
       where: { id },
       data:  patch,
-      select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+      select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
     })
     await audit(auth.userId, 'user.update', 'User', id, patch)
     res.json(user)
+  } catch (e) { next(e) }
+})
+
+/**
+ * POST /api/admin/users/:id/password-reset (ADMIN) — сброс пароля
+ * пользователю (План_устранения 2.1).
+ *
+ * Сервер выдаёт случайный временный пароль и возвращает его ОДИН раз —
+ * администратор передаёт его пользователю; при входе тот обязан сменить
+ * пароль. В аудит пароль не пишется. Свой пароль так не сбрасывают — для
+ * этого «Сменить пароль»: иначе это обход проверки текущего пароля.
+ */
+adminRouter.post('/users/:id/password-reset', async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const id = String(req.params.id)
+    if (id === auth.userId) {
+      res.status(422).json({ message: 'Свой пароль меняют кнопкой «Сменить пароль»', code: 'SELF_RESET' })
+      return
+    }
+    const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true } })
+    if (!user) { res.status(404).json({ message: 'Пользователь не найден' }); return }
+
+    const password = temporaryPassword()
+    await prisma.user.update({
+      where: { id },
+      data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true },
+    })
+    await audit(auth.userId, 'user.password_reset', 'User', id, { email: user.email })
+
+    // Пароль — в ответе один раз; ни прокси, ни браузер его не кешируют.
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ temporaryPassword: password })
   } catch (e) { next(e) }
 })
 

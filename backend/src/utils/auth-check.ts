@@ -5,12 +5,21 @@ export interface AuthUser {
   id: string
   role: string
   isActive: boolean
+  /** Пароль задан не им самим — до смены открыта только смена пароля. */
+  mustChangePassword?: boolean
 }
 
 export type FindAuthUser = (id: string) => Promise<AuthUser | null>
 
 /** Запрос не пропущен: сообщение — текст ответа 401. */
 export class AuthError extends Error {}
+
+/**
+ * Пароль нужно сменить, прежде чем работать дальше (План_устранения 2.1):
+ * он задан не самим пользователем — первый администратор, создание или
+ * сброс администратором. Ответ — 403 `PASSWORD_CHANGE_REQUIRED`.
+ */
+export class PasswordChangeRequired extends Error {}
 
 /**
  * Кто делает запрос.
@@ -20,7 +29,11 @@ export class AuthError extends Error {}
  * токена: отзыв роли и блокировка учётной записи действуют с первого же
  * запроса, а не когда истечёт токен (№3).
  */
-export async function authenticate(token: string, findUser: FindAuthUser): Promise<{ userId: string; role: string }> {
+export async function authenticate(
+  token: string,
+  findUser: FindAuthUser,
+  opts: { allowPasswordChange?: boolean } = {},
+): Promise<{ userId: string; role: string }> {
   let userId: string
   try {
     userId = (await verifyAccess(token)).userId
@@ -29,5 +42,10 @@ export async function authenticate(token: string, findUser: FindAuthUser): Promi
   }
   const user = await findUser(userId)
   if (!user || !user.isActive) throw new AuthError('Пользователь не найден или заблокирован')
+  // Пароль задан не им — открыты только маршруты смены пароля (и «кто я»,
+  // и выход): так обязательную смену не обойти запросами мимо экрана.
+  if (user.mustChangePassword && !opts.allowPasswordChange) {
+    throw new PasswordChangeRequired('Сначала смените пароль: он задан не вами')
+  }
   return { userId: user.id, role: user.role }
 }

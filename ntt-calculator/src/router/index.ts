@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { passwordGate } from './guards'
 import { useAuthStore } from '@/stores/auth'
 import type { UserRole } from '@/stores/auth'
 
@@ -8,6 +9,7 @@ import DashboardView  from '@/views/DashboardView.vue'
 const ProjectView = () => import('@/views/ProjectView.vue')
 const PricesView  = () => import('@/views/PricesView.vue')
 const AdminView   = () => import('@/views/AdminView.vue')
+const PasswordView = () => import('@/views/PasswordView.vue')
 
 // ── Route meta types ───────────────────────────────────────────────────────
 declare module 'vue-router' {
@@ -26,6 +28,13 @@ const router = createRouter({
       name: 'login',
       component: LoginView,
       meta: { requiresAuth: false },
+    },
+    {
+      // Обязательная смена пароля, заданного не самим пользователем (2.1).
+      path: '/password',
+      name: 'password',
+      component: PasswordView,
+      meta: { requiresAuth: true },
     },
     {
       path: '/',
@@ -96,6 +105,7 @@ const router = createRouter({
 })
 
 // ── Navigation guard ───────────────────────────────────────────────────────
+
 /** Сессия сверена с сервером в этом запуске приложения. */
 let sessionChecked = false
 
@@ -119,6 +129,9 @@ router.beforeEach(async (to) => {
   if (!auth.isLoggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
+
+  const gate = passwordGate(auth.mustChangePassword, to)
+  if (gate) return gate
 
   // Role check
   const allowed = to.meta.roles
