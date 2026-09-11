@@ -5,6 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import { seesAllProjects } from '../utils/access'
 import { buildProjectKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
@@ -27,10 +28,6 @@ const updateSchema = createSchema.partial()
  * Чтение всех проектов: ADMIN; MANAGER — проверяет чужие расчёты (§4.3);
  * VIEWER — наблюдатель (просмотр расчёта, вкладка Битрикс24).
  */
-function seesAllProjects(role: string | undefined): boolean {
-  return role === 'ADMIN' || role === 'MANAGER' || role === 'VIEWER'
-}
-
 // GET /api/projects
 projectsRouter.get('/', async (req, res: Response, next: NextFunction) => {
   try {

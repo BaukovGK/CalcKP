@@ -5,6 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import { canAccessEstimate, canReadEstimate, seesAllEstimates } from '../utils/access'
 import { ESTIMATE_CHANGED, isStaleTreeWrite, isSurveyRevRegression, isVersionConflict, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
 import {
@@ -29,32 +30,6 @@ import type { Response, NextFunction } from 'express'
 export const estimatesRouter = Router()
 estimatesRouter.use('/', requireAuth)
 
-/**
- * Доступ к расчёту (ТЗ §2).
- *
- * ADMIN — все расчёты; MANAGER — расчёты команды (проверяет и утверждает);
- * остальные — только свои.
- *
- * Раньше здесь стояло `role !== 'ADMIN' && authorId !== userId`, то есть
- * MANAGER не имел доступа к чужим расчётам. Это делало НЕВОЗМОЖНЫМИ переходы
- * CALC→REVIEW и REVIEW→APPROVED, которые по §4.3 выполняет именно MANAGER:
- * расчёт инженера он открыть не мог. Сценарий приёмки №2 был неисполним.
- */
-function canAccessEstimate(role: string | undefined, authorId: string, userId: string | undefined): boolean {
-  if (role === 'ADMIN' || role === 'MANAGER') return true
-  return authorId === userId
-}
-
-/**
- * Чтение шире записи: VIEWER — наблюдатель (ТЗ §2), видит расчёты и их
- * версии, но не меняет ничего. Роль нужна вкладке «Расчёт» в Битрикс24:
- * менеджер сделки открывает расчёт на просмотр.
- */
-function canReadEstimate(role: string | undefined, authorId: string, userId: string | undefined): boolean {
-  if (role === 'VIEWER') return true
-  return canAccessEstimate(role, authorId, userId)
-}
-
 const createSchema = z.object({
   title:      z.string().min(1),
   deviceType: z.enum(['KNS', 'EMK', 'KOL']),
@@ -65,9 +40,10 @@ const createSchema = z.object({
 estimatesRouter.get('/', async (req, res: Response, next: NextFunction) => {
   try {
     const auth  = req as AuthRequest
-    // MANAGER проверяет чужие расчёты (§2), VIEWER — наблюдатель: оба видят
-    // весь список. Раньше список был ограничен своими для всех, кроме ADMIN.
-    const seesAll = ['ADMIN', 'MANAGER', 'VIEWER'].includes(auth.userRole ?? '')
+    // MANAGER проверяет чужие расчёты (§2), VIEWER — наблюдатель, BUYER ведёт
+    // закупку по любому (Р8): все видят весь список. Раньше список был
+    // ограничен своими для всех, кроме ADMIN.
+    const seesAll = seesAllEstimates(auth.userRole)
     const where = seesAll ? {} : { authorId: auth.userId }
     const estimates = await prisma.estimate.findMany({
       where,

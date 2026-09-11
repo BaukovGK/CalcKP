@@ -22,7 +22,7 @@
       <div class="topbar">
         <div class="tb-title">Проекты</div>
         <div class="tb-spacer"></div>
-        <button v-if="auth.role !== 'VIEWER'" class="btn" @click="newOpen = true">＋ Новый проект</button>
+        <button v-if="canCreate" class="btn" @click="newOpen = true">＋ Новый проект</button>
       </div>
 
       <div class="dash-filters">
@@ -40,7 +40,7 @@
         </div>
         <div v-else-if="filtered.length === 0" class="dash-state">
           <div class="dash-state-txt">{{ projects.list.length === 0 ? 'Проектов пока нет. Создайте первый!' : 'Ничего не найдено.' }}</div>
-          <button v-if="projects.list.length === 0 && auth.role !== 'VIEWER'" class="btn" @click="newOpen = true">＋ Создать проект</button>
+          <button v-if="projects.list.length === 0 && canCreate" class="btn" @click="newOpen = true">＋ Создать проект</button>
         </div>
         <div v-else class="dash-grid">
           <ProjectCard
@@ -110,6 +110,8 @@ import UserMenu     from '@/components/ui/UserMenu.vue'
 
 const router   = useRouter()
 const auth     = useAuthStore()
+/** Заводят проекты те, кто считает: наблюдатель и снабженец только смотрят (План_устранения 3.7). */
+const canCreate = computed(() => auth.role !== 'VIEWER' && auth.role !== 'BUYER')
 const projects = useProjectsStore()
 
 const search  = ref('')

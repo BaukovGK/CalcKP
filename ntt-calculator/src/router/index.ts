@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { passwordGate } from './guards'
+import { homeRedirect, passwordGate } from './guards'
 import { useAuthStore } from '@/stores/auth'
 import type { UserRole } from '@/stores/auth'
 
@@ -109,7 +109,7 @@ const router = createRouter({
 /** Сессия сверена с сервером в этом запуске приложения. */
 let sessionChecked = false
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   const auth = useAuthStore()
 
   // Один раз за запуск — и при пользователе из кэша: роль в кэше могла
@@ -139,12 +139,8 @@ router.beforeEach(async (to) => {
     return { name: 'dashboard' }
   }
 
-  // Домашний экран роли: дашборд проектов бесполезен тем, кто не работает
-  // с расчётами — технолог живёт в «Шаблонах», снабженец — в прайсе.
-  if (to.name === 'dashboard') {
-    if (auth.role === 'TECHNOLOG') return { name: 'templates' }
-    if (auth.role === 'BUYER') return { name: 'prices' }
-  }
+  const home = homeRedirect(auth.role, to, from)
+  if (home) return home
 
   return true
 })

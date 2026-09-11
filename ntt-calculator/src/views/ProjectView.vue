@@ -44,7 +44,11 @@
         <!-- КП на проект доступно и наблюдателю: чтение документа шире правки
              расчёта — то же правило, что у КП на единицу. -->
         <button class="btn" :disabled="units.length === 0" @click="openKp">КП на проект</button>
-        <span v-if="!canEdit" v-hint.plain="'Роль «Наблюдатель»: только просмотр'" class="pv-ro">👁 просмотр</span>
+        <span
+          v-if="!canEdit"
+          v-hint.plain="isBuyer ? 'Роль «Снабженец»: проект — только просмотр; единица открывает заявку на закупку' : 'Роль «Наблюдатель»: только просмотр'"
+          class="pv-ro"
+        >👁 просмотр</span>
       </div>
 
       <!-- Content -->
@@ -108,7 +112,8 @@
               <div class="pv-uc-foot">
                 <!-- Карточка открывает ОЛ; в расчёт — отдельной ссылкой, для
                      тонкой настройки строк. -->
-                <button v-hint="'Открыть расчёт: строки, цены и итоги. Сама карточка открывает опросный лист'" class="pv-uc-calc" @click.stop="openCalc(e.id)">расчёт →</button>
+                <button v-if="isBuyer" v-hint="'Заявка на закупку по этой единице: покупные позиции расчёта с количествами'" class="pv-uc-calc" @click.stop="openPurchase(e.id)">заявка →</button>
+                <button v-else v-hint="'Открыть расчёт: строки, цены и итоги. Сама карточка открывает опросный лист'" class="pv-uc-calc" @click.stop="openCalc(e.id)">расчёт →</button>
                 <span v-if="e.totalRub" class="pv-uc-total">{{ fmt(e.totalRub) }} ₽</span>
               </div>
             </div>
@@ -233,8 +238,13 @@ const router   = useRouter()
 const projects = useProjectsStore()
 const auth     = useAuthStore()
 
-/** VIEWER — наблюдатель: проект и расчёты открыты только для просмотра. */
-const canEdit = computed(() => auth.role !== 'VIEWER')
+/**
+ * VIEWER — наблюдатель, BUYER — снабженец: проект и расчёты им открыты
+ * только для просмотра (План_устранения 3.7).
+ */
+const canEdit = computed(() => auth.role !== 'VIEWER' && auth.role !== 'BUYER')
+/** Снабженец идёт из единицы в заявку на закупку: расчёт ему не нужен. */
+const isBuyer = computed(() => auth.role === 'BUYER')
 
 const projectId = String(route.params.id)
 
@@ -259,12 +269,18 @@ function addUnit() {
  * роутер отбрасывал его с карточки на дашборд.
  */
 function openUnit(id: string) {
+  if (isBuyer.value) return openPurchase(id)
   if (!canEdit.value) return openCalc(id)
   router.push({ name: 'survey', params: { id } })
 }
 
 function openCalc(id: string) {
   router.push({ name: 'calculator', params: { id } })
+}
+
+/** Заявка на закупку по единице — экран снабженца (План_устранения 3.7). */
+function openPurchase(id: string) {
+  router.push({ name: 'purchase-request', params: { id } })
 }
 
 // ── Edit project ────────────────────────────────────────────────────────────

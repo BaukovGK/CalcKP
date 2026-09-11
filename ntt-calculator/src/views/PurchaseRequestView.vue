@@ -4,7 +4,9 @@
       <div class="pr-top-l">
         <span class="pr-name">Заявка на закупку</span>
         <span class="pr-sub">{{ st.estimate?.title ?? '—' }}</span>
-        <RouterLink v-if="id" class="pr-lnk" :to="{ name: 'calculator', params: { id } }">← Расчёт</RouterLink>
+        <!-- Снабженцу расчёт закрыт — назад в проект (План_устранения 3.7). -->
+        <RouterLink v-if="id && !isBuyer" class="pr-lnk" :to="{ name: 'calculator', params: { id } }">← Расчёт</RouterLink>
+        <RouterLink v-else-if="projectId" class="pr-lnk" :to="{ name: 'project', params: { id: projectId } }">← Проект</RouterLink>
       </div>
       <div class="pr-top-r">
         <span class="pr-cnt">{{ rows.length }} позиций · {{ fmtInt(total) }} ₽</span>
@@ -22,7 +24,8 @@
       <!-- Строки без цены занижают заявку: их сумма равна нулю. -->
       <div v-if="missing.length" class="warn">
         ⚠ {{ missing.length }} закупаемых {{ plural(missing.length) }} без цены — их стоимость в заявке равна нулю.
-        <RouterLink :to="{ name: 'calculator', params: { id } }">Заполнить в расчёте →</RouterLink>
+        <RouterLink v-if="!isBuyer" :to="{ name: 'calculator', params: { id } }">Заполнить в расчёте →</RouterLink>
+        <span v-else>Цены заполняет инженер в расчёте или вы — в прайсе.</span>
       </div>
 
       <div class="tbl">
@@ -66,6 +69,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { useCalcTreeStore } from '@/stores/calcTree'
+import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
 import { isPurchase } from '@/engines/row'
@@ -84,6 +88,9 @@ const { theme, toggle } = useTheme()
 
 const busy = ref(false)
 const id = computed(() => (typeof route.params.id === 'string' ? route.params.id : null))
+/** Снабженцу расчёт закрыт: назад — в проект единицы (План_устранения 3.7). */
+const isBuyer = computed(() => useAuthStore().role === 'BUYER')
+const projectId = computed(() => st.estimate?.projectId ?? null)
 
 const fmt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 })
 const fmtInt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })

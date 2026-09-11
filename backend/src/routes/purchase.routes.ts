@@ -6,6 +6,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import { canReadEstimate } from '../utils/access'
 import type { Response, NextFunction } from 'express'
 
 /**
@@ -64,10 +65,7 @@ purchaseRouter.post(
       })
       if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
       // BUYER ведёт закупку по чужим расчётам — доступ к Заявке ему нужен.
-      const canRead =
-        auth.userRole === 'ADMIN' || auth.userRole === 'MANAGER' || auth.userRole === 'BUYER' ||
-        estimate.authorId === auth.userId
-      if (!canRead) { res.status(403).json({ message: 'Нет доступа' }); return }
+      if (!canReadEstimate(auth.userRole, estimate.authorId, auth.userId)) { res.status(403).json({ message: 'Нет доступа' }); return }
 
       const rows = req.body.rows as z.infer<typeof rowSchema>[]
 
