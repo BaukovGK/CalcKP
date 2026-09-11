@@ -8,20 +8,27 @@ import { logger } from '../utils/logger'
  * получает общую формулировку, чтобы наружу не утекали детали БД и путей.
  * В лог при этом идёт всё: стек, маршрут и пользователь. Раньше писался только
  * `err.message`, и по логу нельзя было понять ни где упало, ни у кого.
+ *
+ * Prisma P2025 — «запись для изменения или удаления не найдена» — это 404, а
+ * не сбой: маршруты проверяют запись заранее, но её могут удалить между
+ * проверкой и записью (План_реализации §4.2 №5).
  */
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
-  const status = (err as { status?: number }).status ?? 500
+  const prismaCode = (err as { code?: string }).code
+  const notFound = prismaCode === 'P2025'
+  const status = (err as { status?: number }).status ?? (notFound ? 404 : 500)
 
-  logger.error(err.message, {
+  logger.log(status >= 500 ? 'error' : 'warn', err.message, {
     status,
     method: req.method,
     path: req.originalUrl,
     userId: (req as { userId?: string }).userId,
     // Код Prisma (P2025 «запись не найдена» и подобные) — по нему сразу видно
     // класс проблемы, не разбирая стек.
-    prismaCode: (err as { code?: string }).code,
+    prismaCode,
     stack: err.stack,
   })
 
-  res.status(status).json({ message: status === 500 ? 'Внутренняя ошибка сервера' : err.message })
+  const message = status === 500 ? 'Внутренняя ошибка сервера' : notFound ? 'Запись не найдена' : err.message
+  res.status(status).json({ message })
 }
