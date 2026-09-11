@@ -45,6 +45,7 @@ export function useEmkSurvey(form: Ref<EmkSurveyForm>) {
       hasShaft: form.value.hasShaft,
       shaftDiameterMm: num(form.value.shaftD),
       shaftHeightMm: num(form.value.shaftH),
+      shaftCount: num(form.value.shaftCount ?? ''),
     }),
   )
 
@@ -83,7 +84,11 @@ export function useEmkSurvey(form: Ref<EmkSurveyForm>) {
 
   const explain = computed(() => {
     if (lengthMm.value == null) return null
-    const src = lengthOverridden.value ? 'ручной ввод' : `ƒ CEILING(4V/(π·D²)) из ${form.value.volumeM3} м³`
+    const src = lengthOverridden.value
+      ? 'ручной ввод'
+      : form.value.placement === 'горизонтальное'
+        ? `ƒ CEILING(4·(V − днища)/(π·D²)) из ${form.value.volumeM3} м³`
+        : `ƒ CEILING(4V/(π·D²)) из ${form.value.volumeM3} м³`
     return `длина трубы ${lengthMm.value.toLocaleString('ru-RU')} мм · ${src}${sn.value ? ` → SN ${sn.value}` : ''}`
   })
 

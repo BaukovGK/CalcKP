@@ -43,19 +43,28 @@ import {
   type MaterializeContext,
 } from './template-kns'
 import {
+  buildEmkAutomation,
   buildEmkBottoms,
+  buildEmkHatches,
   buildEmkInsulation,
   buildEmkNozzles,
+  buildEmkPumps,
+  buildEmkService,
   buildEmkShaft,
   buildEmkShell,
+  buildEmkStrapping,
+  buildEmkValves,
   buildKolBottom,
+  buildKolHatches,
   buildKolInsulation,
   buildKolNeck,
   buildKolNozzles,
   buildKolShell,
   EMK_SECTIONS,
+  emkHatches,
   emkLadderHeightMm,
   KOL_SECTIONS,
+  kolHatch,
   type EmkSurveyParams,
   type KolSurveyParams,
 } from './template-emk-kol'
@@ -89,6 +98,8 @@ const kol = (n: Omit<BuiltinNodeOf<'KOL'>, 'device'>): BuiltinNodeOf<'KOL'> => (
 
 /** Высота лестницы ёмкости, мм — от неё лестница, направляющие и цепь насосов. */
 const emkLadderMm = (s: EmkSurveyParams) => emkLadderHeightMm(s, computeEmkGeometry(s))
+/** Шахт ёмкости; без шахты — одна «единица» для стояка и приставной лестницы. */
+const emkShaftsOrOne = (s: EmkSurveyParams) => Math.max(1, computeEmkGeometry(s).shaftCount)
 
 /**
  * Встроенные узлы по изделиям. Порядок — порядок в палитре редактора: как
@@ -147,11 +158,11 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
   kns({ ref: 'kns.service', codes: ['D5'], title: 'Оборудование для обслуживания', reads: 'высота станции', build: buildKnsService }),
 
   // ── ЕМК ──
-  emk({ ref: 'emk.shell', codes: ['A1'], title: 'Обечайка корпуса', reads: 'DN, объём или длина, тип, PN, SN, цена трубы', build: buildEmkShell }),
+  emk({ ref: 'emk.shell', codes: ['A1'], title: 'Обечайка корпуса', reads: 'DN, объём или длина, расположение, тип, PN, SN, цена трубы', build: buildEmkShell }),
   emk({ ref: 'emk.bottoms', codes: ['A2', 'A3'], title: 'Днища', reads: 'DN, расположение, тип днищ', build: buildEmkBottoms }),
-  emk({ ref: 'emk.shaft', codes: ['A8'], title: 'Шахта обслуживания', reads: 'шахта, её Ø и высота, цена трубы шахты', build: buildEmkShaft }),
+  emk({ ref: 'emk.shaft', codes: ['A8'], title: 'Шахты обслуживания', reads: 'шахта, число шахт, их Ø и высота, цена трубы шахты', build: buildEmkShaft }),
   emk({ ref: 'emk.nozzles', codes: ['A5'], title: 'Патрубки подводящие и отводящие', reads: 'DN и число патрубков', build: buildEmkNozzles }),
-  emk({ ref: 'emk.insulation', codes: ['A9'], title: 'Теплоизоляция корпуса', reads: 'DN, теплоизоляция и её глубина', build: buildEmkInsulation }),
+  emk({ ref: 'emk.insulation', codes: ['A9'], title: 'Теплоизоляция шахт и верха', reads: 'DN, шахты, теплоизоляция и её глубина', build: buildEmkInsulation }),
   emk({ ref: 'emk.loops', codes: ['A10'], title: 'Монтажные петли', reads: 'DN', build: (ctx, s) => [buildMountingLoops(ctx, s.dn)] }),
   // Дробилки в листе ёмкости нет — ни строк, ни формул: узла нет и здесь.
   emk({
@@ -161,8 +172,37 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
     reads: 'корзина, DN, глубина лотка',
     build: (ctx, s) => [buildBasket(ctx, { device: 'EMK', dn: s.dn, trayDepthMm: s.inletTrayDepthMm, enabled: s.hasBasket })],
   }),
-  emk({ ref: 'emk.ladder', codes: ['B1'], title: 'Лестница', reads: 'лестница, расположение, габарит и шахта', build: (ctx, s) => buildLadder(ctx, { depthMm: emkLadderMm(s), enabled: s.hasLadder ?? true, device: 'EMK' }) }),
-  emk({ ref: 'emk.slab', codes: ['B2', 'B6'], title: 'Перекрытие и анкеры', reads: 'DN, габарит', build: (ctx, s) => buildSlab(ctx, { dn: s.dn, depthMm: computeEmkGeometry(s).overallLengthMm ?? 0 }) }),
+  // Лестница — нержавеющая на высоту лестницы и приставные алюминиевые по
+  // одной на шахту (лист ЕМК, строки 114–123).
+  emk({
+    ref: 'emk.ladder',
+    codes: ['B1'],
+    title: 'Лестница',
+    reads: 'лестница, расположение, габарит, шахты',
+    build: (ctx, s) => buildLadder(ctx, { depthMm: emkLadderMm(s), enabled: s.hasLadder ?? true, device: 'EMK', portable: emkShaftsOrOne(s) }),
+  }),
+  // Перекрытие — только у вертикальной: у горизонтальной верх — сама труба,
+  // лист держит перекрытие выключенным (C132 «Нет»). Толщина 10 мм, крышки
+  // люков вычитаются; отверстие под шахту прорезает узел шахты.
+  emk({
+    ref: 'emk.slab',
+    codes: ['B2', 'B6'],
+    title: 'Перекрытие и анкеры (вертикальная)',
+    reads: 'расположение, DN, габарит, шахты',
+    build: (ctx, s) => {
+      if (s.placement === 'горизонтальное') return []
+      const h = emkHatches(s)
+      return buildSlab(ctx, {
+        dn: s.dn,
+        depthMm: computeEmkGeometry(s).overallLengthMm ?? 0,
+        thicknessMm: 10,
+        hatches: { count: h.count, coverMassKg: h.coverMassKg },
+        hatchCutout: !s.hasShaft,
+      })
+    },
+  }),
+  emk({ ref: 'emk.hatches', codes: ['B2'], title: 'Люки шахт', reads: 'шахты, их Ø', build: buildEmkHatches }),
+  emk({ ref: 'emk.strapping', codes: ['B6'], title: 'Крепление к бетонному основанию (горизонтальная)', reads: 'расположение, длина трубы', build: buildEmkStrapping }),
   // Крепление и подъём насосов — только при насосах (лист ЕМК, строки
   // 163–171 и 195–198: всё под `IF(ОЛ!E54="нет";0;…)`). Направляющие и
   // цепь — на высоту лестницы, как в листе.
@@ -183,7 +223,8 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
           })
         : [],
   }),
-  emk({ ref: 'emk.vent', codes: ['C1'], title: 'Вентиляционный стояк', reads: 'вентиляция', build: (ctx, s) => buildVent(ctx, { enabled: s.ventilation ?? true }) }),
+  // Стояк — на каждую шахту (лист ЕМК, строки 210–215 × H209 = L8).
+  emk({ ref: 'emk.vent', codes: ['C1'], title: 'Вентиляционный стояк', reads: 'вентиляция, шахты', build: (ctx, s) => buildVent(ctx, { enabled: s.ventilation ?? true, count: emkShaftsOrOne(s) }) }),
   // Напорный трубопровод — ТОЛЬКО при насосном оборудовании (Реверс §5).
   emk({
     ref: 'emk.pressurePipe',
@@ -201,12 +242,27 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
           })
         : [],
   }),
-  emk({ ref: 'emk.fasteners', codes: ['C3'], title: 'Крепёжный комплект', reads: 'DN и число отводящих патрубков', build: (ctx, s) => buildFasteners(ctx, { outletDn: s.outletDn, outletCount: s.outletCount }) }),
+  // Крепёж фланцев — у напорного трубопровода, то есть только при насосах:
+  // гильзы патрубков фланцев не имеют. В листе ёмкости болты М20 — фланцы
+  // напорной линии (H247 = отверстий × фланцев), М12 — «стульчики»; числа
+  // фланцев и стульчиков вписаны руками.
+  emk({
+    ref: 'emk.fasteners',
+    codes: ['C3'],
+    title: 'Крепёжный комплект',
+    reads: 'насосное оборудование, DN и число отводящих патрубков',
+    build: (ctx, s) => (s.hasPumps ? buildFasteners(ctx, { outletDn: s.outletDn, outletCount: s.outletCount }) : []),
+  }),
+  // Раздел 8 — по листу ёмкости (строки 260–284): то, что выводится из ОЛ.
+  emk({ ref: 'emk.valves', codes: ['C4'], title: 'Задвижка на подводящем', reads: 'арматура на подводящем, DN и число подводящих, глубина лотка', build: buildEmkValves }),
+  emk({ ref: 'emk.pumps', codes: ['D1'], title: 'Насосная группа', reads: 'насосное оборудование, насосы, марка, высота лестницы', build: buildEmkPumps }),
+  emk({ ref: 'emk.automation', codes: ['D2'], title: 'Шкаф управления и датчики', reads: 'шкаф управления, датчики уровня, насосы', build: buildEmkAutomation }),
+  emk({ ref: 'emk.service', codes: ['D5'], title: 'Оборудование для обслуживания', reads: 'высота лестницы', build: buildEmkService }),
 
   // ── КОЛ ──
-  kol({ ref: 'kol.shell', codes: ['A1'], title: 'Обечайка корпуса', reads: 'DN, глубина с горловиной, PN, SN, цена трубы', build: buildKolShell }),
+  kol({ ref: 'kol.shell', codes: ['A1'], title: 'Обечайка корпуса', reads: 'DN, рабочая часть (без горловины — с возвышением), PN, SN, цена трубы', build: buildKolShell }),
   kol({ ref: 'kol.bottom', codes: ['A2'], title: 'Днище', reads: 'DN', build: buildKolBottom }),
-  kol({ ref: 'kol.neck', codes: ['A8'], title: 'Горловина', reads: 'горловина, её Ø и высота, цена трубы горловины', build: buildKolNeck }),
+  kol({ ref: 'kol.neck', codes: ['A8'], title: 'Горловина', reads: 'горловина, её Ø и высота, возвышение, цена трубы горловины', build: buildKolNeck }),
   kol({ ref: 'kol.nozzles', codes: ['A5'], title: 'Патрубки подводящие и отводящие', reads: 'DN и число патрубков', build: buildKolNozzles }),
   kol({ ref: 'kol.insulation', codes: ['A9'], title: 'Теплоизоляция корпуса', reads: 'DN, теплоизоляция и её глубина', build: buildKolInsulation }),
   kol({ ref: 'kol.loops', codes: ['A10'], title: 'Монтажные петли', reads: 'DN', build: (ctx, s) => [buildMountingLoops(ctx, s.dn)] }),
@@ -225,12 +281,40 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
     reads: 'корзина, DN, глубина лотка',
     build: (ctx, s) => [buildBasket(ctx, { device: 'KOL', dn: s.dn, trayDepthMm: s.inletTrayDepthMm, enabled: s.hasBasket })],
   }),
-  // Лестница — по полной глубине корпуса с горловиной (эталон I113).
-  kol({ ref: 'kol.ladder', codes: ['B1'], title: 'Лестница', reads: 'лестница, глубина с горловиной', build: (ctx, s) => buildLadder(ctx, { depthMm: computeKolGeometry(s).totalDepthMm, enabled: s.hasLadder ?? true, device: 'KOL' }) }),
-  kol({ ref: 'kol.slab', codes: ['B2', 'B6'], title: 'Перекрытие и анкеры', reads: 'DN, глубина с горловиной', build: (ctx, s) => buildSlab(ctx, { dn: s.dn, depthMm: computeKolGeometry(s).totalDepthMm }) }),
+  // Лестница — по полной глубине корпуса с горловиной (эталон I113) и одна
+  // приставная (строки 118, 122).
+  kol({
+    ref: 'kol.ladder',
+    codes: ['B1'],
+    title: 'Лестница',
+    reads: 'лестница, глубина с горловиной',
+    build: (ctx, s) => buildLadder(ctx, { depthMm: computeKolGeometry(s).totalDepthMm, enabled: s.hasLadder ?? true, device: 'KOL', portable: 1 }),
+  }),
+  // Перекрытие 10 мм за вычетом крышки люка (лист колодца, строка 132);
+  // анкеры — по глубине трубы корпуса (H5), как в листе.
+  kol({
+    ref: 'kol.slab',
+    codes: ['B2', 'B6'],
+    title: 'Перекрытие и анкеры',
+    reads: 'DN, глубина корпуса, горловина',
+    build: (ctx, s) => {
+      const h = kolHatch(s)
+      return buildSlab(ctx, {
+        dn: s.dn,
+        depthMm: computeKolGeometry(s).shellLengthMm,
+        thicknessMm: 10,
+        hatches: { count: h.count, coverMassKg: h.coverMassKg },
+        hatchCutout: !s.hasNeck,
+      })
+    },
+  }),
+  kol({ ref: 'kol.hatches', codes: ['B2'], title: 'Люк горловины', reads: 'горловина, её Ø', build: buildKolHatches }),
   // Вентиляции в ОЛ колодца нет — стояк всегда.
   kol({ ref: 'kol.vent', codes: ['C1'], title: 'Вентиляционный стояк', reads: '—', build: (ctx) => buildVent(ctx) }),
-  kol({ ref: 'kol.fasteners', codes: ['C3'], title: 'Крепёжный комплект', reads: 'DN и число отводящих патрубков', build: (ctx, s) => buildFasteners(ctx, { outletDn: s.outletDn, outletCount: s.outletCount }) }),
+  // Узла крепежа у колодца нет: его патрубки — гильзы без фланцев, а крепёж
+  // листа (строки 227–230, болты М12) — на «стульчики», число которых
+  // вписано руками. Прежний узел считал болты по фланцам отводящих
+  // патрубков, которых у колодца нет.
 ]
 
 const BY_REF: ReadonlyMap<string, BuiltinNode> = new Map(BUILTIN_NODES.map((n) => [n.ref, n]))
@@ -278,23 +362,27 @@ export const BUILTIN_TEMPLATES: Readonly<Record<DeviceType, TemplateBody>> = {
     ['emk.shell', 'emk.bottoms', 'emk.shaft', 'emk.nozzles', 'emk.insulation', 'emk.loops'],
     ['emk.basket'],
     ['emk.ladder'],
-    ['emk.slab', 'emk.pumpMounting'],
+    // Порядок — как в листе: перекрытие и люки, крепление и подъём насосов,
+    // крепление к бетонному основанию (строки 131–176).
+    ['emk.slab', 'emk.hatches', 'emk.pumpMounting', 'emk.strapping'],
     ['emk.vent'],
     ['emk.pressurePipe'],
     ['emk.fasteners'],
-    // Оборудование ёмкости (ШУ, датчики, насосы) из ОЛ не выводится —
-    // добавляется вручную.
-    [],
+    // Задвижки и клапаны напорной стороны лист вписывает руками — их
+    // добавляют строками; остальное оборудование выводится из ОЛ.
+    ['emk.valves', 'emk.pumps', 'emk.automation', 'emk.service'],
   ]),
   KOL: sections(KOL_SECTIONS, [
     ['kol.shell', 'kol.bottom', 'kol.neck', 'kol.nozzles', 'kol.insulation', 'kol.loops', 'kol.grinder'],
     ['kol.basket'],
     ['kol.ladder'],
-    ['kol.slab'],
+    ['kol.slab', 'kol.hatches'],
     ['kol.vent'],
-    ['kol.fasteners'],
-    // У колодца из оборудования — только запорная арматура; её состав
-    // задаётся в ОЛ поэлементно и добавляется вручную.
+    // Крепёж колодца в листе — на «стульчики», их число вписано руками.
+    [],
+    // Оборудование колодца в листе — задвижка DN100 с фланцами и
+    // борт-шайбами, их количества вписаны руками: раздел — каркас для
+    // ручных строк.
     [],
   ]),
 }

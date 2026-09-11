@@ -148,10 +148,13 @@ export function bottomJointLaminationKg(jointLayerMassKg: number): number {
 
 /**
  * Масса верхнего перекрытия, кг (Реверс §4.3):
- * `π·((DN+300)/2000)²·0,006·1850 − масса_горловины × кол-во_люков`.
+ * `π·((DN+300)/2000)²·толщина·1850 − масса_крышки × кол-во_люков`.
+ *
+ * Толщина у изделий разная: у КНС 6 мм (лист КНС, строка 141), у ёмкости и
+ * колодца 10 мм (лист ЕМК, строка 133; колодца — 132).
  */
-export function topSlabMassKg(dn: number, hatchMassKg = 0, hatchCount = 0): number {
-  const slab = Math.PI * ((dn + 300) / 2000) ** 2 * 0.006 * LAMINATE_DENSITY
+export function topSlabMassKg(dn: number, hatchMassKg = 0, hatchCount = 0, thicknessMm = 6): number {
+  const slab = Math.PI * ((dn + 300) / 2000) ** 2 * (thicknessMm / 1000) * LAMINATE_DENSITY
   return slab - hatchMassKg * hatchCount
 }
 
@@ -176,7 +179,7 @@ export interface InsulationResult {
  * ```
  * вертикаль      = π·(DN/1000)·(глубина_ТИ/1000)   м²
  * крышка         = π·(DN/2000)²                    м²
- * защитный слой  = S·0,005·1850                    кг   (для КНС; у колодца 0,004)
+ * защитный слой  = S·0,005·1850                    кг   (у КНС; у ёмкости и колодца 0,004)
  * монтаж         = 1 чел.ч на 1 м²
  * ```
  */
@@ -214,6 +217,29 @@ export const KNS_NECK_INSULATION_M2 = ((1.5 + 1.5) * 2 + Math.PI * 0.65) * 0.94
 export function knsInsulation(dn: number, insulationDepthMm: number, protectiveThickness = 0.005): InsulationResult {
   const sideM2 = roundUp(Math.PI * (dn / 1000) * (insulationDepthMm / 1000), 2)
   return insulationOf(sideM2 + KNS_NECK_INSULATION_M2, dn, protectiveThickness)
+}
+
+/**
+ * Теплоизоляция ёмкости (лист «Калькулятор ЕМК», строки 49–51 и 86).
+ *
+ * Утепляются шахты обслуживания — через промерзающий слой проходят они, а не
+ * корпус, — и верх `π·(DN/2000)²`. Без шахты утепляется корпус, как у
+ * колодца. Слой ламинации — 4 мм, как в листе.
+ *
+ * Боковая площадь шахты — `π·Ø·h` на каждую. В листе стоит `π·(Ø/2)·h` —
+ * половина окружности; у КНС та же площадь считается по полному диаметру,
+ * поэтому здесь полный, а расхождение — в Вопросах заводу §6и.
+ */
+export function emkInsulation(
+  dn: number,
+  insulationDepthMm: number,
+  shafts: { count: number; diameterMm: number },
+  protectiveThickness = 0.004,
+): InsulationResult {
+  const h = insulationDepthMm / 1000
+  const verticalM2 =
+    shafts.count > 0 ? Math.PI * (shafts.diameterMm / 1000) * h * shafts.count : Math.PI * (dn / 1000) * h
+  return insulationOf(verticalM2, dn, protectiveThickness)
 }
 
 function insulationOf(verticalM2: number, dn: number, protectiveThickness: number): InsulationResult {

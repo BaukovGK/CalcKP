@@ -44,6 +44,8 @@ export interface EmkSurveyForm extends SurveyCommonForm {
 
   // Шахта обслуживания
   hasShaft: boolean
+  /** Количество шахт (лист завода, L8); пусто — одна. */
+  shaftCount: string
   shaftD: string
   shaftH: string
   hasLadder: boolean
@@ -105,6 +107,7 @@ export function makeDefaultEmkSurvey(): EmkSurveyForm {
     pipeManual: false,
 
     hasShaft: true,
+    shaftCount: '1',
     shaftD: '1200',
     shaftH: '2300',
     hasLadder: true,

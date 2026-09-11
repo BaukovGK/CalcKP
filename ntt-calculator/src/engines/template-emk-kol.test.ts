@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { computeRow } from './row'
+import { recalcFotSatellites } from './fot'
 import type { NozzleNorm } from './formulas'
-import { __resetIds, flattenRows, type MaterializeContext } from './template-kns'
+import { __resetIds, flattenRows, sectionEnabledFor, type CalcTree, type MaterializeContext } from './template-kns'
 import { PRESSURE_PIPE_KITS } from './pressure-pipe-kit'
-import { EMK_SECTIONS, KOL_SECTIONS, type EmkSurveyParams, type KolSurveyParams } from './template-emk-kol'
+import { EMK_SECTIONS, KOL_SECTIONS, STRAPPING_ITEMS, type EmkSurveyParams, type KolSurveyParams } from './template-emk-kol'
 import { materializeEmk, materializeKol } from './materialize'
 import {
   computeEmkGeometry,
@@ -54,9 +55,15 @@ const WEIGHTS: Record<string, number> = {
   '1500|0.6|5000': 224.3,
 }
 
+// Нормы простых патрубков, лист «Для расчетов» (seed-data/engineering.json):
+// Мф по Ø — от неё ламинирование гильз, шахты и горловины к корпусу.
 const NORMS: NozzleNorm[] = [
   { dn: 250, odMm: null, minLengthMm: null, moldingMassKg: 0.6, h1Mm: null, s1Mm: null, flangeMassKg: 2.3, bolt: 'М24х100', boltCount: 12 },
+  { dn: 300, odMm: null, minLengthMm: null, moldingMassKg: 0.6, h1Mm: null, s1Mm: null, flangeMassKg: 3.1, bolt: 'М24х100', boltCount: 12 },
   { dn: 400, odMm: null, minLengthMm: null, moldingMassKg: 1.1, h1Mm: null, s1Mm: null, flangeMassKg: 4.6, bolt: 'М24х100', boltCount: 16 },
+  { dn: 500, odMm: null, minLengthMm: null, moldingMassKg: 1.9, h1Mm: null, s1Mm: null, flangeMassKg: 6.4, bolt: 'М27х110', boltCount: 20 },
+  { dn: 1000, odMm: null, minLengthMm: null, moldingMassKg: 7.2, h1Mm: null, s1Mm: null, flangeMassKg: 23, bolt: null, boltCount: null },
+  { dn: 1200, odMm: null, minLengthMm: null, moldingMassKg: 10.3, h1Mm: null, s1Mm: null, flangeMassKg: 36, bolt: null, boltCount: null },
 ]
 
 /** Мс при PN 4 — значение, которое эталон берёт для стыков (лист «Для расчетов»). */
@@ -68,6 +75,7 @@ const JOINT_LAYER_MASS: Record<number, number> = { 3000: 112, 2000: 35 }
  */
 const ELLIPTIC: Record<string, { massKg: number; thicknessMm: number }> = {
   '2000|5000': { massKg: 133, thicknessMm: 16 },
+  '2000|6000': { massKg: 144, thicknessMm: 17 },
   '2000|6500': { massKg: 149, thicknessMm: 17 },
   '2000|12000': { massKg: 196, thicknessMm: 23 },
   '3000|12000': { massKg: 586, thicknessMm: 34 },
@@ -110,10 +118,23 @@ describe('ЕМК: габариты из объёма (Реверс §5)', () => 
     expect(tankPipeLengthMm(50, 0)).toBeNull()
   })
 
-  it('горизонтальная получает +1,5 м под эллиптические днища', () => {
+  // Лист «для шапки», F6/G7: у горизонтальной часть объёма дают два
+  // эллиптических днища, π·D³/15, — трубы на их объём меньше.
+  it('горизонтальная: из объёма вычитаются днища — образец листа 13 400 мм', () => {
+    expect(tankPipeLengthMm(100, 3000, true)).toBe(13400)
+    expect(tankPipeLengthMm(100, 3000)).toBe(14200)
+    // V 50 м³, DN 2000: (50 − 1,6755) → 15 382 → 15 400 мм.
+    expect(tankPipeLengthMm(50, 2000, true)).toBe(15400)
+    // Объём не больше объёма днищ — трубы нет, длину вводят вручную.
+    expect(tankPipeLengthMm(1, 2000, true)).toBeNull()
+  })
+
+  it('габарит горизонтальной — труба плюс 1,5 м под днища, у вертикальной — труба', () => {
     const h = computeEmkGeometry({ volumeM3: 50, dn: 2000, placement: 'горизонтальное', installation: 'подземная', hasShaft: false })
     const v = computeEmkGeometry({ volumeM3: 50, dn: 2000, placement: 'вертикальное', installation: 'подземная', hasShaft: false })
-    expect(h.overallLengthMm! - v.overallLengthMm!).toBe(1500)
+    expect(h.pipeLengthMm).toBe(15400)
+    expect(h.overallLengthMm).toBe(16900)
+    expect(v.overallLengthMm).toBe(v.pipeLengthMm)
   })
 
   it('ручная длина из ОЛ перекрывает расчётную — и габарит, и SN следуют за ней', () => {
@@ -152,7 +173,16 @@ describe('ЕМК: габариты из объёма (Реверс §5)', () => 
     const without = computeEmkGeometry({ volumeM3: 50, dn: 2000, placement: 'вертикальное', installation: 'подземная', hasShaft: false })
     expect(withShaft.shaftDiameterMm).toBe(1200)
     expect(withShaft.shaftHeightMm).toBe(2300) // подземная выше наземной
+    expect(withShaft.shaftCount).toBe(1)
     expect(without.shaftDiameterMm).toBe(0)
+    expect(without.shaftCount).toBe(0)
+  })
+
+  it('число шахт из ОЛ; пустое — одна', () => {
+    const base = { volumeM3: 50, dn: 2000, placement: 'горизонтальное' as const, installation: 'подземная' as const, hasShaft: true }
+    expect(computeEmkGeometry({ ...base, shaftCount: 2 }).shaftCount).toBe(2)
+    expect(computeEmkGeometry({ ...base, shaftCount: null }).shaftCount).toBe(1)
+    expect(computeEmkGeometry({ ...base, shaftCount: 0 }).shaftCount).toBe(1)
   })
 
   it('размеры шахты из ОЛ перекрывают типовые', () => {
@@ -239,10 +269,10 @@ describe('материализация ЕМК', () => {
     expect(row.note).toContain('толщина 23 мм')
   })
 
-  it('эллиптические: строка матрицы следует за длиной — V 20 м³ → 6 400 мм → «До 6,5 м»', () => {
+  it('эллиптические: строка матрицы следует за длиной — V 20 м³ → 5 900 мм → «До 6 м»', () => {
     const rows = flattenRows(materializeEmk(ctx, { ...EMK, volumeM3: 20, placement: 'горизонтальное' }))
     const row = rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
-    expect(row.qtyCalc).toBe(2 * 149)
+    expect(row.qtyCalc).toBe(2 * 144)
   })
 
   // Крепление к трубе — ламинирование по Мс: масса формованных слоёв стыка
@@ -261,7 +291,8 @@ describe('материализация ЕМК', () => {
 
   it('эллиптические: труба — ровно на корпус, без прибавки', () => {
     const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное' }))
-    expect(rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000'))!.qtyCalc).toBe(16)
+    // V 50 м³ за вычетом днищ → 15 400 мм.
+    expect(rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000'))!.qtyCalc).toBe(15.4)
     expect(rows.some((r) => r.name === 'Ламинация днища (косые и центральный стыки)')).toBe(false)
   })
 
@@ -291,7 +322,8 @@ describe('материализация ЕМК', () => {
   it('цилиндрические: трубы на 1,5 м больше — днища из неё же', () => {
     const rows = flattenRows(materializeEmk(ctx, { ...EMK, placement: 'горизонтальное', bottomType: 'цилиндрические' }))
     const pipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 2000'))!
-    expect(pipe.qtyCalc).toBe(17.5)
+    // 15 400 мм корпуса + 1,5 м на днища.
+    expect(pipe.qtyCalc).toBe(16.9)
     expect(pipe.note).toContain('+ 1,5 м на цилиндрические днища')
     const tree = materializeEmk(ctx, { ...EMK, placement: 'горизонтальное', bottomType: 'цилиндрические' })
     const titles = tree.sections.flatMap((s) => s.components.map((c) => c.title))
@@ -465,9 +497,18 @@ describe('КОЛ: геометрия с горловиной', () => {
     expect(g.neckHeightMm).toBe(1000)
   })
 
-  it('без горловины глубина равна рабочей части', () => {
+  it('с горловиной труба корпуса — рабочая часть, возвышение идёт в горловину', () => {
+    const g = computeKolGeometry(KOL)
+    expect(g.shellLengthMm).toBe(2500)
+    expect(g.neckHeightMm).toBe(1000)
+  })
+
+  // Эталон H5 = IF(горловина; глубина; глубина + возвышение).
+  it('без горловины возвышение идёт в трубу корпуса', () => {
     const g = computeKolGeometry({ ...KOL, hasNeck: false })
-    expect(g.totalDepthMm).toBe(2500)
+    expect(g.shellLengthMm).toBe(2700)
+    expect(g.totalDepthMm).toBe(2700)
+    expect(g.neckHeightMm).toBe(0)
     expect(g.neckDiameterMm).toBe(0)
   })
 
@@ -533,25 +574,39 @@ describe('материализация КОЛ', () => {
   it('горловина материализуется по флагу ОЛ', () => {
     const withNeck = flattenRows(materializeKol(ctx, KOL))
     const without = flattenRows(materializeKol(ctx, { ...KOL, hasNeck: false }))
-    expect(withNeck.some((r) => r.name === 'Механическая формовка горловины к корпусу')).toBe(true)
-    expect(without.some((r) => r.name === 'Механическая формовка горловины к корпусу')).toBe(false)
+    expect(withNeck.some((r) => r.name === 'Ламинирование горловины к корпусу емкости')).toBe(true)
+    expect(without.some((r) => r.name === 'Ламинирование горловины к корпусу емкости')).toBe(false)
   })
 
-  it('горловина — отрезок трубы своего DN, длиной в свою высоту', () => {
+  // Лист колодца, N5 = h горловины + возвышение; марка трубы — SN 2500, PN 0,1.
+  it('горловина — отрезок трубы своего DN, высотой с возвышением', () => {
     const rows = flattenRows(materializeKol(ctx, KOL))
     const neckPipe = rows.find((r) => r.name.startsWith('Труба СК/НПС-К 1000-'))
-    expect(neckPipe).toBeDefined()
+    expect(neckPipe?.name).toBe('Труба СК/НПС-К 1000-0,1-2500')
     expect(neckPipe!.unit).toBe('м')
-    expect(neckPipe!.qtyCalc).toBeCloseTo(0.8, 6) // h 800 мм
+    expect(neckPipe!.qtyCalc).toBeCloseTo(1.0, 6) // h 800 + возвышение 200
     expect(neckPipe!.priceCatalog).toBeNull()
   })
 
-  it('длина трубы учитывает горловину', () => {
+  // Крышка люка — не часть горловины: в листе она в разделе 4.
+  it('горловина ламинируется к корпусу по Мф своего диаметра; крышка — в люке', () => {
+    const tree = materializeKol(ctx, KOL)
+    const neck = tree.sections.find((s) => s.code === '1')!.components.find((c) => c.nodeCode === 'A8')!
+    expect(neck.rows.find((r) => r.name === 'Ламинирование горловины к корпусу емкости')!.qtyCalc).toBe(7.2)
+    expect(neck.rows.some((r) => r.name.includes('крышки') || r.name.includes('формовка горловины'))).toBe(false)
+    const hatch = tree.sections.find((s) => s.code === '4')!.components.find((c) => c.title.startsWith('Люк'))!
+    expect(hatch.title).toBe('Люк горловины Ø1000')
+    expect(hatch.rows[0]!.qtyCalc).toBeCloseTo(neckCoverMassKg(1000), 9)
+  })
+
+  it('труба корпуса — рабочая часть: горловина идёт своей трубой', () => {
     // DN в поиске обязателен: труба корпуса и труба горловины различаются
     // только им, и без него нашлась бы первая попавшаяся.
     const pipe = flattenRows(materializeKol(ctx, KOL)).find((r) => r.name.startsWith('Труба СК/НПС-К 1500-'))!
-    expect(pipe.qtyCalc).toBeCloseTo(3.5, 6) // 3500 мм
-    expect(pipe.note).toContain('с горловиной')
+    expect(pipe.qtyCalc).toBeCloseTo(2.5, 6)
+    expect(pipe.note).toContain('горловина своей трубой')
+    const noNeck = flattenRows(materializeKol(ctx, { ...KOL, hasNeck: false })).find((r) => r.name.startsWith('Труба СК/НПС-К 1500-'))!
+    expect(noNeck.qtyCalc).toBeCloseTo(2.7, 6)
   })
 
   // У колодца защитный слой 4 мм, у КНС/ЕМК — 5 мм (Реверс §4.3).
@@ -562,14 +617,22 @@ describe('материализация КОЛ', () => {
     expect(rows.some((r) => r.name === 'Защитный слой ламинации 5 мм на теплоизоляцию')).toBe(false)
   })
 
-  it('у ЕМК тот же слой — 5 мм', () => {
+  // Лист ЕМК, строка 51: «4 мм» и 0,004·1850 — как у колодца.
+  it('у ЕМК слой тоже 4 мм', () => {
     const rows = flattenRows(materializeEmk(ctx, EMK))
-    expect(rows.some((r) => r.name === 'Защитный слой ламинации 5 мм на теплоизоляцию')).toBe(true)
+    expect(rows.some((r) => r.name === 'Защитный слой ламинации 4 мм на теплоизоляцию')).toBe(true)
+    expect(rows.some((r) => r.name === 'Защитный слой ламинации 5 мм на теплоизоляцию')).toBe(false)
   })
 
-  it('гильзы патрубков считаются из норм: DN150 → Ø250 → 0,6 кг', () => {
-    const sleeve = flattenRows(materializeKol(ctx, KOL)).find((r) => r.name === 'Формовка гильз')!
-    expect(sleeve.qtyCalc).toBeCloseTo(0.6, 6)
+  // Лист ЕМК, D37: гильза из трубы — от DN 200; меньше — ручная формовка.
+  it('патрубок DN150: ручная формовка 0,5 кг и ламинирование Мф(Ø250)·3/10', () => {
+    const rows = flattenRows(materializeKol(ctx, KOL))
+    expect(rows.filter((r) => r.name === 'Ручная формовка патрубка').map((r) => r.qtyCalc)).toEqual([0.5, 0.5])
+    const lam = rows.filter((r) => r.name === 'Ламинирование патрубка к корпусу')
+    expect(lam[0]!.qtyCalc).toBeCloseTo(0.18, 9)
+    expect(lam[0]!.fotK).toBe(1)
+    expect(rows.some((r) => r.name === 'Формовка гильз')).toBe(false)
+    expect(rows.some((r) => r.name.startsWith('Труба СК/НПС-К 250-'))).toBe(false)
   })
 })
 
@@ -629,7 +692,7 @@ describe('ЕМК и КОЛ: строки, которые листы эталон
 
   it('КОЛ: подготовка трубы — у корпуса и у горловины', () => {
     const preps = flattenRows(materializeKol(ctx, KOL)).filter((r) => r.name === PREP)
-    expect(preps.map((r) => r.qtyCalc)).toEqual([(1500 / 1200) * 3.5, (1000 / 1200) * 0.8])
+    expect(preps.map((r) => r.qtyCalc)).toEqual([(1500 / 1200) * 2.5, (1000 / 1200) * 1.0])
   })
 
   it('петли монтажные: ЕМК DN 2000 — усиленные, КОЛ DN 1500 — простые', () => {
@@ -659,5 +722,232 @@ describe('ЕМК и КОЛ: строки, которые листы эталон
     // В напорном трубопроводе направляющих больше нет — они в разделе 4.
     const pipeRows = withPumps.sections.find((s) => s.code === '6')!.components.flatMap((c) => c.rows)
     expect(pipeRows.some((r) => r.name.includes('направляющих насосов'))).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Построчная сверка с образцами листов (doc/Шаблон_ЕМК_КОЛ_разбор.md)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Строки дерева с ФОТ-спутниками и количеством, как в колонке J листа. */
+function settled(tree: CalcTree) {
+  const enabled = sectionEnabledFor(tree)
+  const rows = recalcFotSatellites(flattenRows(tree), { tirage: 1 })
+  const qtyOf = (r: (typeof rows)[number]) => computeRow(r, { sectionEnabled: enabled(r), tirage: 1 }).qty
+  const named = (n: string) => rows.filter((r) => r.name === n)
+  return {
+    rows,
+    /** Количества всех строк с таким наименованием — по порядку. */
+    qty: (n: string) => named(n).map(qtyOf),
+    /** ФОТ-спутники строк с таким наименованием. */
+    fot: (n: string) => named(n).map((op) => qtyOf(rows.find((r) => r.kind === 'ФОТ' && r.parentId === op.id)!)),
+  }
+}
+
+describe('сверка с образцом эталона «Калькулятор ЕМК»', () => {
+  // ОЛ_ЕМКОСТИ из книги: горизонтальная подземная DN 3000 на 100 м³, SN
+  // 10000, две шахты Ø1200 h2000, подводящий DN400 на глубине 2400,
+  // два отводящих DN300, насосы 1 + 1, корзина, задвижка на подводящем,
+  // шкаф управления, теплоизоляция 2000; днища — «новый способ».
+  const REF: EmkSurveyParams = {
+    dn: 3000,
+    volumeM3: 100,
+    placement: 'горизонтальное',
+    installation: 'подземная',
+    tankType: 'Накопительная',
+    bottomType: 'цилиндрические',
+    pnSurvey: 0.1,
+    sn: 10000,
+    hasShaft: true,
+    shaftCount: 2,
+    shaftDiameterMm: 1200,
+    shaftHeightMm: 2000,
+    hasLadder: true,
+    ventilation: true,
+    inletDn: 400,
+    inletCount: 1,
+    inletTrayDepthMm: 2400,
+    outletDn: 300,
+    outletCount: 2,
+    hasPumps: true,
+    pumpsWorking: 1,
+    pumpsReserve: 1,
+    pumpModel: 'VSL.100.30.2.5.0D',
+    valveOnInlet: true,
+    hasControlCabinet: true,
+    hasLevelSensor: false,
+    hasBasket: true,
+    insulationEnabled: true,
+    insulationDepthMm: 2000,
+  }
+  const tree = materializeEmk(ctx, REF)
+  const { rows, qty, fot } = settled(tree)
+  const section = (code: string) => tree.sections.find((s) => s.code === code)!
+
+  it('корпус: труба 14,9 м, товарный вид 34,4, подготовка 37,3, муфта отрезков 1', () => {
+    expect(qty('Труба СК/НПС-К 3000-0,1-10000')).toEqual([14.9])
+    expect(qty('Муфта соединительная Муфта-1 3000-1')).toEqual([1])
+    expect(qty('Ламинация днища (косые и центральный стыки)')[0]).toBeCloseTo(428.83, 2)
+    expect(fot('Ламинация днища (косые и центральный стыки)')).toEqual([240.2])
+    const body = section('1').components.find((c) => c.nodeCode === 'A1')!.rows
+    const q = (n: string) => computeRow(body.find((r) => r.name === n)!).qty
+    expect(q('Придание изделию товарного вида')).toBe(34.4)
+    expect(q('Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)')).toBe(37.3)
+  })
+
+  it('шахты: труба 4 м SN 5000, товарный вид 3,7, муфт 2, ламинирование 20,6, подготовка 4, прорезка 3,8', () => {
+    const shaft = section('1').components.find((c) => c.nodeCode === 'A8')!
+    expect(shaft.title).toBe('Шахта обслуживания Ø1200 h2000 ×2')
+    const q = (n: string) => computeRow(shaft.rows.find((r) => r.name === n)!).qty
+    expect(q('Труба СК/НПС-К 1200-0,1-5000')).toBe(4)
+    expect(q('Придание изделию товарного вида')).toBe(3.7)
+    expect(q('Муфта соединительная Муфта-1 1200-1')).toBe(2)
+    expect(q('Ламинирование шахты обслуживания к корпусу')).toBeCloseTo(20.6, 9)
+    expect(fot('Ламинирование шахты обслуживания к корпусу')).toEqual([11.6])
+    expect(q('Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)')).toBe(4)
+    expect(q('Прорезка отверстия шахты обслуживания')).toBe(3.8)
+    expect(rows.some((r) => r.name === 'Ручная формовка шахты обслуживания к корпусу')).toBe(false)
+  })
+
+  it('патрубки: гильзы 0,5 и 1 м трубы, ламинирование 0,57 и 0,66 кг с ФОТ 0,6 и 0,7', () => {
+    expect(qty('Труба СК/НПС-К 500-0,1-2500')).toEqual([0.5])
+    expect(qty('Труба СК/НПС-К 400-0,1-2500')).toEqual([1])
+    expect(qty('Ламинирование патрубка к корпусу').map((v) => +v.toFixed(2))).toEqual([0.57, 0.66])
+    expect(fot('Ламинирование патрубка к корпусу')).toEqual([0.6, 0.7])
+    // Прорезки — формулой колодца: у ёмкости строки 81–82 сдвинуты.
+    expect(qty('Прорезка отверстия патрубка в корпусе')).toEqual([0.8, 1.3])
+  })
+
+  it('теплоизоляция: шахты и верх, слой 4 мм', () => {
+    const area = Math.PI * 1.2 * 2 * 2 + Math.PI * 1.5 ** 2
+    expect(qty('Теплоизоляция - Изофом ППЭ ОР 15 1,5х40')[0]).toBeCloseTo(area, 9)
+    expect(qty('Защитный слой ламинации 4 мм на теплоизоляцию')[0]).toBeCloseTo(area * 0.004 * 1850, 9)
+  })
+
+  it('лестница: нержавеющая на 5 м и две приставные с монтажом 4 чел.ч', () => {
+    expect(qty('Уголок 40х40х3мм 08Х18Н10Т(AISI304) ГОСТ 8509-93')).toEqual([10])
+    expect(qty('Изготовление Лестницы')).toEqual([6.3])
+    expect(qty('Лестница приставная односекционная 14 ступеней 3,98 м (алюминиевая)')).toEqual([2])
+    expect(qty('Монтаж Лестницы')).toEqual([3.2, 4])
+  })
+
+  it('раздел 4: без перекрытия и анкеров; люки шахт и ремни к основанию', () => {
+    expect(rows.some((r) => r.name === 'Механическая формовка верхнего перекрытия')).toBe(false)
+    expect(rows.some((r) => r.name === 'Анкерный болт распорный 20х200')).toBe(false)
+    expect(qty('Ручка складная оцинкованная')).toEqual([4])
+    expect(qty('Замок натяжной АРТ 8427 А2 115-125')).toEqual([2])
+    expect(qty('Концевой выключатель KZ 81-08')).toEqual([2])
+    expect(qty('Монтаж складных ручек на болтах М6')).toEqual([2])
+    expect(qty('Монтаж замка натяжного, петли и концевого выключателя')).toEqual([2])
+    expect(qty(STRAPPING_ITEMS.strap.name)).toEqual([14])
+    expect(qty(STRAPPING_ITEMS.anchor.name)).toEqual([28])
+    expect(qty(STRAPPING_ITEMS.eyeNut.name)).toEqual([56])
+    expect(qty('Монтаж емкости к бетонному основанию ремнями стяжными')).toEqual([7])
+  })
+
+  it('вентстояк — на каждую шахту: дефлекторов 2, прорезка 0,4, монтаж 6', () => {
+    expect(qty('Дефлектор ПВХ Ду110')).toEqual([2])
+    expect(qty('Прорезка отверстия вентиляции в перекрытии')).toEqual([0.4])
+    expect(qty('Монтаж вентиляционного стояка')).toEqual([6])
+  })
+
+  it('раздел 8: задвижка на подводящем, насосы 2, муфт 2, поплавков 4, шкаф, тренога и газоанализатор', () => {
+    const valve = rows.find((r) => r.name.startsWith('Задвижка шиберная'))!
+    // Шток — от оси трубы: лоток 2400 − DN/2.
+    expect(valve.name).toContain('DN400 PN10 и удлиненным штоком L=2200 мм')
+    expect(computeRow(valve).qty).toBe(1)
+    expect(qty('Монтаж Задвижки шиберной ножевой')).toEqual([1])
+    expect(qty('Насос VSL.100.30.2.5.0D')).toEqual([2])
+    expect(qty('Автоматическая трубная муфта')).toEqual([2])
+    expect(rows.find((r) => r.name.startsWith('ПОПЛАВКОВЫЙ ВЫКЛЮЧАТЕЛЬ'))!.qtyCalc).toBe(4)
+    expect(qty('Монтаж Насосов')).toEqual([4])
+    expect(qty('Монтаж Систем автоматической трубной муфты')).toEqual([6])
+    expect(qty('Монтаж Поплавковых выключателей')).toEqual([4])
+    expect(qty('Шкаф управления насосами (2 шт.)')).toEqual([1])
+    expect(qty('Монтаж Шкафа управления')).toEqual([6])
+    expect(qty('Переносной газоанализатор (CH4, H2S, CO, O2)')).toEqual([1])
+    expect(qty('Тренога перегрузочная ТП-1000 г/п 1000 кг (без тали)')).toEqual([1])
+  })
+})
+
+describe('сверка с образцом эталона «Калькулятор колодца»', () => {
+  // ОЛ_КОЛОДЦА из книги: DN 2000, рабочая часть 4000, возвышение 300, SN
+  // 5000, горловина Ø1200 h1800, подводящий DN300 на 2000, два отводящих
+  // DN300, корзина, теплоизоляция 2000.
+  const REF: KolSurveyParams = {
+    dn: 2000,
+    workingDepthMm: 4000,
+    elevationMm: 300,
+    pnSurvey: 0.1,
+    sn: 5000,
+    hasLadder: true,
+    hasNeck: true,
+    neckHeightMm: 1800,
+    neckDiameterMm: 1200,
+    inletDn: 300,
+    inletCount: 1,
+    inletTrayDepthMm: 2000,
+    outletDn: 300,
+    outletCount: 2,
+    hasBasket: true,
+    hasGrinder: false,
+    underRoadway: false,
+    insulationEnabled: true,
+    insulationDepthMm: 2000,
+  }
+  const tree = materializeKol(ctx, REF)
+  const { rows, qty, fot } = settled(tree)
+  const neck = tree.sections.find((s) => s.code === '1')!.components.find((c) => c.nodeCode === 'A8')!
+
+  it('корпус: труба 4 м — рабочая часть, товарный вид 6,2, подготовка 6,7', () => {
+    expect(qty('Труба СК/НПС-К 2000-0,1-5000')).toEqual([4])
+    expect(qty('Придание изделию товарного вида')[0]).toBe(6.2)
+    expect(qty('Предварительные работы для подготовки трубы (транспортировка, разметка осей, шлифовка)')).toEqual([6.7, 2.1])
+  })
+
+  it('днище: формованное дно 123,36 кг и ламинирование к фальшполу 37,01 кг', () => {
+    expect(qty('Механическое формованное дно')[0]).toBeCloseTo(123.3586, 4)
+    expect(fot('Механическое формованное дно')).toEqual([34.6])
+    expect(qty('Ламинирование дна к фальшполу')[0]).toBeCloseTo(37.0076, 4)
+    expect(fot('Ламинирование дна к фальшполу')).toEqual([20.8])
+  })
+
+  it('горловина: труба 2,1 м SN 2500, товарный вид 2, муфта 1, ламинирование 10,3, прорезка 1,9', () => {
+    const q = (n: string) => computeRow(neck.rows.find((r) => r.name === n)!).qty
+    expect(q('Труба СК/НПС-К 1200-0,1-2500')).toBe(2.1)
+    expect(q('Придание изделию товарного вида')).toBe(2)
+    expect(q('Муфта соединительная Муфта-1 1200-1')).toBe(1)
+    expect(q('Ламинирование горловины к корпусу емкости')).toBe(10.3)
+    expect(fot('Ламинирование горловины к корпусу емкости')).toEqual([5.8])
+    expect(q('Прорезка отверстия для горловины обслуживания')).toBe(1.9)
+  })
+
+  it('патрубки: гильзы Ø400 0,5 и 1 м, ламинирование 0,33 и 0,66, прорезки 0,7 и 1,3', () => {
+    expect(qty('Труба СК/НПС-К 400-0,1-2500')).toEqual([0.5, 1])
+    expect(qty('Ламинирование патрубка к корпусу').map((v) => +v.toFixed(2))).toEqual([0.33, 0.66])
+    expect(fot('Ламинирование патрубка к корпусу')).toEqual([0.4, 0.7])
+    expect(qty('Прорезка отверстия патрубка в корпусе')).toEqual([0.7, 1.3])
+  })
+
+  it('лестница 6,1 м: уголок 12,2, ступени 7,669, работы 7,7 и 3,9, приставная 1 с монтажом 2', () => {
+    expect(qty('Уголок 40х40х3мм 08Х18Н10Т(AISI304) ГОСТ 8509-93')).toEqual([12.2])
+    expect(qty('Труба 25х2 мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81')[0]).toBeCloseTo(7.6686, 4)
+    expect(qty('Изготовление Лестницы')).toEqual([7.7])
+    expect(qty('Монтаж Лестницы')).toEqual([3.9, 2])
+    expect(qty('Лестница приставная односекционная 14 ступеней 3,98 м (алюминиевая)')).toEqual([1])
+  })
+
+  it('перекрытие 10 мм за вычетом крышки люка; прорезки люка в нём нет — она у горловины', () => {
+    const slab = Math.PI * (2300 / 2000) ** 2 * 0.01 * 1850 - neckCoverMassKg(1200)
+    expect(qty('Механическая формовка верхнего перекрытия')[0]).toBeCloseTo(slab, 9)
+    expect(rows.some((r) => r.name === 'Прорезка люков (горловин) в стеклокомпозитном перекрытии')).toBe(false)
+    expect(qty('Ручка складная оцинкованная')).toEqual([1])
+    expect(qty('Монтаж складных ручек на болтах М6')).toEqual([0.5])
+  })
+
+  it('вентстояк один: дефлектор, прорезка 0,2, монтаж 3', () => {
+    expect(qty('Дефлектор ПВХ Ду110')).toEqual([1])
+    expect(qty('Прорезка отверстия вентиляции в перекрытии')).toEqual([0.2])
+    expect(qty('Монтаж вентиляционного стояка')).toEqual([3])
   })
 })

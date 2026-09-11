@@ -1,7 +1,8 @@
 /**
  * Узлы изделий ЕМК (ёмкость) и КОЛ (колодец): корпус по частям — обечайка,
- * днища, шахта или горловина, патрубки, теплоизоляция. Разделы и порядок
- * узлов задаёт шаблон изделия (встроенный — engines/code-nodes.ts).
+ * днища, шахта или горловина, патрубки, теплоизоляция; люки, крепление
+ * горизонтальной ёмкости и оборудование ёмкости. Разделы и порядок узлов
+ * задаёт шаблон изделия (встроенный — engines/code-nodes.ts).
  *
  * Структура разделов у трёх изделий РАЗНАЯ — сверено с первоисточником
  * («Шаблон 3.0.xlsx», листы «Калькулятор ЕМК» и «Калькулятор колодца»):
@@ -18,28 +19,35 @@
  *
  * У колодца НЕТ напорного трубопровода (Реверс §6): насосов в нём нет.
  *
- * Общие узлы (лестница, перекрытие, вентстояк, крепёж) переиспользуются из
- * шаблона КНС — формулы этих компонентов побайтово совпадают во всех трёх
- * калькуляторах (Библиотека, основание); в шаблоны ЕМК и КОЛ их ставит
- * engines/code-nodes.ts.
+ * Общие узлы (лестница, перекрытие, вентстояк, крепёж, оборудование станции)
+ * переиспользуются из шаблона КНС и station-equipment.ts; в шаблоны ЕМК и
+ * КОЛ их ставит engines/code-nodes.ts.
+ *
+ * Построчная сверка с образцами листов — doc/Шаблон_ЕМК_КОЛ_разбор.md.
  */
 
 import {
   bottomJointLaminationKg,
   bottomMassKg,
   cutoutHours,
+  emkInsulation,
   insulation,
   laminationMassKg,
   marketableAppearanceHours,
   pipePrepHours,
+  type InsulationResult,
 } from './formulas'
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
 import {
   boundPrice,
+  inletGateValveName,
   makeRow,
   nextId,
   operationWithFot,
+  PUMP_PRICE_CATEGORY,
+  pumpRowName,
   surveyToggled,
+  TYPICAL_HATCH_MM,
   type CalcComponent,
   type CalcRowNode,
   type MaterializeContext,
@@ -57,7 +65,11 @@ import {
   type Placement,
   type TankType,
 } from './survey-emk-kol'
-import { pnForWeightLookup, sleeveDiameter } from './survey-kns'
+import { floatSwitchCount, pnForWeightLookup, sleeveDiameter } from './survey-kns'
+import { buildAutomation, buildServiceEquipment, floatSwitchRow, STATION_WORKS, work } from './station-equipment'
+
+/** Число для примечаний — по-русски: запятая, до двух знаков. */
+const fmt = (n: number, digits = 2) => n.toLocaleString('ru-RU', { maximumFractionDigits: digits })
 
 // ─── Каркасы разделов ────────────────────────────────────────────────────────
 
@@ -117,6 +129,12 @@ export interface EmkSurveyParams {
    */
   shaftDiameterMm?: number | null
   shaftHeightMm?: number | null
+  /**
+   * Количество шахт (лист, L8 «Количество шахт, шт.»): на него умножаются
+   * труба шахты и её муфта, ламинирование к корпусу, прорезка, утепление,
+   * люки, вентстояки и приставные лестницы. Пусто — одна.
+   */
+  shaftCount?: number | null
 
   inletDn: number
   inletCount: number
@@ -127,11 +145,25 @@ export interface EmkSurveyParams {
   hasPumps: boolean
   pumpsWorking: number
   pumpsReserve: number
+  /** Марка насосов из ОЛ — в наименование строки насоса. */
+  pumpModel?: string | null
+
+  /**
+   * Ответ ОЛ «Запорная арматура на подводящем»: шиберная задвижка со штоком
+   * на каждый подводящий. Пусто — у расчётов до появления поля: узел
+   * собирается выключенным.
+   */
+  valveOnInlet?: boolean
+  /** Ответ ОЛ «Шкаф управления». */
+  hasControlCabinet?: boolean
+  /** Ответ ОЛ «Датчики уровня»: погружной датчик уровня с футляром. */
+  hasLevelSensor?: boolean
 
   hasBasket: boolean
   /**
    * Глубина залегания H лотка подводящего, мм (ОЛ ёмкости, E51) — от неё
-   * цепь и направляющие корзины. Пусто — эти строки ждут ввода.
+   * цепь и направляющие корзины, шток задвижки на подводящем. Пусто — эти
+   * строки ждут ввода.
    */
   inletTrayDepthMm?: number | null
   insulationEnabled: boolean
@@ -185,17 +217,108 @@ export interface KolSurveyParams {
   tirage?: number
 }
 
-/** Патрубки с гильзами — общий узел A5 для ёмкости и колодца. */
+// ─── Трубы и муфты из стеклокомпозита ───────────────────────────────────────
+
+/**
+ * Марка трубы шахты, горловины и гильз. PN и SN вписаны в листах числом и
+ * от корпуса не зависят: шахта ёмкости — SN 5000 (лист ЕМК, H54), горловина
+ * колодца — SN 2500 (лист колодца, H36), гильзы патрубков — SN 2500
+ * (в наименовании, строки 37 и 26); PN у всех 0,1 — давления они не несут.
+ */
+const SERVICE_PIPE_PN = '0,1'
+export const SHAFT_PIPE_SN = 5000
+export const NECK_PIPE_SN = 2500
+export const SLEEVE_PIPE_SN = 2500
+
+/** Труба из стеклокомпозита своего производства: цена договорная, в прайсе её нет. */
+function ownPipeRow(ctx: MaterializeContext, name: string, qtyCalc: number, note: string): CalcRowNode {
+  return {
+    ...makeRow(ctx, { kind: 'МАТЕРИАЛ', category: 'Собственное производство', name, unit: 'м', qtyCalc, bucket: 'Труба, муфта', note }),
+    priceCatalog: null,
+  }
+}
+
+/**
+ * Соединительная муфта своего производства (листы: «Муфта соединительная
+ * Муфта-1 {D}-1»). В прайсе её нет, в листе цена вписывается — строка
+ * «красная» до ввода, как задвижка со штоком.
+ */
+function couplingRow(ctx: MaterializeContext, d: number, qtyCalc: number, note: string): CalcRowNode {
+  return {
+    ...makeRow(ctx, {
+      kind: 'МАТЕРИАЛ',
+      category: 'Собственное производство',
+      name: `Муфта соединительная Муфта-1 ${d}-1`,
+      unit: 'шт',
+      qtyCalc,
+      bucket: 'Труба, муфта',
+      note: `${note} · цена договорная — введите`,
+    }),
+    priceCatalog: null,
+  }
+}
+
+// ─── Патрубки (A5) ───────────────────────────────────────────────────────────
+
+/** Длина гильзы из трубы на патрубок, м (листы: `0,5 × кол-во`). */
+export const SLEEVE_PIPE_M = 0.5
+/** От этого DN гильза — отрезок трубы, ниже — ручная формовка (лист ЕМК, D37). */
+export const SLEEVE_PIPE_FROM_DN = 200
+
+/**
+ * Патрубки — общий узел A5 для ёмкости и колодца, по листам «Калькулятор
+ * ЕМК» (строки 36–46) и «Калькулятор колодца» (25–34, 80–81):
+ *
+ * - гильза — отрезок трубы Ø гильзы, 0,5 м на патрубок, с приданием
+ *   товарного вида `Ø/1300 × L`; у патрубка меньше DN 200 — «Ручная
+ *   формовка патрубка», 0,5 кг на патрубок;
+ * - к корпусу гильза ламинируется: `Мф(Ø гильзы) × 3/10 × кол-во`, ФОТ этого
+ *   ламинирования в листах k = 1;
+ * - прорезка отверстия `Ø·π/1000 × 0,5 × кол-во` — строки колодца 80–81. У
+ *   ёмкости на их месте строки 81–82 умножают на длину трубы шахты — сдвиг
+ *   при копировании, Вопросы_заводу §6и.
+ *
+ * Прежде здесь стояла «Формовка гильз» — Мф × кол-во, как у КНС: трубы гильзы
+ * не было, а масса и ФОТ выходили втрое больше ламинирования по листу.
+ */
 function buildNozzles(
   ctx: MaterializeContext,
-  nozzles: Array<{ title: string; dn: number; count: number; cutoutName: string }>,
+  nozzles: Array<{ title: string; dn: number; count: number }>,
 ): CalcComponent[] {
   const out: CalcComponent[] = []
   for (const n of nozzles) {
     if (n.count <= 0) continue
     const sleeve = sleeveDiameter(n.dn)
     const norm = ctx.nozzleNormOf?.(sleeve) ?? null
-    const mass = norm ? norm.moldingMassKg * n.count : null
+    const lamination = norm ? laminationMassKg(norm.moldingMassKg) * n.count : null
+    const sleeveM = SLEEVE_PIPE_M * n.count
+    const fromPipe = n.dn >= SLEEVE_PIPE_FROM_DN
+
+    const sleeveRows: CalcRowNode[] = fromPipe
+      ? [
+          ownPipeRow(
+            ctx,
+            `Труба СК/НПС-К ${sleeve}-${SERVICE_PIPE_PN}-${SLEEVE_PIPE_SN}`,
+            sleeveM,
+            `Гильза Ø${sleeve} — отрезок трубы ${SLEEVE_PIPE_M.toLocaleString('ru-RU')} м × ${n.count} · цена трубы договорная — введите`,
+          ),
+          makeRow(ctx, {
+            kind: 'ОПЕРАЦИЯ',
+            category: 'Собственное производство',
+            name: 'Придание изделию товарного вида',
+            unit: 'чел. ч',
+            qtyCalc: marketableAppearanceHours(sleeve, sleeveM),
+            note: `ƒ Ø${sleeve}/1300 × ${fmt(sleeveM)} м гильз`,
+          }),
+        ]
+      : operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ручная формовка патрубка',
+          unit: 'кг',
+          qtyCalc: sleeveM,
+          fotK: FOT_K_MANUAL,
+          note: `ƒ 0,5 кг на патрубок × ${n.count} — меньше DN ${SLEEVE_PIPE_FROM_DN} гильза формуется вручную`,
+        })
 
     out.push({
       id: nextId('c'),
@@ -203,21 +326,23 @@ function buildNozzles(
       title: `${n.title} DN${n.dn} ×${n.count}`,
       enabled: true,
       rows: [
+        ...sleeveRows,
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
-          name: 'Формовка гильз',
+          name: 'Ламинирование патрубка к корпусу',
           unit: 'кг',
-          qtyCalc: mass,
+          qtyCalc: lamination,
+          // В листах у этой строки k = 1 («*ламин*» → 1), а не 0,56.
           fotK: FOT_K_MANUAL,
           note:
-            mass == null
-              ? `Гильза Ø${sleeve} мм ×${n.count} · нормы формовки для Ø${sleeve} нет — введите массу вручную`
-              : `ƒ Мф(Ø${sleeve}) × ${n.count} = ${mass.toFixed(2)} кг`,
+            lamination == null
+              ? `Мф для гильзы Ø${sleeve} в нормах «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф(Ø${sleeve}) ${fmt(norm!.moldingMassKg)} кг × 3/10 × ${n.count} = ${fmt(lamination)} кг`,
         }),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
-          name: n.cutoutName,
+          name: 'Прорезка отверстия патрубка в корпусе',
           unit: 'чел. ч',
           qtyCalc: cutoutHours(sleeve, n.count),
           note: `ƒ Ø${sleeve}·π/1000 × 0,5 чел.ч × ${n.count}`,
@@ -245,16 +370,14 @@ function pipePrepRow(ctx: MaterializeContext, dn: number, lengthM: number): Calc
   })
 }
 
-/** Теплоизоляция — общий узел A9; толщина защитного слоя зависит от изделия. */
+/** Теплоизоляция — общий узел A9: площади считает изделие, слой — 4 мм у обоих. */
 function buildInsulation(
   ctx: MaterializeContext,
-  dn: number,
-  depthMm: number,
+  ins: InsulationResult,
   enabled: boolean,
   layerMm: number,
+  areaNote: string,
 ): CalcComponent {
-  const ins = insulation(dn, depthMm, { protectiveThickness: layerMm / 1000 })
-
   return {
     id: nextId('c'),
     nodeCode: 'A9',
@@ -267,12 +390,12 @@ function buildInsulation(
         name: 'Теплоизоляция - Изофом ППЭ ОР 15 1,5х40',
         unit: 'м²',
         qtyCalc: ins.totalM2,
-        note: `ƒ π·(DN/1000)·h + π·(DN/2000)² = ${ins.totalM2.toFixed(1)} м²`,
+        note: `${areaNote} = ${fmt(ins.totalM2, 1)} м²`,
       }),
       ...operationWithFot(ctx, {
         category: 'Собственное производство',
-        // Толщина зашита в наименование прайса: у КНС/ЕМК 5 мм, у колодца 4 мм
-        // (Реверс §4.3) — это две разные позиции НН.
+        // Толщина зашита в наименование прайса: 5 мм и 4 мм — две разные
+        // позиции НН. У ёмкости и колодца в листах — 4 мм.
         name: `Защитный слой ламинации ${layerMm} мм на теплоизоляцию`,
         unit: 'кг',
         qtyCalc: ins.protectiveLayerKg,
@@ -290,7 +413,13 @@ function buildInsulation(
   }
 }
 
+/** Слой ламинации на теплоизоляцию ёмкости и колодца, мм (листы: 0,004·1850). */
+const INSULATION_LAYER_MM = 4
+
 // ─── ЕМК: корпус ёмкости ─────────────────────────────────────────────────────
+
+/** Длина транспортного отрезка трубы корпуса, м (лист ЕМК, H22). */
+export const TRANSPORT_PIPE_M = 6
 
 /**
  * Труба корпуса ёмкости — общая для обечайки, днищ и шахты: длина, жёсткость
@@ -316,15 +445,30 @@ function emkPipe(s: EmkSurveyParams) {
   }
 }
 
+/**
+ * Соединительных муфт трубы горизонтальной ёмкости (лист ЕМК, строка 23):
+ * `ROUNDDOWN((L − 1,5) / 6)` — стыки транспортных отрезков по 6 м; L — длина
+ * трубы корпуса, м. У вертикальной их нет.
+ */
+export function emkCouplingCount(s: EmkSurveyParams): number {
+  const { lengthMm, horizontal } = emkPipe(s)
+  if (!horizontal || lengthMm <= 0) return 0
+  return Math.max(0, Math.floor((lengthMm / 1000 - 1.5) / TRANSPORT_PIPE_M))
+}
+
 // Раздел 1 ёмкости собирается из встроенных узлов (engines/code-nodes.ts),
 // как и корпус КНС: функция — узел, порядок задаёт шаблон изделия.
 
-/** A1 — обечайка корпуса ёмкости. */
+/** A1 — обечайка корпуса ёмкости и муфты её отрезков. */
 export function buildEmkShell(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
-  const { lengthMm, extraMm, lengthM, sn, material } = emkPipe(s)
+  const { lengthMm, extraMm, lengthM, sn, material, horizontal } = emkPipe(s)
   const pnPipe = pnForWeightLookup(s.pnSurvey, s.dn, sn)
   const kgPerM = ctx.pipeWeightOf(s.dn, pnPipe, sn)
   const pipeName = `Труба ${material}-К ${s.dn}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`
+  const couplings = emkCouplingCount(s)
+  const fromVolume = horizontal
+    ? ` · длина из объёма ${s.volumeM3} м³ за вычетом днищ = ${lengthMm} мм`
+    : ` · длина из объёма ${s.volumeM3} м³ = ${lengthMm} мм`
 
   return [
     {
@@ -343,7 +487,7 @@ export function buildEmkShell(ctx: MaterializeContext, s: EmkSurveyParams): Calc
             bucket: 'Труба, муфта',
             note:
               (kgPerM == null ? `Вес трубы не найден (DN ${s.dn}; PN ${pnPipe}; SN ${sn})` : `${kgPerM} кг/пм`) +
-              (s.pipeLengthMm ? ` · длина из ОЛ ${lengthMm} мм` : ` · длина из объёма ${s.volumeM3} м³ = ${lengthMm} мм`) +
+              (s.pipeLengthMm ? ` · длина из ОЛ ${lengthMm} мм` : fromVolume) +
               (extraMm ? ` + ${(extraMm / 1000).toLocaleString('ru-RU')} м на цилиндрические днища из той же трубы` : ''),
           }),
           // Цена трубы договорная — как у КНС (Механика §5.2): её дают полем
@@ -359,6 +503,10 @@ export function buildEmkShell(ctx: MaterializeContext, s: EmkSurveyParams): Calc
           unit: 'чел. ч',
           qtyCalc: marketableAppearanceHours(s.dn, lengthM),
         }),
+        // Отрезки трубы горизонтальной ёмкости стыкуются муфтами (строка 23).
+        ...(couplings > 0
+          ? [couplingRow(ctx, s.dn, couplings, `ƒ ROUNDDOWN((L ${(lengthMm / 1000).toLocaleString('ru-RU')} − 1,5 м) / ${TRANSPORT_PIPE_M} м)`)]
+          : []),
         // Вся труба, включая 1,5 м на цилиндрические днища (эталон J13).
         pipePrepRow(ctx, s.dn, lengthM),
       ],
@@ -430,6 +578,9 @@ export function buildEmkBottoms(ctx: MaterializeContext, s: EmkSurveyParams): Ca
       ],
     })
   } else {
+    // Фальшпол у ёмкости бывает только при насосах и в листе по умолчанию
+    // выключен (C72 «Нет»), поэтому пара — без фальшпола: «плоское днище» и
+    // «ламинирование плоского днища» (строки 25 и 27 при вертикальной).
     const bottom = bottomMassKg(s.dn)
     components.push({
       id: nextId('c'),
@@ -443,11 +594,11 @@ export function buildEmkBottoms(ctx: MaterializeContext, s: EmkSurveyParams): Ca
           unit: 'кг',
           qtyCalc: bottom,
           fotK: FOT_K_MECH,
-          note: `ƒ π·((DN+300)/2000)²·0,01·1850 + … = ${bottom.toFixed(1)} кг`,
+          note: `ƒ π·((DN+300)/2000)²·0,01·1850 + … = ${fmt(bottom, 1)} кг`,
         }),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
-          name: 'Ламинирование дна к фальшполу',
+          name: 'Ламинирование плоского днища',
           unit: 'кг',
           qtyCalc: laminationMassKg(bottom),
           fotK: FOT_K_LAMIN,
@@ -460,61 +611,75 @@ export function buildEmkBottoms(ctx: MaterializeContext, s: EmkSurveyParams): Ca
   return components
 }
 
-/** A8 — шахта обслуживания, по флагу ОЛ. */
+/**
+ * A8 — шахты обслуживания, по флагу ОЛ (лист ЕМК, строки 53–59, 80, 83).
+ *
+ * Шахта — отрезок трубы своего диаметра высотой в шахту, с приданием
+ * товарного вида, соединительной муфтой и подготовкой трубы; к корпусу она
+ * ламинируется массой Мф по своему диаметру (нормы «Для расчетов» — те же,
+ * что у гильз: Ø1200 — 10,3 кг). Всё — на каждую шахту.
+ *
+ * Прежде вместо ламинирования по норме стояли две пустые строки — «ручная
+ * формовка» и «ламинирование шахты»: масса считалась неизвестной
+ * (Вопросы_заводу §5), хотя лист берёт её из той же таблицы норм.
+ */
 export function buildEmkShaft(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
   if (!s.hasShaft) return []
-  const { geo, sn, material } = emkPipe(s)
+  const { geo } = emkPipe(s)
+  const d = geo.shaftDiameterMm
+  const n = geo.shaftCount
+  const pipeM = (geo.shaftHeightMm / 1000) * n
+  const norm = ctx.nozzleNormOf?.(d) ?? null
+  const lamination = norm ? norm.moldingMassKg * n : null
+  const each = n > 1 ? ` × ${n} шахты` : ''
 
   return [
     {
       id: nextId('c'),
       nodeCode: 'A8',
-      title: `Шахта обслуживания Ø${geo.shaftDiameterMm} h${geo.shaftHeightMm}`,
+      title: `Шахта обслуживания Ø${d} h${geo.shaftHeightMm}${n > 1 ? ` ×${n}` : ''}`,
       enabled: true,
       rows: [
-        // Шахта — та же стеклопластиковая труба, что и корпус, но своего
-        // диаметра: в расчёт идёт отрезок длиной в высоту шахты. Марка взята
-        // от корпуса — PN и SN шахты завод не называл (Вопросы_заводу §6г).
+        // Цена трубы договорная — как у корпуса (Механика §5.2), но своя: у
+        // шахты другой диаметр. Её дают полем ОЛ «Цена трубы» у шахты.
         {
-          ...makeRow(ctx, {
-            kind: 'МАТЕРИАЛ',
-            category: 'Собственное производство',
-            name: `Труба ${material}-К ${geo.shaftDiameterMm}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`,
-            unit: 'м',
-            qtyCalc: geo.shaftHeightMm / 1000,
-            bucket: 'Труба, муфта',
-            note: `Ø${geo.shaftDiameterMm} × h${geo.shaftHeightMm} мм = ${(geo.shaftHeightMm / 1000).toLocaleString('ru-RU')} пм · марка по корпусу`,
-          }),
-          // Цена трубы договорная — как у корпуса (Механика §5.2), но своя:
-          // у шахты другой диаметр. Её дают полем ОЛ «Цена трубы» у шахты.
-          priceCatalog: null,
+          ...ownPipeRow(
+            ctx,
+            `Труба СК/НПС-К ${d}-${SERVICE_PIPE_PN}-${SHAFT_PIPE_SN}`,
+            pipeM,
+            `Ø${d} × h${geo.shaftHeightMm} мм${each} = ${pipeM.toLocaleString('ru-RU')} пм · марка по листу: SN ${SHAFT_PIPE_SN}, PN ${SERVICE_PIPE_PN}`,
+          ),
           priceBinding: 'servicePipePrice',
           priceManual: boundPrice(s.servicePipePriceRub),
         },
-        pipePrepRow(ctx, geo.shaftDiameterMm, geo.shaftHeightMm / 1000),
-        ...operationWithFot(ctx, {
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
-          name: 'Ручная формовка шахты обслуживания к корпусу',
-          unit: 'кг',
-          qtyCalc: null,
-          fotK: FOT_K_MANUAL,
-          note: `Ø${geo.shaftDiameterMm} × h${geo.shaftHeightMm} мм · массу введите вручную`,
+          name: 'Придание изделию товарного вида',
+          unit: 'чел. ч',
+          qtyCalc: marketableAppearanceHours(d, pipeM),
+          note: `ƒ Ø${d}/1300 × ${pipeM.toLocaleString('ru-RU')} м`,
         }),
+        couplingRow(ctx, d, n, `ƒ по одной на шахту (${n})`),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ламинирование шахты обслуживания к корпусу',
           unit: 'кг',
-          qtyCalc: null,
+          qtyCalc: lamination,
           fotK: FOT_K_LAMIN,
-          note: 'Зависит от массы шахты',
+          note:
+            lamination == null
+              ? `Мф для Ø${d} в нормах «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф(Ø${d}) ${fmt(norm!.moldingMassKg)} кг${each}`,
         }),
+        pipePrepRow(ctx, d, pipeM),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
           name: 'Прорезка отверстия шахты обслуживания',
           unit: 'чел. ч',
-          qtyCalc: cutoutHours(geo.shaftDiameterMm, 1),
-          note: `ƒ Ø${geo.shaftDiameterMm}·π/1000 × 0,5 чел.ч`,
+          qtyCalc: cutoutHours(d, n),
+          note: `ƒ Ø${d}·π/1000 × 0,5 чел.ч${each}`,
         }),
       ],
     },
@@ -527,25 +692,286 @@ export function buildEmkNozzles(
   s: Pick<EmkSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
 ): CalcComponent[] {
   return buildNozzles(ctx, [
-    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName: 'Прорезка отверстия под гильзу входящего патрубка' },
-    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)' },
+    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount },
+    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount },
   ])
 }
 
-/** A9 — теплоизоляция ёмкости: защитный слой 5 мм, как у КНС. */
-export function buildEmkInsulation(
+/** A9 — теплоизоляция ёмкости: шахты и верх, слой 4 мм (лист ЕМК, строки 49–52, 86). */
+export function buildEmkInsulation(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  const geo = computeEmkGeometry(s)
+  const shafts = { count: geo.shaftCount, diameterMm: geo.shaftDiameterMm }
+  const ins = emkInsulation(s.dn, s.insulationDepthMm, shafts, INSULATION_LAYER_MM / 1000)
+  const side =
+    shafts.count > 0
+      ? `ƒ шахты π·${fmt(shafts.diameterMm / 1000)}·h${shafts.count > 1 ? ` × ${shafts.count}` : ''}`
+      : 'ƒ корпус π·(DN/1000)·h'
+  return [buildInsulation(ctx, ins, s.insulationEnabled, INSULATION_LAYER_MM, `${side} + верх π·(DN/2000)²`)]
+}
+
+// ─── ЕМК: люки, крепление, оборудование ──────────────────────────────────────
+
+/** Люки ёмкости: по одному на шахту; без шахты — один типовой. */
+export function emkHatches(s: EmkSurveyParams): { count: number; diameterMm: number; coverMassKg: number } {
+  const geo = computeEmkGeometry(s)
+  const d = geo.shaftCount > 0 ? geo.shaftDiameterMm : TYPICAL_HATCH_MM
+  return { count: Math.max(1, geo.shaftCount), diameterMm: d, coverMassKg: neckCoverMassKg(d) }
+}
+
+/** Фурнитура люка — дословно из прайса. */
+export const HATCH_ITEMS = {
+  handle: { category: 'Прочие материалы', name: 'Ручка складная оцинкованная', unit: 'шт' },
+  lock: { category: 'Прочие материалы', name: 'Замок натяжной АРТ 8427 А2 115-125', unit: 'шт' },
+  limitSwitch: { category: 'Прочие материалы', name: 'Концевой выключатель KZ 81-08', unit: 'шт' },
+} as const
+
+/**
+ * Люки шахт ёмкости и горловины колодца (B2): стеклокомпозитная крышка, её
+ * ламинирование, фурнитура и монтаж — лист ЕМК, строки 139–147 и 182–183;
+ * лист колодца — 138–144 и 179.
+ *
+ * Состав люка в листах задан на люк: у ёмкости 2 ручки, замок и концевой
+ * выключатель, у колодца 1 ручка; монтаж — 0,5 чел.ч на ручку и на замок с
+ * выключателем. Масса крышки в листах вписана числом, здесь — по площади
+ * люка (`neckCoverMassKg`).
+ */
+export function buildHatches(
   ctx: MaterializeContext,
-  s: Pick<EmkSurveyParams, 'dn' | 'insulationDepthMm' | 'insulationEnabled'>,
+  h: { count: number; diameterMm: number; handlesPerHatch: number; lockAndSwitch: boolean; title: string },
 ): CalcComponent[] {
-  return [buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 5)]
+  if (h.count <= 0) return []
+  const cover = neckCoverMassKg(h.diameterMm)
+  const mass = cover * h.count
+  const handles = h.handlesPerHatch * h.count
+  const hatchesNote = h.count > 1 ? ` × ${h.count} люка` : ''
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'B2',
+      title: `${h.title} Ø${h.diameterMm}${h.count > 1 ? ` ×${h.count}` : ''}`,
+      enabled: true,
+      rows: [
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Механическая формовка стеклокомпозитной крышки',
+          unit: 'кг',
+          qtyCalc: mass,
+          fotK: FOT_K_MECH,
+          note: `ƒ π·(Ø${h.diameterMm}/2000)²·0,006·1850 = ${fmt(cover, 1)} кг${hatchesNote}`,
+        }),
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ламинирование стеклокомпозитной крышки',
+          unit: 'кг',
+          qtyCalc: laminationMassKg(mass),
+          fotK: FOT_K_LAMIN,
+          note: 'ƒ масса крышек × 3/10',
+        }),
+        makeRow(ctx, { kind: 'МАТЕРИАЛ', ...HATCH_ITEMS.handle, qtyCalc: handles, note: `ƒ ${h.handlesPerHatch} на люк${hatchesNote}` }),
+        ...(h.lockAndSwitch
+          ? [
+              makeRow(ctx, { kind: 'МАТЕРИАЛ', ...HATCH_ITEMS.lock, qtyCalc: h.count, note: 'ƒ один на люк' }),
+              makeRow(ctx, { kind: 'МАТЕРИАЛ', ...HATCH_ITEMS.limitSwitch, qtyCalc: h.count, note: 'ƒ один на люк' }),
+            ]
+          : []),
+        work(ctx, 'Монтаж складных ручек на болтах М6', 0.5 * handles, 'ƒ 0,5 чел.ч на ручку'),
+        ...(h.lockAndSwitch
+          ? [work(ctx, 'Монтаж замка натяжного, петли и концевого выключателя', 0.5 * 2 * h.count, 'ƒ 0,5 чел.ч на замок и на выключатель')]
+          : []),
+      ],
+    },
+  ]
+}
+
+/** B2 — люки шахт ёмкости: крышка, 2 ручки, замок и концевой выключатель на люк. */
+export function buildEmkHatches(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  const h = emkHatches(s)
+  return buildHatches(ctx, {
+    count: h.count,
+    diameterMm: h.diameterMm,
+    handlesPerHatch: 2,
+    lockAndSwitch: true,
+    title: s.hasShaft ? 'Люк шахты' : 'Люк',
+  })
+}
+
+/** Крепление горизонтальной ёмкости к бетонному основанию — дословно из прайса. */
+export const STRAPPING_ITEMS = {
+  strap: {
+    category: 'Грузоподъем',
+    name: 'Ремень стяжной с натяжным устройством и крюками на концах (Прочность на разрыв 10тонн, Длина ремня 10 метров, Ширина 50мм)',
+    unit: 'шт',
+  },
+  // Наименование в прайсе обрезано на «М2» — так оно и в листе завода.
+  anchor: { category: 'Метизы', name: 'Анкерный болт с гайкой SZ-B MKT М20х165/30 высокой прочности (резьбовая часть М2', unit: 'шт' },
+  eyeNut: { category: 'Метизы', name: 'Рым-гайка М20 DIN 582 оцинкованная', unit: 'шт' },
+} as const
+
+/**
+ * B6 — крепление горизонтальной ёмкости к бетонному основанию стяжными
+ * ремнями (лист ЕМК, строки 173–176 и 201): ремень на каждый метр трубы
+ * корпуса, вверх до целого, по два анкерных болта SZ-B на ремень, по две
+ * рым-гайки на анкер; монтаж — 0,5 чел.ч на ремень. У вертикальной ёмкости
+ * лист ремней не ставит (`IF(Вертикальное; 0; …)`).
+ *
+ * Прежде горизонтальная ёмкость получала анкеры против всплытия, как
+ * вертикальная, — по «глубине», равной длине корпуса: 48 анкеров 20×200 на
+ * образце, которых в листе ёмкости нет вовсе.
+ */
+export function buildEmkStrapping(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  if (s.placement !== 'горизонтальное') return []
+  const { lengthMm } = emkPipe(s)
+  if (lengthMm <= 0) return []
+  const straps = Math.ceil(lengthMm / 1000)
+  const anchors = 2 * straps
+  const eyeNuts = 2 * anchors
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'B6',
+      title: 'Крепление к бетонному основанию ремнями',
+      enabled: true,
+      rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          ...STRAPPING_ITEMS.strap,
+          qtyCalc: straps,
+          note: `ƒ ROUNDUP(L ${(lengthMm / 1000).toLocaleString('ru-RU')} м) — ремень на каждый метр трубы`,
+        }),
+        makeRow(ctx, { kind: 'МАТЕРИАЛ', ...STRAPPING_ITEMS.anchor, qtyCalc: anchors, note: 'ƒ 2 на ремень' }),
+        makeRow(ctx, { kind: 'МАТЕРИАЛ', ...STRAPPING_ITEMS.eyeNut, qtyCalc: eyeNuts, note: 'ƒ 2 на анкерный болт' }),
+        work(ctx, 'Монтаж емкости к бетонному основанию ремнями стяжными', 0.5 * straps, 'ƒ 0,5 чел.ч на ремень'),
+      ],
+    },
+  ]
+}
+
+/**
+ * Высота ёмкости для оборудования, м: длина кабеля поплавков и датчиков,
+ * футляр датчика уровня, высота подъёма тали — высота лестницы (лист ЕМК,
+ * I114: футляр датчика уровня идёт на неё же, строка 271).
+ */
+export function emkEquipmentHeightM(s: EmkSurveyParams): number {
+  return emkLadderHeightMm(s, computeEmkGeometry(s)) / 1000
+}
+
+/**
+ * C4 — задвижка на подводящем ёмкости (лист ЕМК, строки 260 и 276):
+ * шиберная со штоком до поверхности, по одной на подводящий, по ответу ОЛ.
+ *
+ * Длина штока — как у КНС: глубина лотка минус половина DN. В листе ёмкости
+ * стоит `длина лестницы − лоток/2` (на образце 3800 мм вместо 2200) —
+ * Вопросы_заводу §6и. Задвижки и клапаны напорной стороны лист вписывает
+ * руками (DN напорной линии в ОЛ ёмкости нет) — их узел не строит.
+ */
+export function buildEmkValves(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  if (s.inletCount <= 0) return []
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'C4',
+      title: 'Задвижка на подводящем',
+      ...surveyToggled(Boolean(s.valveOnInlet)),
+      rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: 'Запорная арматура',
+          name: inletGateValveName(s.inletDn, s.inletTrayDepthMm),
+          unit: 'шт',
+          qtyCalc: s.inletCount,
+          note:
+            `ƒ по одной на подводящий (${s.inletCount}) · цена под длину штока — введите` +
+            (s.inletTrayDepthMm
+              ? ` · шток = лоток ${s.inletTrayDepthMm} − DN/2`
+              : ' · длина штока = глубина лотка − DN/2: укажите в ОЛ глубину лотка подводящего'),
+        }),
+        work(ctx, STATION_WORKS.knifeGateMount, s.inletCount, 'ƒ 1 чел.ч на задвижку'),
+      ],
+    },
+  ]
+}
+
+/**
+ * D1 — насосы ёмкости (лист ЕМК, строки 263–265 и 279–281): насосы, по
+ * автоматической трубной муфте на насос, поплавки «раб + рез + 2»; монтаж —
+ * 2 чел.ч на насос, 3 на муфту, 1 на поплавок. Только при насосах.
+ *
+ * Цена насоса — позиция прайса «Насос {марка}»; своего поля цены в ОЛ ёмкости
+ * нет, поэтому строка с ним не связана (у КНС связана).
+ */
+export function buildEmkPumps(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  if (!s.hasPumps) return []
+  const pumps = s.pumpsWorking + s.pumpsReserve
+  const W = STATION_WORKS
+  const floats = floatSwitchCount(s.pumpsWorking, s.pumpsReserve)
+  const model = s.pumpModel?.trim() || null
+
+  return [
+    {
+      id: nextId('c'),
+      nodeCode: 'D1',
+      title: 'Насосная группа',
+      enabled: true,
+      rows: [
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: PUMP_PRICE_CATEGORY,
+          name: pumpRowName(model),
+          unit: 'шт',
+          qtyCalc: pumps,
+          note: `ƒ = раб ${s.pumpsWorking} + рез ${s.pumpsReserve}` + (model ? '' : ' · марка не указана — уточните в опросном листе'),
+        }),
+        makeRow(ctx, {
+          kind: 'МАТЕРИАЛ',
+          category: PUMP_PRICE_CATEGORY,
+          name: 'Автоматическая трубная муфта',
+          unit: 'шт',
+          qtyCalc: pumps,
+          note: `ƒ по одной на насос (${pumps}) · цена по предложению поставщика насосов`,
+        }),
+        floatSwitchRow(ctx, floats, emkEquipmentHeightM(s), 'ƒ = раб + рез + 2'),
+        work(ctx, W.pumpsMount, 2 * pumps, `ƒ 2 чел.ч на насос (${pumps})`),
+        work(ctx, W.couplingMount, 3 * pumps, `ƒ 3 чел.ч на муфту (${pumps})`),
+        work(ctx, W.floatsMount, floats, 'ƒ 1 чел.ч — 1 выключатель'),
+      ],
+    },
+  ]
+}
+
+/**
+ * D2 — шкаф управления и датчики ёмкости (лист ЕМК, строки 266–271 и
+ * 282–284): шкаф и погружной датчик уровня с футляром — по ответам ОЛ.
+ * Датчиков давления и расходомера в ОЛ ёмкости нет — их узлы собираются
+ * выключенными, включаются в расчёте.
+ */
+export function buildEmkAutomation(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  const heightM = emkEquipmentHeightM(s)
+  return buildAutomation(ctx, {
+    heightM,
+    depthM: heightM,
+    outletDn: s.outletDn,
+    outletCount: s.outletCount,
+    pumps: s.hasPumps ? s.pumpsWorking + s.pumpsReserve : 0,
+    controlCabinet: Boolean(s.hasControlCabinet),
+    pressureSensors: false,
+    levelSensor: Boolean(s.hasLevelSensor),
+    flowMeter: false,
+  })
+}
+
+/** D5 — тренога, таль по высоте ёмкости и газоанализатор: в листе по одному всегда (строки 269, 272–273). */
+export function buildEmkService(ctx: MaterializeContext, s: EmkSurveyParams): CalcComponent[] {
+  return [buildServiceEquipment(ctx, { heightM: emkEquipmentHeightM(s) })]
 }
 
 // ─── КОЛ: корпус колодца ─────────────────────────────────────────────────────
 
-/** Труба корпуса колодца: полная глубина с горловиной и жёсткость. */
+/** Труба корпуса колодца: рабочая часть (с горловиной) или с возвышением (без неё). */
 function kolPipe(s: KolSurveyParams) {
   const geo = computeKolGeometry(s)
-  return { geo, lengthM: geo.totalDepthMm / 1000, sn: s.sn ?? geo.sn ?? 2500 }
+  return { geo, lengthM: geo.shellLengthMm / 1000, sn: s.sn ?? geo.sn ?? 2500 }
 }
 
 /** A1 — обечайка корпуса колодца. */
@@ -571,9 +997,10 @@ export function buildKolShell(ctx: MaterializeContext, s: KolSurveyParams): Calc
             qtyCalc: lengthM,
             bucket: 'Труба, муфта',
             note:
-              kgPerM == null
-                ? `Вес трубы не найден (DN ${s.dn}; PN ${pnPipe}; SN ${sn})`
-                : `${kgPerM} кг/пм · глубина ${geo.totalDepthMm} мм${s.hasNeck ? ' (с горловиной)' : ''}`,
+              (kgPerM == null ? `Вес трубы не найден (DN ${s.dn}; PN ${pnPipe}; SN ${sn})` : `${kgPerM} кг/пм`) +
+              (s.hasNeck
+                ? ` · рабочая часть ${geo.shellLengthMm} мм — горловина своей трубой`
+                : ` · рабочая часть ${s.workingDepthMm} + возвышение ${s.elevationMm} = ${geo.shellLengthMm} мм`),
           }),
           // Цена договорная — поле ОЛ «Цена трубы, ₽/м.п.», связанное со строкой.
           priceCatalog: null,
@@ -593,7 +1020,11 @@ export function buildKolShell(ctx: MaterializeContext, s: KolSurveyParams): Calc
   ]
 }
 
-/** A2 — плоское днище колодца и его ламинирование. */
+/**
+ * A2 — днище колодца и его ламинирование. Лист колодца по умолчанию — с
+ * фальшполом (C43 «Да»): «механическое формованное дно» и «ламинирование дна
+ * к фальшполу» (строки 21 и 23). Масса — та же, что у КНС.
+ */
 export function buildKolBottom(ctx: MaterializeContext, s: Pick<KolSurveyParams, 'dn'>): CalcComponent[] {
   const bottom = bottomMassKg(s.dn)
 
@@ -606,11 +1037,11 @@ export function buildKolBottom(ctx: MaterializeContext, s: Pick<KolSurveyParams,
       rows: [
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
-          name: 'Механическая формовка плоского днища',
+          name: 'Механическое формованное дно',
           unit: 'кг',
           qtyCalc: bottom,
           fotK: FOT_K_MECH,
-          note: `ƒ геометрия DN${s.dn} = ${bottom.toFixed(1)} кг`,
+          note: `ƒ геометрия DN${s.dn} = ${fmt(bottom, 1)} кг`,
         }),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
@@ -625,61 +1056,69 @@ export function buildKolBottom(ctx: MaterializeContext, s: Pick<KolSurveyParams,
   ]
 }
 
-/** A8 — горловина, по флагу ОЛ (Механика §7.2). */
+/**
+ * A8 — горловина, по флагу ОЛ (лист колодца, строки 36–41, 79, 82).
+ *
+ * Горловина — отрезок трубы своего диаметра высотой в горловину с
+ * возвышением (N5), с приданием товарного вида, соединительной муфтой и
+ * подготовкой трубы; к корпусу она ламинируется массой Мф по своему
+ * диаметру (нормы «Для расчетов»).
+ *
+ * Прежде здесь стояли «механическая формовка горловины» по площади и её
+ * ламинирование 3/10 — это крышка люка, в листе она в разделе 4 (узел
+ * «Люк горловины»).
+ */
 export function buildKolNeck(ctx: MaterializeContext, s: KolSurveyParams): CalcComponent[] {
   if (!s.hasNeck) return []
-  const { sn } = kolPipe(s)
-  const coverMass = neckCoverMassKg(s.neckDiameterMm)
+  const geo = computeKolGeometry(s)
+  const d = s.neckDiameterMm
+  const pipeM = geo.neckHeightMm / 1000
+  const norm = ctx.nozzleNormOf?.(d) ?? null
+  const lamination = norm ? norm.moldingMassKg : null
 
   return [
     {
       id: nextId('c'),
       nodeCode: 'A8',
-      title: `Горловина Ø${s.neckDiameterMm} h${s.neckHeightMm}`,
+      title: `Горловина Ø${d} h${s.neckHeightMm}`,
       enabled: true,
       rows: [
-        // Горловина — отрезок стеклопластиковой трубы своего диаметра, как и
-        // шахта ёмкости. Марка по корпусу: PN и SN горловины завод не называл
-        // (Вопросы_заводу §6г).
+        // Цена договорная и своя — поле ОЛ «Цена трубы» у горловины.
         {
-          ...makeRow(ctx, {
-            kind: 'МАТЕРИАЛ',
-            category: 'Собственное производство',
-            name: `Труба СК/НПС-К ${s.neckDiameterMm}-${s.pnSurvey.toLocaleString('ru-RU')}-${sn}`,
-            unit: 'м',
-            qtyCalc: s.neckHeightMm / 1000,
-            bucket: 'Труба, муфта',
-            note: `Ø${s.neckDiameterMm} × h${s.neckHeightMm} мм = ${(s.neckHeightMm / 1000).toLocaleString('ru-RU')} пм · марка по корпусу`,
-          }),
-          // Цена договорная и своя — поле ОЛ «Цена трубы» у горловины.
-          priceCatalog: null,
+          ...ownPipeRow(
+            ctx,
+            `Труба СК/НПС-К ${d}-${SERVICE_PIPE_PN}-${NECK_PIPE_SN}`,
+            pipeM,
+            `Ø${d} × (h${s.neckHeightMm} + возвышение ${s.elevationMm}) мм = ${pipeM.toLocaleString('ru-RU')} пм · марка по листу: SN ${NECK_PIPE_SN}, PN ${SERVICE_PIPE_PN}`,
+          ),
           priceBinding: 'servicePipePrice',
           priceManual: boundPrice(s.servicePipePriceRub),
         },
-        pipePrepRow(ctx, s.neckDiameterMm, s.neckHeightMm / 1000),
-        ...operationWithFot(ctx, {
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
-          name: 'Механическая формовка горловины к корпусу',
-          unit: 'кг',
-          qtyCalc: coverMass,
-          fotK: FOT_K_MECH,
-          note: `ƒ π·(Ø${s.neckDiameterMm}/2000)²·0,006·1850 = ${coverMass.toFixed(1)} кг`,
+          name: 'Придание изделию товарного вида',
+          unit: 'чел. ч',
+          qtyCalc: marketableAppearanceHours(d, pipeM),
+          note: `ƒ Ø${d}/1300 × ${pipeM.toLocaleString('ru-RU')} м`,
         }),
+        couplingRow(ctx, d, 1, 'ƒ одна на горловину'),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ламинирование горловины к корпусу емкости',
           unit: 'кг',
-          qtyCalc: laminationMassKg(coverMass),
+          qtyCalc: lamination,
           fotK: FOT_K_LAMIN,
-          note: 'ƒ масса горловины × 3/10',
+          note: lamination == null ? `Мф для Ø${d} в нормах «Для расчетов» нет — введите массу вручную` : `ƒ Мф(Ø${d}) = ${fmt(lamination)} кг`,
         }),
+        pipePrepRow(ctx, d, pipeM),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
           name: 'Прорезка отверстия для горловины обслуживания',
           unit: 'чел. ч',
-          qtyCalc: cutoutHours(s.neckDiameterMm, 1),
-          note: `ƒ Ø${s.neckDiameterMm}·π/1000 × 0,5 чел.ч`,
+          qtyCalc: cutoutHours(d, 1),
+          note: `ƒ Ø${d}·π/1000 × 0,5 чел.ч`,
         }),
       ],
     },
@@ -692,17 +1131,42 @@ export function buildKolNozzles(
   s: Pick<KolSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
 ): CalcComponent[] {
   return buildNozzles(ctx, [
-    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName: 'Прорезка отверстия под гильзу входящего патрубка' },
-    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)' },
+    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount },
+    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount },
   ])
 }
 
-/** A9 — теплоизоляция колодца: защитный слой ламинации 4 мм, а не 5 (Реверс §4.3). */
+/**
+ * A9 — теплоизоляция колодца: корпус `π·DN·h` и верх, слой 4 мм.
+ *
+ * В листе колодца (строка 51) боковая площадь — `π·(DN/2000)²·h`, то есть
+ * площадь круга, умноженная на высоту; у КНС та же площадь — `π·DN·h`. Здесь
+ * — как у КНС, расхождение в Вопросах заводу §6и.
+ */
 export function buildKolInsulation(
   ctx: MaterializeContext,
   s: Pick<KolSurveyParams, 'dn' | 'insulationDepthMm' | 'insulationEnabled'>,
 ): CalcComponent[] {
-  return [buildInsulation(ctx, s.dn, s.insulationDepthMm, s.insulationEnabled, 4)]
+  const ins = insulation(s.dn, s.insulationDepthMm, { protectiveThickness: INSULATION_LAYER_MM / 1000 })
+  return [buildInsulation(ctx, ins, s.insulationEnabled, INSULATION_LAYER_MM, 'ƒ π·(DN/1000)·h + π·(DN/2000)²')]
+}
+
+/** Люк колодца: на горловине её диаметра, без горловины — типовой в перекрытии. */
+export function kolHatch(s: KolSurveyParams): { count: number; diameterMm: number; coverMassKg: number } {
+  const d = s.hasNeck && s.neckDiameterMm > 0 ? s.neckDiameterMm : TYPICAL_HATCH_MM
+  return { count: 1, diameterMm: d, coverMassKg: neckCoverMassKg(d) }
+}
+
+/** B2 — люк колодца: крышка и одна ручка (лист колодца, строки 138–144, 179). */
+export function buildKolHatches(ctx: MaterializeContext, s: KolSurveyParams): CalcComponent[] {
+  const h = kolHatch(s)
+  return buildHatches(ctx, {
+    count: h.count,
+    diameterMm: h.diameterMm,
+    handlesPerHatch: 1,
+    lockAndSwitch: false,
+    title: s.hasNeck ? 'Люк горловины' : 'Люк',
+  })
 }
 
 // ─── Геометрия узлов ─────────────────────────────────────────────────────────

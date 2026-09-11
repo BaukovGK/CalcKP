@@ -124,13 +124,19 @@
              диаметр с высотой читаются вместе, как DN с признаками у КНС. -->
         <div class="ol-grid ol-grid--mid">
           <ToggleYesNo v-model="form.hasShaft" :hint="H.hasShaft" stacked class="fld--3" label="Шахта обслуживания" />
+          <!-- Число шахт — ячейка L8 листа завода: на него умножаются труба
+               шахты, муфта, ламинирование, люки, стояки и приставные
+               лестницы. Пусто — одна. -->
+          <label v-if="form.hasShaft" class="fld fld--2"><span v-hint="H.shaftCount">Шахт, шт</span>
+            <input v-model="form.shaftCount" class="num" placeholder="1" />
+          </label>
           <!-- Шахта — та же стеклопластиковая труба, что корпус, но своего
                диаметра, поэтому здесь селект по ряду труб, а не свободный
                ввод. Типовая — DN 1200. -->
-          <label v-if="form.hasShaft" class="fld fld--3"><span v-hint="H.shaftD">DN шахты, мм</span>
+          <label v-if="form.hasShaft" class="fld fld--2"><span v-hint="H.shaftD">DN шахты, мм</span>
             <select v-model="form.shaftD"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
           </label>
-          <label v-if="form.hasShaft" class="fld fld--3"><span v-hint="H.shaftH">h шахты, мм</span>
+          <label v-if="form.hasShaft" class="fld fld--2"><span v-hint="H.shaftH">h шахты, мм</span>
             <input v-model="form.shaftH" class="num" :placeholder="String(s.geo.value.shaftHeightMm)" />
           </label>
           <!-- Цена трубы шахты — своя, не корпуса: диаметр другой. Связана с
@@ -452,7 +458,13 @@ const liveValues = computed(() => {
       v: s.lengthMm.value != null ? `${fmtInt(s.lengthMm.value)} мм` : '—',
       hint: s.lengthOverridden.value
         ? { title: 'Длина трубы', text: 'Введена вручную — «изменить вручную» у трубы корпуса.', tone: 'ovr' as const }
-        : { title: 'Длина трубы', text: 'Из объёма и DN, вверх до 100 мм.', formula: 'L = CEILING(4V / (π·(DN/1000)²) · 1000; 100)' },
+        : form.value.placement === 'горизонтальное'
+          ? {
+              title: 'Длина трубы',
+              text: 'Из объёма за вычетом двух эллиптических днищ и DN, вверх до 100 мм.',
+              formula: 'L = CEILING(4·(V − π·(DN/1000)³/15) / (π·(DN/1000)²) · 1000; 100)',
+            }
+          : { title: 'Длина трубы', text: 'Из объёма и DN, вверх до 100 мм.', formula: 'L = CEILING(4V / (π·(DN/1000)²) · 1000; 100)' },
     },
     {
       k: 'Днища',
@@ -480,8 +492,11 @@ const liveValues = computed(() => {
     },
     {
       k: 'Шахта',
-      v: g.shaftDiameterMm ? `Ø${g.shaftDiameterMm} h${g.shaftHeightMm}` : 'нет',
-      hint: { title: 'Шахта обслуживания', text: 'Диаметр и высота — из листа, пустые поля — типовые: DN 1200, h 2300 мм у подземной и 2000 мм у остальных.' },
+      v: g.shaftDiameterMm ? `Ø${g.shaftDiameterMm} h${g.shaftHeightMm}${g.shaftCount > 1 ? ` × ${g.shaftCount}` : ''}` : 'нет',
+      hint: {
+        title: 'Шахта обслуживания',
+        text: 'Число, диаметр и высота — из листа, пустые поля — типовые: одна шахта DN 1200, h 2300 мм у подземной и 2000 мм у остальных.',
+      },
     },
   ]
 })
@@ -501,12 +516,16 @@ const blocks = computed(() => [
   { t: 'Теплоизоляция', on: form.value.insulation },
   { t: 'Корзина', on: form.value.grinder === 'корзина' || form.value.grinder === 'обе' },
   { t: 'Лестница', on: form.value.hasLadder },
-  { t: 'Перекрытие, площадка и несущие балки', on: true },
+  { t: form.value.placement === 'горизонтальное' ? 'Люки шахт' : 'Перекрытие и люки', on: true },
+  { t: 'Крепление к бетонному основанию ремнями', on: form.value.placement === 'горизонтальное' },
   { t: 'Вентиляционный стояк', on: form.value.ventilation },
   { t: 'Напорный трубопровод', on: form.value.hasPumps },
   { t: 'Крепёж', on: true },
-  // Запорная арматура в блоки не входит: раздел «Оборудование и запорная
-  // арматура» заполняется в расчёте вручную, тумблер ОЛ его не наполняет.
+  { t: 'Задвижка на подводящем', on: form.value.hasValves },
+  { t: 'Насосная группа', on: form.value.hasPumps },
+  { t: 'Шкаф управления', on: form.value.shu },
+  { t: 'Датчик уровня', on: form.value.datchikiUrov },
+  { t: 'Оборудование для обслуживания', on: true },
 ])
 const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)
 
@@ -574,6 +593,7 @@ function surveyPayload() {
       hasShaft: form.value.hasShaft,
       hasLadder: form.value.hasLadder,
       ventilation: form.value.ventilation,
+      shaftCount: num(form.value.shaftCount),
       shaftDiameterMm: num(form.value.shaftD),
       shaftHeightMm: num(form.value.shaftH),
       servicePipePriceRub: num(form.value.servicePipePrice),
@@ -584,6 +604,12 @@ function surveyPayload() {
       hasPumps: form.value.hasPumps,
       pumpsWorking: num(form.value.nRab) ?? 0,
       pumpsReserve: num(form.value.nRez) ?? 0,
+      pumpModel: form.value.marka.trim() || null,
+      // Оборудование — ответы блока «Доп. оборудование»: каждый ведёт свой
+      // узел раздела 8.
+      valveOnInlet: form.value.hasValves,
+      hasControlCabinet: form.value.shu,
+      hasLevelSensor: form.value.datchikiUrov,
       hasBasket: form.value.grinder === 'корзина' || form.value.grinder === 'обе',
       inletTrayDepthMm: num(form.value.podvLotok),
       insulationEnabled: form.value.insulation,

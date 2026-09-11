@@ -358,7 +358,8 @@ export interface MaterializeContext {
 /**
  * Толщина защитного слоя ламинации теплоизоляции, мм.
  *
- * У КНС — 5 мм, у колодца — 4 мм (Реверс §4.3). В прайсе это две разные
+ * У КНС — 5 мм, у ёмкости и колодца — 4 мм (листы ЕМК и колодца: 0,004·1850;
+ * у КНС в листе строка названа «4 мм», а считается 0,005). В прайсе это две разные
  * позиции, и толщина входит в наименование, поэтому константа задаётся здесь,
  * а не в формуле: она нужна и для массы, и для ключа поиска цены.
  */
@@ -847,6 +848,8 @@ export const LADDER_ITEMS = {
   stringer: { category: 'Металлопрокат', name: 'Уголок 40х40х3мм 08Х18Н10Т(AISI304) ГОСТ 8509-93', unit: 'м' },
   rungs: { category: 'Металлопрокат', name: 'Труба 25х2 мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81', unit: 'м' },
   rungsEmk: { category: 'Металлопрокат', name: 'Труба 25х2,5мм 12Х18Н10Т (AISI 304) ГОСТ 9941-81', unit: 'м' },
+  /** Приставная алюминиевая — у ёмкости и колодца вместе с нержавеющей. */
+  portable: { category: 'Прочие материалы', name: 'Лестница приставная односекционная 14 ступеней 3,98 м (алюминиевая)', unit: 'шт' },
 } as const satisfies Record<string, { category: EngineRow['category']; name: string; unit: string }>
 
 /**
@@ -857,12 +860,17 @@ export const LADDER_ITEMS = {
  *
  * Материалы — по листам всех трёх изделий (КНС 124–125, ЕМК 116–117,
  * колодец 115–116): тетивы из уголка на две стороны и ступени 0,44 м через
- * 0,35 м. Приставная алюминиевая лестница, которую листы ёмкости и колодца
- * кладут рядом, сюда не входит — вопрос заводу, вариант это или дополнение.
+ * 0,35 м.
+ *
+ * `portable` — приставные алюминиевые лестницы. Листы ёмкости и колодца
+ * считают их вместе с нержавеющей формулой: у ёмкости по одной на шахту
+ * (строка 119, `I113 = L8`), у колодца одну (строка 118); монтаж — 2 чел.ч
+ * на лестницу (строки 123 и 122). У КНС их число вписано руками (в образце
+ * 3), и узел их не строит.
  */
 export function buildLadder(
   ctx: MaterializeContext,
-  s: { depthMm: number; enabled?: boolean; device?: BasketDevice },
+  s: { depthMm: number; enabled?: boolean; device?: BasketDevice; portable?: number },
 ): CalcComponent[] {
   const heightM = s.depthMm / 1000
   const l = ladder(heightM)
@@ -903,6 +911,24 @@ export function buildLadder(
           qtyCalc: l.mountingHours,
           note: 'ƒ изготовление / 2',
         }),
+        ...(s.portable && s.portable > 0
+          ? [
+              makeRow(ctx, {
+                kind: 'МАТЕРИАЛ',
+                ...LADDER_ITEMS.portable,
+                qtyCalc: s.portable,
+                note: s.device === 'EMK' ? `ƒ по одной на шахту (${s.portable})` : 'ƒ одна на колодец',
+              }),
+              makeRow(ctx, {
+                kind: 'ОПЕРАЦИЯ',
+                category: 'Собственное производство',
+                name: 'Монтаж Лестницы',
+                unit: 'чел. ч',
+                qtyCalc: 2 * s.portable,
+                note: 'ƒ 2 чел.ч на приставную лестницу',
+              }),
+            ]
+          : []),
       ],
     },
   ]
@@ -913,15 +939,40 @@ export function buildLadder(
 /** Рама перекрытия ставится от этого DN (лист КНС, строка 145: `IF(F140<1200;0;…)`). */
 export const SLAB_FRAME_FROM_DN = 1200
 
-/**
- * Раздел 3: перекрытие и анкеры.
- *
- * `frame` — рама перекрытия из профильной трубы (лист КНС, строки 145 и
- * 218–219). У ёмкости и колодца она зависит от признаков, которых в их ОЛ
- * нет (исполнение крышки, наличие рамы), — поэтому только по запросу.
- */
-export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: number; frame?: boolean }): CalcComponent[] {
-  const slabMass = topSlabMassKg(s.dn)
+/** Типовой люк в перекрытии, Ø мм — когда ОЛ не задаёт ни горловины, ни шахты. */
+export const TYPICAL_HATCH_MM = 800
+
+export interface SlabParams {
+  dn: number
+  /** Глубина погружения для анкеров, мм. */
+  depthMm: number
+  /**
+   * Рама перекрытия из профильной трубы (лист КНС, строки 145 и 218–219).
+   * У ёмкости и колодца она зависит от признаков, которых в их ОЛ нет
+   * (исполнение крышки, наличие рамы), — поэтому только по запросу.
+   */
+  frame?: boolean
+  /** Толщина перекрытия, мм: у КНС 6, у ёмкости и колодца 10. */
+  thicknessMm?: number
+  /**
+   * Крышки люков: их масса вычитается из массы перекрытия, как в листах
+   * ёмкости и колодца (`… − H141·I131`). Пусто — не вычитается: у КНС число
+   * люков вписано руками, и узел их не строит.
+   */
+  hatches?: { count: number; coverMassKg: number } | null
+  /**
+   * Прорезка типового люка Ø800 в перекрытии. Нет — отверстие под горловину
+   * или шахту прорезает их узел (раздел 1).
+   */
+  hatchCutout?: boolean
+}
+
+/** Раздел 3: перекрытие и анкеры. */
+export function buildSlab(ctx: MaterializeContext, s: SlabParams): CalcComponent[] {
+  const thicknessMm = s.thicknessMm ?? 6
+  const hatches = s.hatches ?? null
+  const slabMass = topSlabMassKg(s.dn, hatches?.coverMassKg ?? 0, hatches?.count ?? 0, thicknessMm)
+  const hatchCutout = s.hatchCutout ?? true
   // Наружный диаметр ≈ DN + 300 (по геометрии формовки, Реверс §4.3).
   const outerD = (s.dn + 300) / 1000
   const anchors = anchorCount(outerD, s.depthMm / 1000)
@@ -941,7 +992,10 @@ export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: num
           unit: 'кг',
           qtyCalc: slabMass,
           fotK: FOT_K_MECH,
-          note: `ƒ π·((DN+300)/2000)²·0,006·1850 = ${slabMass.toFixed(1)} кг`,
+          note:
+            `ƒ π·((DN+300)/2000)²·${fmtNum(thicknessMm / 1000, 3)}·1850` +
+            (hatches ? ` − крышки люков ${fmtNum(hatches.coverMassKg, 1)} кг × ${hatches.count}` : '') +
+            ` = ${fmtNum(slabMass, 1)} кг`,
         }),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
@@ -951,15 +1005,19 @@ export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: num
           fotK: FOT_K_LAMIN,
           note: 'ƒ масса перекрытия × 3/10',
         }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Прорезка люков (горловин) в стеклокомпозитном перекрытии',
-          unit: 'чел. ч',
-          // Кол-во люков в ОЛ не задаётся — типовой один; уточняется вручную.
-          qtyCalc: cutoutHours(800, 1),
-          note: 'ƒ Ø800·π/1000 × 0,5 чел.ч · один люк типовой, уточните вручную',
-        }),
+        // Кол-во люков в ОЛ не задаётся — типовой один; уточняется вручную.
+        ...(hatchCutout
+          ? [
+              makeRow(ctx, {
+                kind: 'ОПЕРАЦИЯ',
+                category: 'Собственное производство',
+                name: 'Прорезка люков (горловин) в стеклокомпозитном перекрытии',
+                unit: 'чел. ч',
+                qtyCalc: cutoutHours(TYPICAL_HATCH_MM, 1),
+                note: `ƒ Ø${TYPICAL_HATCH_MM}·π/1000 × 0,5 чел.ч · один люк типовой, уточните вручную`,
+              }),
+            ]
+          : []),
       ],
     },
     // Рама перекрытия: метраж профиля лист не выводит (в образце вписано
@@ -1032,16 +1090,21 @@ export function buildSlab(ctx: MaterializeContext, s: { dn: number; depthMm: num
  *
  * `enabled` — ответ ОЛ «Вентиляция» у ёмкости: узел следует за тумблером.
  * У КНС и колодца вопроса нет — стояк есть всегда.
+ *
+ * `count` — стояков: у ёмкости по одному на шахту (лист ЕМК, строки
+ * 210–215 умножаются на `H209 = L8`), у КНС и колодца один.
  */
-export function buildVent(ctx: MaterializeContext, s: { enabled?: boolean } = {}): CalcComponent[] {
+export function buildVent(ctx: MaterializeContext, s: { enabled?: boolean; count?: number } = {}): CalcComponent[] {
   // Ø вентстояка в ОЛ не задаётся; типовой ПЭ Ду110 — под него есть дефлектор.
   const VENT_D = 110
+  const n = s.count && s.count > 1 ? s.count : 1
+  const per = n > 1 ? ` × ${n} стояка` : ''
 
   return [
     {
       id: nextId('c'),
       nodeCode: 'C1',
-      title: 'Вентиляционный стояк ПЭ Ду110',
+      title: n > 1 ? `Вентиляционный стояк ПЭ Ду110 ×${n}` : 'Вентиляционный стояк ПЭ Ду110',
       ...(s.enabled === undefined ? { enabled: true } : surveyToggled(s.enabled)),
       rows: [
         makeRow(ctx, {
@@ -1049,23 +1112,24 @@ export function buildVent(ctx: MaterializeContext, s: { enabled?: boolean } = {}
           category: 'Детали труб_да ПЭ ПВХ PPR',
           name: 'Дефлектор ПВХ Ду110',
           unit: 'шт',
-          qtyCalc: 1,
+          qtyCalc: n,
+          note: n > 1 ? `ƒ по одному на стояк (${n})` : undefined,
         }),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
           name: 'Прорезка отверстия вентиляции в перекрытии',
           unit: 'чел. ч',
-          qtyCalc: cutoutHours(VENT_D, 1),
-          note: `ƒ Ø${VENT_D}·π/1000 × 0,5 чел.ч`,
+          qtyCalc: cutoutHours(VENT_D, n),
+          note: `ƒ Ø${VENT_D}·π/1000 × 0,5 чел.ч${per}`,
         }),
         makeRow(ctx, {
           kind: 'ОПЕРАЦИЯ',
           category: 'Собственное производство',
           name: 'Монтаж вентиляционного стояка',
           unit: 'чел. ч',
-          qtyCalc: 3,
-          note: 'ƒ норматив 3 чел.ч (Библиотека C1)',
+          qtyCalc: 3 * n,
+          note: `ƒ норматив 3 чел.ч (Библиотека C1)${per}`,
         }),
       ],
     },

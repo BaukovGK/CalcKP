@@ -36,6 +36,7 @@
    двенадцати, и три поля арматуры разъезжались на две строки. */
 .ol-grid > *, .ol-manual > * { grid-column: span 4; }
 .fld { display: flex; flex-direction: column; gap: 3px; }
+.fld--2 { grid-column: span 2; }
 .fld--3 { grid-column: span 3; }
 .fld--4 { grid-column: span 4; }
 .fld--5 { grid-column: span 5; }

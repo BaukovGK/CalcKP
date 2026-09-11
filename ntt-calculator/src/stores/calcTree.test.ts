@@ -783,10 +783,36 @@ describe('стор calcTree: ёмкость', () => {
     })
     const store = useCalcTreeStore()
 
-    // V 50 м³ при DN 2000 — труба 16 000 мм → строка «До 12».
+    // V 50 м³ при DN 2000 — труба за вычетом днищ 15 400 мм → строка «До 12».
     await store.applySurvey('e1', { form: {}, emk: emk({ placement: 'горизонтальное' }), surveyRev: 2 })
     const row = store.rows.find((r) => r.name === 'Механическая формовка эллиптических днищ')!
     expect(row.qtyCalc).toBe(2 * 196)
+  })
+
+  // Параметры, сохранённые до полей оборудования и числа шахт: ответы ОЛ
+  // лежали в самой форме листа, а в параметры расчёта не попадали.
+  it('старые параметры ёмкости: оборудование и число шахт берутся из формы ОЛ', async () => {
+    const store = emkStore()
+    await store.applySurvey('e1', {
+      form: { hasValves: true, shu: true, datchikiUrov: false, marka: ' VSL 40 ', shaftCount: '2' },
+      emk: emk({ hasPumps: true, pumpsWorking: 1, pumpsReserve: 1 }),
+      surveyRev: 2,
+    })
+    expect(node(store, 'Задвижка на подводящем').enabled).toBe(true)
+    expect(node(store, 'Шкаф управления').enabled).toBe(true)
+    expect(node(store, 'Датчик уровня').enabled).toBe(false)
+    expect(store.rows.some((r) => r.name === 'Насос VSL 40')).toBe(true)
+    expect(node(store, 'Шахта обслуживания').title).toContain('×2')
+
+    // Новые параметры листа побеждают форму.
+    await store.applySurvey('e1', {
+      form: { hasValves: true, shu: true, shaftCount: '2' },
+      emk: emk({ valveOnInlet: false, hasControlCabinet: false, shaftCount: 1 }),
+      surveyRev: 3,
+    })
+    expect(node(store, 'Задвижка на подводящем').enabled).toBe(false)
+    expect(node(store, 'Шкаф управления').enabled).toBe(false)
+    expect(node(store, 'Шахта обслуживания').title).not.toContain('×')
   })
 })
 

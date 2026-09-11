@@ -219,16 +219,25 @@ describe('шаблон КНС против настоящего прайса', (
       insulationEnabled: false,
       insulationDepthMm: 0,
     }
+    // Трубы и муфты своего производства (корпус, шахта, горловина, гильзы) —
+    // договорные, как у КНС: цены в прайсе у них нет и не должно быть.
     const fresh = (rows: ReturnType<typeof flattenRows>) =>
-      rows.filter(
-        (r) =>
-          r.priceCatalog == null &&
-          r.priceManual == null &&
-          // Трубы корпуса, шахты и горловины — договорные, как у КНС.
-          !r.name.startsWith('Труба СК'),
-      )
-    expect(fresh(flattenRows(materializeEmk(ctx, EMK))).map((r) => r.name)).toEqual([])
+      rows.filter((r) => r.priceCatalog == null && r.priceManual == null && r.bucket !== 'Труба, муфта')
+    // Остальные «красные» — позиции, подбираемые под проект; любая другая —
+    // опечатка в имени.
+    expect(fresh(flattenRows(materializeEmk(ctx, EMK))).map((r) => r.name)).toEqual([
+      'Задвижка шиберная с невыдв.шпинделем с ручным управлением DN150 PN10 и удлиненным штоком',
+      'Насос (марка по подбору)',
+      'Автоматическая трубная муфта',
+      'Шкаф управления насосами (2 шт.)',
+    ])
+    // Вертикальная без насосов: перекрытие с люком, плоское днище, шкаф без насосов.
+    expect(fresh(flattenRows(materializeEmk(ctx, { ...EMK, placement: 'вертикальное', hasPumps: false }))).map((r) => r.name)).toEqual([
+      'Задвижка шиберная с невыдв.шпинделем с ручным управлением DN150 PN10 и удлиненным штоком',
+      'Шкаф управления',
+    ])
     expect(fresh(flattenRows(materializeKol(ctx, KOL))).map((r) => r.name)).toEqual([])
+    expect(fresh(flattenRows(materializeKol(ctx, { ...KOL, hasNeck: false, insulationEnabled: true, insulationDepthMm: 1500 }))).map((r) => r.name)).toEqual([])
     // Направляющие ёмкости — на высоту лестницы: DN + шахта.
     const geo = computeEmkGeometry(EMK)
     const guide = flattenRows(materializeEmk(ctx, EMK)).find((r) => r.name === STATION_ITEMS.guidePipeEmk.name)!

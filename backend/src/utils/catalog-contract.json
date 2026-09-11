@@ -78,10 +78,16 @@
       "emk.basket",
       "emk.ladder",
       "emk.slab",
+      "emk.hatches",
+      "emk.strapping",
       "emk.pumpMounting",
       "emk.vent",
       "emk.pressurePipe",
-      "emk.fasteners"
+      "emk.fasteners",
+      "emk.valves",
+      "emk.pumps",
+      "emk.automation",
+      "emk.service"
     ],
     "KOL": [
       "kol.shell",
@@ -94,8 +100,8 @@
       "kol.basket",
       "kol.ladder",
       "kol.slab",
-      "kol.vent",
-      "kol.fasteners"
+      "kol.hatches",
+      "kol.vent"
     ]
   }
 }

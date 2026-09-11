@@ -5,6 +5,7 @@
  * Встроенный шаблон собирается на наборе ОЛ, покрывающем ветки узлов:
  * исполнение целое и частями, корзина и дробилка, арматура и автоматика,
  * горизонтальная ёмкость с обоими типами днищ, насосы, шахта и горловина,
+ * ёмкость с двумя шахтами и оборудованием из ОЛ,
  * DN вне сеток справочников. Справочники — заглушки: отпечаток не должен
  * зависеть от базы. Из результата берётся всё, что задаёт состав и
  * количество: разделы, узлы с их состоянием, строки — вид, категория,
@@ -89,6 +90,13 @@ const SURVEYS: { readonly [D in DeviceType]: ReadonlyArray<DeviceEnv['survey']> 
     { pipeLengthMm: 6400, sn: 10000, tankType: 'Химстойкая', servicePipePriceRub: 7000, pipePriceRub: 9000, inletTrayDepthMm: 3100 },
     { placement: 'горизонтальное', installation: 'наземная', shaftDiameterMm: 1000, shaftHeightMm: 1500, hasPumps: true, pumpsWorking: 2, pumpsReserve: 1 },
     { dn: 1500, volumeM3: 10, inletCount: 0 },
+    // Образец листа «Калькулятор ЕМК»: две шахты, оборудование из ОЛ.
+    {
+      placement: 'горизонтальное', bottomType: 'цилиндрические', dn: 3000, volumeM3: 100, shaftCount: 2, shaftHeightMm: 2000,
+      inletDn: 400, inletTrayDepthMm: 2400, outletDn: 300, outletCount: 2, valveOnInlet: true,
+      hasPumps: true, pumpsWorking: 1, pumpsReserve: 1, pumpModel: 'VSL 100', hasControlCabinet: true, hasLevelSensor: true,
+    },
+    { valveOnInlet: true, hasControlCabinet: true, shaftCount: 3 },
   ].map((v) => ({ ...EMK, ...v }) as EmkSurveyParams),
   KOL: [
     {},

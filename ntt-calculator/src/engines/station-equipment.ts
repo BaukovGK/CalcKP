@@ -299,8 +299,10 @@ export function buildAutomation(ctx: MaterializeContext, p: AutomationParams): C
     name,
     generic,
   })
+  // Без насосов (ёмкость без насосного оборудования) шкаф — просто шкаф
+  // управления: «насосами (0 шт.)» в КП не пишут.
   const cabinetName =
-    `Шкаф управления насосами (${p.pumps} шт.)` +
+    (p.pumps > 0 ? `Шкаф управления насосами (${p.pumps} шт.)` : 'Шкаф управления') +
     (p.cabinetType ? `, ${p.cabinetType}` : '') +
     (p.cabinetStart ? `, пуск ${p.cabinetStart}` : '')
 

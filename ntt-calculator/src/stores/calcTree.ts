@@ -317,7 +317,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     switch (deviceType) {
       case 'EMK': {
         const p = saved.emk as EmkSurveyParams | undefined
-        return p ? materializeEmk(ctx, p) : null
+        return p ? materializeEmk(ctx, emkParamsWithForm(p, saved.form)) : null
       }
       case 'KOL': {
         const p = saved.kol as KolSurveyParams | undefined
@@ -327,6 +327,27 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
         const p = surveyToParams(saved)
         return p ? materializeKns(ctx, p) : null
       }
+    }
+  }
+
+  /**
+   * Параметры ёмкости, сохранённые до появления полей оборудования и числа
+   * шахт (редакция 2 встроенного шаблона ЕМК): ответы ОЛ «Запорная
+   * арматура», «Шкаф управления», «Датчики уровня» и марка насосов лежали в
+   * самой форме (`form`), но в параметры расчёта не попадали. Недостающее
+   * берётся из формы — пересборка старого расчёта строит те же узлы, что
+   * построила бы правка ОЛ.
+   */
+  function emkParamsWithForm(p: EmkSurveyParams, form: unknown): EmkSurveyParams {
+    const f = (form && typeof form === 'object' ? form : {}) as Record<string, unknown>
+    const flag = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined)
+    return {
+      ...p,
+      shaftCount: p.shaftCount ?? tryEvalExpr(String(f.shaftCount ?? '')),
+      pumpModel: p.pumpModel ?? (typeof f.marka === 'string' && f.marka.trim() ? f.marka.trim() : null),
+      valveOnInlet: p.valveOnInlet ?? flag(f.hasValves),
+      hasControlCabinet: p.hasControlCabinet ?? flag(f.shu),
+      hasLevelSensor: p.hasLevelSensor ?? flag(f.datchikiUrov),
     }
   }
 
