@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { requireAuth } from '../middleware/auth'
 import { calcPumpStationDimensions } from '../utils/pump-station-dimensions'
-import { calcRingStiffnessPa } from '../utils/ring-stiffness'
+import { ringStiffnessDesignation, ringStiffnessPa } from '../utils/ring-stiffness'
 import { calcDischargePipeDiameterMm, selectPressurePiping } from '../utils/pipe-hydraulics'
 import { selectPump } from '../utils/pump-selection'
 import { prisma } from '../utils/prisma'
@@ -43,19 +43,28 @@ pumpStationRouter.post('/dimensions', (req, res, next) => {
 })
 
 const ringStiffnessSchema = z.object({
-  mvk: z.boolean(),
-  inletPipeDepthM: z.number().min(0),
+  /** Глубина подземной части корпуса, мм: Нподз у КНС, полная глубина у колодца. */
+  depthMm: z.number().min(0),
+  /** Объект под проезжей частью — жёсткость на ступень выше. */
+  underRoadway: z.boolean().optional(),
+  /** ТТ МВК — меняет только обозначение (8000/12000), не жёсткость. */
+  mvk: z.boolean().optional(),
 })
 
 /**
- * POST /api/pump-station/ring-stiffness — кольцевая жёсткость корпуса SN, Па.
+ * POST /api/pump-station/ring-stiffness — кольцевая жёсткость корпуса.
  *
- * Чистый расчёт `calcRingStiffnessPa` (см. `utils/ring-stiffness.ts`).
+ * Правило завода (`utils/ring-stiffness.ts`), то же, что в опросном листе:
+ * `ringStiffnessPa` — расчётная ступень 5000 или 10000, от неё вес и
+ * трудоёмкость; `designationPa` — обозначение для заказчика (по ТТ МВК 8000
+ * и 12000). До 11.09.2026 эндпоинт принимал `{ mvk, inletPipeDepthM }` и
+ * считал по устаревшему правилу «глубина патрубка + 2 м > 7 м».
  */
 pumpStationRouter.post('/ring-stiffness', (req, res, next) => {
   try {
-    const { mvk, inletPipeDepthM } = ringStiffnessSchema.parse(req.body)
-    res.json({ ringStiffnessPa: calcRingStiffnessPa(mvk, inletPipeDepthM) })
+    const { depthMm, underRoadway, mvk } = ringStiffnessSchema.parse(req.body)
+    const sn = ringStiffnessPa(depthMm, { underRoadway })
+    res.json({ ringStiffnessPa: sn, designationPa: ringStiffnessDesignation(sn, { mvk }) })
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })

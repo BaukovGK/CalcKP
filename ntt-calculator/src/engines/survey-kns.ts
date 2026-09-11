@@ -179,6 +179,10 @@ export const SN_DEPTH_THRESHOLD_MM = 7000
  *
  * Подбор предварительный: окончательная жёсткость подтверждается расчётом
  * прочности (его делает отдельная программа).
+ *
+ * То же правило — на сервере (`backend/src/utils/ring-stiffness.ts`,
+ * `POST /api/pump-station/ring-stiffness`): общего пакета нет, совпадение
+ * держат общие примеры `backend/src/utils/sn-rule.vectors.json`.
  */
 export function snByDepth(depthMm: number, opts: { underRoadway?: boolean } = {}): number {
   return depthMm > SN_DEPTH_THRESHOLD_MM || opts.underRoadway ? SN_BASE.raised : SN_BASE.normal

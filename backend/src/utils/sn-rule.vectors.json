@@ -1,0 +1,15 @@
+{
+  "comment": "Правило кольцевой жёсткости корпуса (завод, 30.07.2026): реальных ступеней две — глубина корпуса > 7000 мм или «под проезжей частью» → SN 10000, иначе 5000; по ТТ МВК обозначение 8000 вместо 5000 и 12000 вместо 10000 — та же труба. Примеры прогоняют бэкенд (utils/ring-stiffness.ts) и фронтенд (engines/survey-kns.ts, snByDepth и snDesignation): правило задано в двух местах и обязано давать одно и то же.",
+  "cases": [
+    { "depthMm": 0, "underRoadway": false, "mvk": false, "sn": 5000, "designation": 5000 },
+    { "depthMm": 3000, "underRoadway": false, "mvk": false, "sn": 5000, "designation": 5000 },
+    { "depthMm": 6900, "underRoadway": false, "mvk": false, "sn": 5000, "designation": 5000, "note": "лоток 5,2 м при притоке и DN ОЛ3487 (hР 1,62 м) — Нподз 6900, нижняя ступень; прежнее правило бэкенда («глубина патрубка + 2 м» > 7 м) давало здесь 10000" },
+    { "depthMm": 7000, "underRoadway": false, "mvk": false, "sn": 5000, "designation": 5000, "note": "ровно на пороге — нижняя ступень" },
+    { "depthMm": 7001, "underRoadway": false, "mvk": false, "sn": 10000, "designation": 10000 },
+    { "depthMm": 11600, "underRoadway": false, "mvk": true, "sn": 10000, "designation": 12000, "note": "ОЛ3487: SN 10000, в марке трубы 12000" },
+    { "depthMm": 3500, "underRoadway": false, "mvk": true, "sn": 5000, "designation": 8000 },
+    { "depthMm": 3500, "underRoadway": true, "mvk": false, "sn": 10000, "designation": 10000, "note": "проезжая часть поднимает на ступень" },
+    { "depthMm": 7000, "underRoadway": true, "mvk": true, "sn": 10000, "designation": 12000 },
+    { "depthMm": 11600, "underRoadway": true, "mvk": false, "sn": 10000, "designation": 10000, "note": "выше 10000 ступени нет" }
+  ]
+}

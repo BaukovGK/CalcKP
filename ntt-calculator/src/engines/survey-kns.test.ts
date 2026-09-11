@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import snVectors from '../../../backend/src/utils/sn-rule.vectors.json'
 import {
   checkValveCount,
   convertFlowText,
@@ -136,6 +137,17 @@ describe('snByDepth — расчётная жёсткость', () => {
   it('ТТ МВК расчётную жёсткость НЕ меняет', () => {
     // Реальный ОЛ3487: глубина 11 600 при действующих ТТ МВК показывает 10000.
     expect(snByDepth(11600)).toBe(10000)
+  })
+})
+
+// Те же примеры прогоняет бэкенд (utils/ring-stiffness.ts): правило задано в
+// двух местах, и до 11.09.2026 они расходились — сервер считал по старому
+// «глубина патрубка + 2 м > 7 м».
+describe('правило SN — общие примеры с бэкендом', () => {
+  it.each(snVectors.cases)('%j', ({ depthMm, underRoadway, mvk, sn, designation }) => {
+    const calc = snByDepth(depthMm, { underRoadway })
+    expect(calc).toBe(sn)
+    expect(snDesignation(calc, { mvk })).toBe(designation)
   })
 })
 

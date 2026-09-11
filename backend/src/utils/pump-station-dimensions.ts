@@ -120,9 +120,17 @@ export interface PumpStationDimensions {
 
 /* ────────────────────────────  Вспомогательные функции  ──────────────────────────── */
 
-/** Округление вверх до кратного шага (аналог Excel `ROUNDUP(x, -2)` при step=100). */
+/**
+ * Округление вверх до кратного шага (аналог Excel `ROUNDUP(x, -2)` при step=100).
+ *
+ * Двоичный хвост гасится, как это делает Excel и фронтенд
+ * (`ntt-calculator/src/engines/rounding.ts`, «косметическое» округление до
+ * 15 значащих цифр): иначе (0,1 + 0,2)·1000 = 300,00000000000006 уходило бы
+ * в 400. Такой хвост на ровной границе шага развёл бы Нподз сервера и опросного
+ * листа на 100 мм — а на пороге жёсткости 7000 мм и SN.
+ */
 export function roundUpTo(value: number, step: number): number {
-  return Math.ceil(value / step) * step
+  return Math.ceil(Number((value / step).toPrecision(15))) * step
 }
 
 /**
