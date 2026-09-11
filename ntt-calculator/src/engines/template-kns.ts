@@ -39,7 +39,7 @@ import {
   type NozzleNorm,
 } from './formulas'
 import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
-import type { CostBucket } from './economics'
+import type { CostBucket, TreeRates } from './economics'
 import {
   DEFAULT_COUPLING_GM,
   couplingItem,
@@ -351,6 +351,12 @@ export interface CalcTree {
   survey: Record<string, unknown>
   /** Версия прайса, применённая при материализации (ТЗ §3). */
   priceListVersion: number
+  /**
+   * Ставки экономики того же прайса — ставятся при сборке и пересчёте по
+   * прайсу (План_устранения, 1.3). Нет поля — дерево собрано до фиксации
+   * ставок: оно считается по действующему прайсу до первого сохранения.
+   */
+  rates?: TreeRates
   /**
    * Версия шаблона изделия, по которой собран состав: 0 — встроенный шаблон
    * из кода, N — опубликованная технологом версия. Нет поля — дерево собрано

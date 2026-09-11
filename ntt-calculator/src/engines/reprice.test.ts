@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { hasPriceDelta, hasPriceDrift, isContractualRow, priceMarkAfter, repriceTree, type PriceLookup } from './reprice'
+import { hasPriceDelta, hasPriceDrift, isContractualRow, priceMarkAfter, rateShifts, repriceTree, type PriceLookup, type RepriceSummary } from './reprice'
+import { FALLBACK_RATES } from './economics'
 import type { CalcRowNode, CalcTree } from './template-kns'
 
 function row(over: Partial<CalcRowNode>): CalcRowNode {
@@ -130,12 +131,17 @@ describe('отметка «цена была» при пересборке', () 
 // План_устранения, 1.2: версию прайса поднимает и правка одной цены — к
 // пересчёту зовёт расхождение цен, а не номер версии.
 describe('пересчёт что-то изменит', () => {
-  const summary = { changed: 0, changedUnderManual: 0, notFound: 0, fotRate: null }
+  const summary: RepriceSummary = { changed: 0, changedUnderManual: 0, notFound: 0, fotRate: null, rateShifts: [] }
 
   it('сменится цена строки или ставка ФОТ — да', () => {
     expect(hasPriceDrift({ ...summary, changed: 1 })).toBe(true)
     expect(hasPriceDrift({ ...summary, changed: 1, changedUnderManual: 1 })).toBe(true)
     expect(hasPriceDrift({ ...summary, fotRate: { from: 1207.8, to: 1250 } })).toBe(true)
+  })
+
+  it('сдвинется ставка экономики или её источник — да', () => {
+    const shift = { key: 'overheadRub' as const, from: 1584.73, to: 1584.73, fromFallback: true, toFallback: false }
+    expect(hasPriceDrift({ ...summary, rateShifts: [shift] })).toBe(true)
   })
 
   it('позиций нет в прайсе, а остальное совпадает — нет: их цена не изменится', () => {
@@ -153,5 +159,39 @@ describe('пересчёт что-то изменит', () => {
     const prices: PriceLookup = (_c, name) => ({ Лист: 200, Швеллер: 900 } as Record<string, number>)[name] ?? null
 
     expect(hasPriceDrift(repriceTree(tree, prices, 3).summary)).toBe(false)
+  })
+})
+
+// План_устранения, 1.3: ставки экономики — в дереве; пересчёт берёт их из
+// того же прайса, что и цены строк, и показывает сдвиг каждой.
+describe('ставки экономики при пересчёте', () => {
+  const V2 = { fotRub: 1000, overheadRub: 1500, acetoneRub: 100, ppeRub: 120 }
+  const V5 = { ФОТ: 1300, 'Накладные расходы': 1500, Ацетон: 110, 'СИЗ и РМ': 120 }
+
+  it('дерево получает ставки нового прайса; сдвинувшиеся — в сводке', () => {
+    const { tree: next, summary } = repriceTree({ ...tree([]), rates: V2 }, prices(V5), 5)
+
+    expect(next.rates).toEqual({ fotRub: 1300, overheadRub: 1500, acetoneRub: 110, ppeRub: 120 })
+    expect(summary.rateShifts).toEqual([
+      { key: 'fotRub', from: 1000, to: 1300, fromFallback: false, toFallback: false },
+      { key: 'acetoneRub', from: 100, to: 110, fromFallback: false, toFallback: false },
+    ])
+    expect(hasPriceDrift(summary)).toBe(true)
+  })
+
+  it('дерево без ставок считалось по действующему прайсу — сдвига нет, ставки ставятся', () => {
+    const { tree: next, summary } = repriceTree(tree([]), prices(V5), 5)
+
+    expect(summary.rateShifts).toEqual([])
+    expect(next.rates?.fotRub).toBe(1300)
+  })
+
+  it('позиция ставки появилась в прайсе — источник сменился, даже если число то же', () => {
+    const prev = { ...V2, overheadRub: FALLBACK_RATES.overheadRub, fallback: ['overheadRub' as const] }
+    const shifts = rateShifts(prev, { ...V2, overheadRub: FALLBACK_RATES.overheadRub })
+
+    expect(shifts).toEqual([
+      { key: 'overheadRub', from: FALLBACK_RATES.overheadRub, to: FALLBACK_RATES.overheadRub, fromFallback: true, toFallback: false },
+    ])
   })
 })

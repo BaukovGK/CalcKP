@@ -27,9 +27,14 @@
  * ФОТ-спутники обновляются без отметки: их цена — ставка ФОТ, одна на все, и
  * её сдвиг показывает сводка, а не десятки одинаковых отметок.
  *
+ * Ставки экономики дерева (`CalcTree.rates`: ФОТ, накладные, ацетон, СИЗ)
+ * пересчёт берёт из того же прайса и показывает сдвиг каждой — ПЗР и
+ * ФОТ-спутники считаются по одной ставке (План_устранения, 1.3).
+ *
  * @module engines/reprice
  */
 
+import { RATE_KEYS, ratesFromPrices, type RateKey, type TreeRates } from './economics'
 import type { CalcRowNode, CalcTree } from './template-kns'
 import type { EngineRow } from './types'
 
@@ -44,12 +49,44 @@ export interface RepriceSummary {
   changedUnderManual: number
   /** Строки с ценой, позиции которых в новом прайсе нет: цена оставлена прежней. */
   notFound: number
-  /** Ставка ФОТ до и после, если сдвинулась. */
+  /** Ставка ФОТ у ФОТ-спутников до и после, если сдвинулась. */
   fotRate: { from: number | null; to: number } | null
+  /**
+   * Ставки экономики дерева, которые сдвинутся: значение или источник
+   * (прайс либо константа кода). У дерева без ставок — пусто: оно и так
+   * считается по действующему прайсу.
+   */
+  rateShifts: RateShift[]
+}
+
+/** Сдвиг одной ставки экономики при пересчёте. */
+export interface RateShift {
+  key: RateKey
+  from: number
+  to: number
+  /** До пересчёта ставка была константой кода: позиции не было в прайсе. */
+  fromFallback: boolean
+  /** После пересчёта — константа: позиции нет в прайсе. */
+  toFallback: boolean
+}
+
+/** Какие ставки дерева сдвинутся, если взять `next`. */
+export function rateShifts(prev: TreeRates | undefined, next: TreeRates): RateShift[] {
+  if (!prev) return []
+  const shifts: RateShift[] = []
+  for (const key of RATE_KEYS) {
+    const fromFallback = prev.fallback?.includes(key) ?? false
+    const toFallback = next.fallback?.includes(key) ?? false
+    if (prev[key] !== next[key] || fromFallback !== toFallback) {
+      shifts.push({ key, from: prev[key], to: next[key], fromFallback, toFallback })
+    }
+  }
+  return shifts
 }
 
 /**
- * Пересчёт что-то изменит: у строк сменится цена прайса или ставка ФОТ.
+ * Пересчёт что-то изменит: у строк сменится цена прайса, у ФОТ-спутников —
+ * ставка, у дерева — ставка экономики или её источник.
  *
  * Позиции, которых в прайсе нет, в счёт не идут: их цена остаётся прежней
  * при любом пересчёте. Версия прайса растёт с каждой правкой цены, и правка
@@ -57,7 +94,7 @@ export interface RepriceSummary {
  * «прайс обновился» решает это расхождение, а не номер версии.
  */
 export function hasPriceDrift(summary: RepriceSummary): boolean {
-  return summary.changed > 0 || summary.fotRate != null
+  return summary.changed > 0 || summary.fotRate != null || summary.rateShifts.length > 0
 }
 
 /**
@@ -102,7 +139,14 @@ export function repriceTree(
   priceOf: PriceLookup,
   version: number,
 ): { tree: CalcTree; summary: RepriceSummary } {
-  const summary: RepriceSummary = { changed: 0, changedUnderManual: 0, notFound: 0, fotRate: null }
+  const rates = ratesFromPrices(priceOf)
+  const summary: RepriceSummary = {
+    changed: 0,
+    changedUnderManual: 0,
+    notFound: 0,
+    fotRate: null,
+    rateShifts: rateShifts(tree.rates, rates),
+  }
 
   const reprice = (r: CalcRowNode): CalcRowNode => {
     if (isContractualRow(r)) return r
@@ -127,6 +171,7 @@ export function repriceTree(
     tree: {
       ...tree,
       priceListVersion: version,
+      rates,
       sections: tree.sections.map((s) => ({
         ...s,
         components: s.components.map((c) => ({ ...c, rows: c.rows.map(reprice) })),

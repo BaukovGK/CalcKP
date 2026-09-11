@@ -63,7 +63,8 @@ load(id):
   параллельно: estimate, прайс (nomenclature), веса труб, инж. матрицы,
                активная версия прайса (/refs/price-version)
   → индексы: priceIdx (категория|имя|ЕИ), weightIdx (dn|pn|sn), normIdx (dn)
-  → rates: 4 ставки из прайса (fallback — константы)
+  → liveRates: 4 ставки действующего прайса (позиции нет — константа
+    с отметкой fallback); дереву их ставит материализация (tree.rates)
   → totals: markup и tirage восстанавливаются из surveyData ДО первого
     recalcAll() — иначе переоткрытие молча возвращало 0,43 и 1 корпус
   → дерево: saved.tree (если ОЛ не менялся) | рематериализация | материализация
@@ -71,7 +72,9 @@ load(id):
 производные (computed):
   rows        — плоский список строк
   results     — Map<rowId, RowResult> = computeRow(row, {sectionEnabled, tirage})
-  economics   — computeEconomics(aggregateRows(...), rates, {markup})
+  economics   — computeEconomics(aggregateRows(...), rates, {markup});
+                rates — ставки дерева, у дерева без них — liveRates
+                (до первого сохранения, План_устранения 1.3)
   economicsUnit — то же с tirage=1 (строка «за 1 корп.»)
   missingPriceIds / conflictIds / overrideIds — состояния строк
 

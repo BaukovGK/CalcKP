@@ -7,7 +7,14 @@ import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { isStaleTreeWrite, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
-import { rowsWithoutPrice, treeBuiltinRevision, treePriceListVersion, treeTemplateVersion } from '../utils/estimate-tree'
+import {
+  RATE_LABELS,
+  rowsWithoutPrice,
+  treeBuiltinRevision,
+  treePriceListVersion,
+  treeRateFallbacks,
+  treeTemplateVersion,
+} from '../utils/estimate-tree'
 import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
@@ -336,7 +343,9 @@ estimatesRouter.post(
  *
  * Здесь, а НЕ при смене статуса:
  *  1. гейт по красным строкам — их сумма равна нулю, то есть такая строка
- *     молча занижает итог; в документ заказчику это попасть не должно;
+ *     молча занижает итог; в документ заказчику это попасть не должно; и по
+ *     ставкам экономики, взятым константами программы, — 422
+ *     RATES_NOT_IN_PRICE (решение Р5);
  *  2. снапшот — фиксирует, из каких цен и какой версии прайса родилась цифра
  *     в согласуемом документе.
  *
@@ -367,6 +376,21 @@ estimatesRouter.post(
           code: 'ROWS_WITHOUT_PRICE',
           rows: unpriced.slice(0, 20).map((r) => ({ id: r.id, name: r.name, unit: r.unit })),
           count: unpriced.length,
+        })
+        return
+      }
+
+      // Ставки экономики не из прайса — итог посчитан по константам
+      // программы, а не по ценам завода (решение Р5, План_устранения 1.3).
+      const fallbackRates = treeRateFallbacks(estimate.surveyData)
+      if (fallbackRates.length > 0) {
+        const names = fallbackRates.map((k) => `«${RATE_LABELS[k]}»`).join(', ')
+        res.status(422).json({
+          message:
+            `Нельзя выпустить КП: ${fallbackRates.length > 1 ? 'ставок' : 'ставки'} ${names} нет в прайсе — ` +
+            'расчёт посчитан по константам программы. Добавьте позиции в прайс и пересчитайте расчёт по нему.',
+          code: 'RATES_NOT_IN_PRICE',
+          rates: fallbackRates,
         })
         return
       }

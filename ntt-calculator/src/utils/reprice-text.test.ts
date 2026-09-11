@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { costShiftText, pluralRu, repricedToastText, repriceSummaryText, type RepricePreview } from './reprice-text'
+import {
+  costShiftText,
+  pluralRu,
+  rateFallbackText,
+  rateShiftText,
+  rateSourceText,
+  repricedToastText,
+  repriceSummaryText,
+  type RepricePreview,
+} from './reprice-text'
 
 /** Разряды ru-RU разделены неразрывными пробелами — сравниваем с обычными. */
 const plain = (t: string) => t.replace(/[\u00a0\u202f]/g, ' ')
@@ -12,7 +21,7 @@ const preview = (over: PreviewOver = {}): RepricePreview => ({
   saleBefore: 1_430_000,
   saleAfter: 1_458_600,
   ...over,
-  summary: { changed: 0, changedUnderManual: 0, notFound: 0, fotRate: null, ...over.summary },
+  summary: { changed: 0, changedUnderManual: 0, notFound: 0, fotRate: null, rateShifts: [], ...over.summary },
 })
 
 describe('тексты пересчёта по новому прайсу', () => {
@@ -30,6 +39,44 @@ describe('тексты пересчёта по новому прайсу', () =>
     expect(t).toContain('цена 2 строк и ставка ФОТ 1 207,8 → 1 250 ₽')
     expect(t).toContain('У 1 из них стоит ручная цена — она останется.')
     expect(t).toContain('3 позиций нет в новом прайсе')
+  })
+
+  it('сдвиг ставок экономики — каждая своей строкой, ФОТ не дважды', () => {
+    const t = plain(
+      repriceSummaryText(
+        preview({
+          summary: {
+            changed: 2,
+            fotRate: { from: 1000, to: 1300 },
+            rateShifts: [
+              { key: 'fotRub', from: 1000, to: 1300, fromFallback: false, toFallback: false },
+              { key: 'overheadRub', from: 1584.73, to: 1600, fromFallback: true, toFallback: false },
+            ],
+          },
+        }),
+      ),
+    )
+    expect(t).toContain(
+      'Изменится цена 2 строк, ставка «ФОТ» 1 000 → 1 300 ₽/чел.ч и ставка «Накладные расходы» 1 584,73 → 1 600 ₽/чел.ч (теперь из прайса)',
+    )
+    expect(t).not.toContain('ставка ФОТ 1 000')
+  })
+
+  it('ставка: источник и отметка константы', () => {
+    const shift = { key: 'ppeRub' as const, from: 125, to: 122, fromFallback: false, toFallback: true }
+    expect(plain(rateShiftText(shift))).toBe('ставка «СИЗ и РМ» 125 → 122 ₽/ед. (позиции нет в прайсе — константа программы)')
+    const rates = { fotRub: 1300, overheadRub: 1584.73, acetoneRub: 110, ppeRub: 125, fallback: ['overheadRub' as const] }
+    expect(plain(rateSourceText('fotRub', rates, 5))).toBe('Ставка «ФОТ» — 1 300 ₽/чел.ч, из прайса НН v5; в расчёте она до пересчёта по прайсу.')
+    expect(rateSourceText('overheadRub', rates, 5)).toContain('константа программы — позиции нет в прайсе, КП не выпускается')
+  })
+
+  it('ставки не из прайса: плашка называет позиции, которые добавить', () => {
+    const one = rateFallbackText(['overheadRub'])
+    expect(one.title).toBe('Ставки «Накладные расходы» нет в прайсе')
+    expect(one.detail).toContain('Добавьте в прайс позицию «ФОТ / Накладные расходы / чел. ч»')
+    const two = rateFallbackText(['acetoneRub', 'ppeRub'])
+    expect(two.title).toBe('Ставок «Ацетон» и «СИЗ и РМ» нет в прайсе')
+    expect(two.blocked).toBe('КП не выпущено: ставок «Ацетон» и «СИЗ и РМ» нет в прайсе — расчёт посчитан по константам программы')
   })
 
   it('цены не сдвинулись — пересчёт только отметит версию', () => {

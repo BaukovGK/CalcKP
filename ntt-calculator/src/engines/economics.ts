@@ -76,6 +76,60 @@ export interface Rates {
   ppeRub: number
 }
 
+/** Ставка экономики — ключ в {@link Rates}. */
+export type RateKey = keyof Rates
+
+export const RATE_KEYS: readonly RateKey[] = ['fotRub', 'overheadRub', 'acetoneRub', 'ppeRub']
+
+/**
+ * Позиции прайса со ставками (Механика §9): по этим тройкам ставки ищутся в
+ * прайсе; `label` — для экрана и сообщений, `per` — единица ставки.
+ */
+export const RATE_ITEMS: Readonly<Record<RateKey, { category: string; name: string; unit: string; label: string; per: string }>> = {
+  fotRub: { category: 'ФОТ', name: 'ФОТ', unit: 'чел. ч', label: 'ФОТ', per: '₽/чел.ч' },
+  overheadRub: { category: 'ФОТ', name: 'Накладные расходы', unit: 'чел. ч', label: 'Накладные расходы', per: '₽/чел.ч' },
+  acetoneRub: { category: 'Прочие материалы', name: 'Ацетон', unit: 'кг', label: 'Ацетон', per: '₽/кг' },
+  ppeRub: { category: 'Прочие материалы', name: 'СИЗ и РМ', unit: 'ед.', label: 'СИЗ и РМ', per: '₽/ед.' },
+}
+
+/**
+ * Ставки по умолчанию — если позиции нет в прайсе (Механика §9). Такая
+ * ставка отмечается в дереве (`TreeRates.fallback`), и КП по расчёту не
+ * выпускается, пока она не придёт из прайса (решение Р5).
+ */
+export const FALLBACK_RATES: Rates = {
+  fotRub: 1207.8,
+  overheadRub: 1584.73,
+  acetoneRub: 109.4,
+  ppeRub: 122,
+}
+
+/**
+ * Ставки, зафиксированные в дереве расчёта (План_устранения, 1.3).
+ *
+ * Прежде расчёт брал их из прайса при каждом открытии: смена ставки молча
+ * меняла экономику старого расчёта, ФОТ-спутники считались по прежней ставке,
+ * а ПЗР — уже по новой, и экономику по снапшоту было не восстановить. Теперь
+ * ставки ставятся при сборке и пересчёте по прайсу — вместе с ценами строк.
+ */
+export interface TreeRates extends Rates {
+  /** Ставки, которых при сборке не нашлось в прайсе: взяты константы кода. */
+  fallback?: RateKey[]
+}
+
+/** Четыре ставки из прайса; каких в нём нет — константы с отметкой. */
+export function ratesFromPrices(priceOf: (category: string, name: string, unit: string) => number | null): TreeRates {
+  const rates: TreeRates = { ...FALLBACK_RATES }
+  const fallback: RateKey[] = []
+  for (const key of RATE_KEYS) {
+    const { category, name, unit } = RATE_ITEMS[key]
+    const price = priceOf(category, name, unit)
+    if (price == null) fallback.push(key)
+    else rates[key] = price
+  }
+  return fallback.length ? { ...rates, fallback } : rates
+}
+
 /** Агрегаты по строкам расчёта — вход экономического пайплайна. */
 export interface RowAggregate {
   /** Σ чел.ч работ БЕЗ «изготов» в наименовании. */

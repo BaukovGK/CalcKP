@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  FALLBACK_RATES,
+  RATE_ITEMS,
+  RATE_KEYS,
+  ratesFromPrices,
   aggregateRows,
   classifyRow,
   computeEconomics,
@@ -283,5 +287,31 @@ describe('aggregateRows', () => {
     const a = aggregateRows([mk({ unit: 'кг', qtyCalc: 100, priceCatalog: 10 })], { tirage: 3 })
     expect(a.moldingMassKg).toBe(300)
     expect(a.bucketSums.Формовка).toBe(3000)
+  })
+})
+
+// План_устранения, 1.3: ставки — позиции прайса; каких нет — константы с
+// отметкой, по которой КП не выпускается (решение Р5).
+describe('ставки экономики из прайса', () => {
+  const lookup = (map: Record<string, number>) => (_c: string, name: string) => map[name] ?? null
+
+  it('все четыре нашлись — без отметок', () => {
+    const r = ratesFromPrices(lookup({ ФОТ: 1300, 'Накладные расходы': 1600, Ацетон: 110, 'СИЗ и РМ': 125 }))
+    expect(r).toEqual({ fotRub: 1300, overheadRub: 1600, acetoneRub: 110, ppeRub: 125 })
+  })
+
+  it('позиции нет — константа программы с отметкой', () => {
+    const r = ratesFromPrices(lookup({ ФОТ: 1300, Ацетон: 110 }))
+    expect(r).toEqual({ ...FALLBACK_RATES, fotRub: 1300, acetoneRub: 110, fallback: ['overheadRub', 'ppeRub'] })
+  })
+
+  it('ставки ищутся по позициям прайса из Механики §9', () => {
+    const asked: string[] = []
+    ratesFromPrices((c, n, u) => {
+      asked.push(`${c} / ${n} / ${u}`)
+      return 1
+    })
+    expect(asked).toEqual(['ФОТ / ФОТ / чел. ч', 'ФОТ / Накладные расходы / чел. ч', 'Прочие материалы / Ацетон / кг', 'Прочие материалы / СИЗ и РМ / ед.'])
+    expect(RATE_KEYS.map((k) => RATE_ITEMS[k].label)).toEqual(['ФОТ', 'Накладные расходы', 'Ацетон', 'СИЗ и РМ'])
   })
 })

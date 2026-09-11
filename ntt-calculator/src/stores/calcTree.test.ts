@@ -1075,6 +1075,144 @@ describe('стор calcTree: пересчёт по новой версии пр�
   })
 })
 
+/**
+ * Ставки экономики фиксируются в дереве (План_устранения, 1.3).
+ *
+ * Прежде ставки ФОТ, накладных, ацетона и СИЗ брались из прайса при каждом
+ * открытии: смена ставки молча меняла экономику старого расчёта, ФОТ-спутники
+ * считались по прежней ставке, а ПЗР — уже по новой.
+ */
+describe('стор calcTree: ставки экономики в дереве', () => {
+  const RATES_V2 = { fotRub: 1000, overheadRub: 1500, acetoneRub: 100, ppeRub: 120 }
+
+  /** Расчёт на прайсе v2: формовка с ФОТ-спутником; ставки — в дереве. */
+  function ratedEstimate(rates: Record<string, unknown> | null = RATES_V2) {
+    const est = savedEstimate()
+    const tree = est.surveyData.tree as Record<string, unknown>
+    tree.priceListVersion = 2
+    if (rates) tree.rates = rates
+    tree.sections = [
+      {
+        id: 's1', code: '1', title: 'Корпус', enabled: true,
+        components: [
+          {
+            id: 'c1', title: 'Узел', enabled: true,
+            rows: [
+              { id: 'op', kind: 'ОПЕРАЦИЯ', category: 'Собственное производство', name: 'Ручная формовка', unit: 'кг', qtyCalc: 10, qtyManual: null, priceCatalog: 50, priceManual: null, fotK: 1 },
+              { id: 'fot', kind: 'ФОТ', category: 'ФОТ', name: 'ФОТ', unit: 'чел. ч', qtyCalc: 10, qtyManual: null, priceCatalog: 1000, priceManual: null, fotK: 1, parentId: 'op' },
+            ],
+          },
+        ],
+      },
+    ]
+    return est
+  }
+
+  /** Прайс v5: все четыре ставки выросли, цена формовки та же. */
+  const PRICES_V5 = {
+    'Собственное производство': [{ name: 'Ручная формовка', unit: 'кг', priceRub: 50 }],
+    ФОТ: [
+      { name: 'ФОТ', unit: 'чел. ч', priceRub: 1300 },
+      { name: 'Накладные расходы', unit: 'чел. ч', priceRub: 1600 },
+    ],
+    'Прочие материалы': [
+      { name: 'Ацетон', unit: 'кг', priceRub: 110 },
+      { name: 'СИЗ и РМ', unit: 'ед.', priceRub: 125 },
+    ],
+  }
+  const RATES_V5 = { fotRub: 1300, overheadRub: 1600, acetoneRub: 110, ppeRub: 125 }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    nomenclature.mockResolvedValue(PRICES_V5)
+    priceVersion.mockResolvedValue({ version: 5, label: 'НН v5', createdAt: null })
+  })
+
+  it('смена ставок в прайсе не меняет открытый старый расчёт — пересчёт предлагается', async () => {
+    estimatesGet.mockResolvedValue(ratedEstimate())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    // ПЗР — по ставке ФОТ дерева, той же, что у ФОТ-спутника.
+    expect(store.economics.pzrHours).toBeGreaterThan(0)
+    expect(store.economics.pzrRub).toBe(store.economics.pzrHours * 1000)
+    expect(store.economics.overheadRub).toBe(store.economics.overheadHours * 1500)
+    expect(store.priceOutdated).toBe(true)
+    expect(store.repricePreview!.summary.rateShifts.map((r) => [r.key, r.from, r.to])).toEqual([
+      ['fotRub', 1000, 1300],
+      ['overheadRub', 1500, 1600],
+      ['acetoneRub', 100, 110],
+      ['ppeRub', 120, 125],
+    ])
+  })
+
+  it('пересчёт ставит ставки нового прайса: ФОТ строк и ПЗР — по одной ставке, итог растёт', async () => {
+    estimatesGet.mockResolvedValue(ratedEstimate())
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    const before = store.economics.costRub
+    const previewAfter = store.repricePreview!.costAfter
+
+    store.repriceToCurrent()
+
+    expect(store.tree!.rates).toEqual(RATES_V5)
+    expect(store.rows.find((r) => r.id === 'fot')!.priceCatalog).toBe(1300)
+    expect(store.economics.pzrRub).toBe(store.economics.pzrHours * 1300)
+    expect(store.economics.costRub).toBeGreaterThan(before)
+    // Предпросмотр считал «после» по ставкам нового прайса.
+    expect(store.economics.costRub).toBe(previewAfter)
+    expect(store.priceOutdated).toBe(false)
+  })
+
+  it('дерево без ставок считается по прайсу и получает его ставки при сохранении', async () => {
+    const est = ratedEstimate(null)
+    estimatesGet.mockResolvedValue(est)
+    patchSurvey.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    expect(store.economics.overheadRub).toBe(store.economics.overheadHours * 1600)
+
+    await store.save()
+
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: { rates?: unknown } }]
+    expect(body.tree.rates).toEqual(RATES_V5)
+  })
+
+  it('ставки нет в прайсе — расчёт это знает; появилась — пересчёт снимает отметку', async () => {
+    estimatesGet.mockResolvedValue(ratedEstimate({ ...RATES_V2, overheadRub: 1584.73, fallback: ['overheadRub'] }))
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    expect(store.rateFallbacks).toEqual(['overheadRub'])
+    expect(store.repricePreview!.summary.rateShifts.find((r) => r.key === 'overheadRub')).toEqual({
+      key: 'overheadRub', from: 1584.73, to: 1600, fromFallback: true, toFallback: false,
+    })
+
+    store.repriceToCurrent()
+    expect(store.rateFallbacks).toEqual([])
+  })
+
+  it('свежий расчёт при прайсе без ставок отмечает их константами', async () => {
+    const est = savedEstimate()
+    delete (est.surveyData as Record<string, unknown>).tree
+    Object.assign(est.surveyData, {
+      surveyRev: 2,
+      treeSurveyRev: 0,
+      kns: { dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2', nRab: '2', nRez: '1' },
+      form: { dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2', nRab: '2', nRez: '1' },
+      derived: { npodzMm: 11600, sn: 10000, pn: 0.1, pumpModel: null },
+    })
+    estimatesGet.mockResolvedValue(est)
+    nomenclature.mockResolvedValue({ ФОТ: [{ name: 'ФОТ', unit: 'чел. ч', priceRub: 1300 }] })
+    const store = useCalcTreeStore()
+    await store.load('e1')
+
+    expect(store.tree!.rates).toMatchObject({ fotRub: 1300, fallback: ['overheadRub', 'acetoneRub', 'ppeRub'] })
+    expect(store.rateFallbacks).toEqual(['overheadRub', 'acetoneRub', 'ppeRub'])
+  })
+})
+
 describe('стор calcTree: шаблон технолога и узлы каталога', () => {
   const kns = (over: Record<string, unknown> = {}) => ({
     dn: '3000', podvDn: '250', podvKol: '1', napDn: '150', napKol: '2',

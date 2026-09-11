@@ -127,6 +127,30 @@ export function treeBuiltinRevision(surveyData: unknown): number | null {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : null
 }
 
+/** Подписи ставок экономики — как на экране расчёта (фронт, engines/economics.ts). */
+export const RATE_LABELS: Readonly<Record<string, string>> = {
+  fotRub: 'ФОТ',
+  overheadRub: 'Накладные расходы',
+  acetoneRub: 'Ацетон',
+  ppeRub: 'СИЗ и РМ',
+}
+
+/**
+ * Ставки экономики сохранённого дерева, взятые константами программы:
+ * позиции не нашлось в прайсе (`tree.rates.fallback`, План_устранения 1.3).
+ *
+ * По такому расчёту КП не выпускается (решение Р5): итог посчитан не по
+ * ценам завода. Дерево без ставок (собрано до их фиксации) отметок не
+ * несёт — фронт ставит их при первом сохранении.
+ *
+ * @returns ключи ставок; неизвестные ключи отбрасываются
+ */
+export function treeRateFallbacks(surveyData: unknown): string[] {
+  if (!isObj(surveyData) || !isObj(surveyData.tree) || !isObj(surveyData.tree.rates)) return []
+  const f = surveyData.tree.rates.fallback
+  return Array.isArray(f) ? f.filter((k): k is string => typeof k === 'string' && k in RATE_LABELS) : []
+}
+
 const num = (v: unknown): number | null => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
   if (typeof v === 'string' && v.trim() !== '') {

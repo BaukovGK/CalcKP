@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { treeBuiltinRevision, treePriceListVersion, treeTemplateVersion } from './estimate-tree'
+import { treeBuiltinRevision, treePriceListVersion, treeRateFallbacks, treeTemplateVersion } from './estimate-tree'
 
 describe('версия прайса сохранённого дерева', () => {
   // Расчёт, собранный по прайсу v2 и не пересчитанный после импорта v5,
@@ -47,5 +47,20 @@ describe('редакция встроенного шаблона сохранё�
     expect(treeBuiltinRevision({ tree: { builtinRevision: 1.5 } })).toBeNull()
     expect(treeBuiltinRevision({ tree: { builtinRevision: '4' } })).toBeNull()
     expect(treeBuiltinRevision(undefined)).toBeNull()
+  })
+})
+
+// План_устранения, 1.3 / решение Р5: КП не выпускается по ставкам, взятым
+// константами программы, — сервер видит их по отметке в дереве.
+describe('ставки экономики не из прайса', () => {
+  it('отметки дерева читаются', () => {
+    expect(treeRateFallbacks({ tree: { rates: { fotRub: 1, fallback: ['overheadRub', 'ppeRub'] } } })).toEqual(['overheadRub', 'ppeRub'])
+  })
+
+  it('нет ставок, нет отметок или мусор — пусто', () => {
+    expect(treeRateFallbacks(null)).toEqual([])
+    expect(treeRateFallbacks({ tree: { sections: [] } })).toEqual([])
+    expect(treeRateFallbacks({ tree: { rates: { fotRub: 1 } } })).toEqual([])
+    expect(treeRateFallbacks({ tree: { rates: { fallback: ['другое', 7, 'acetoneRub'] } } })).toEqual(['acetoneRub'])
   })
 })

@@ -5,7 +5,8 @@
  * @module utils/reprice-text
  */
 
-import type { RepriceSummary } from '@/engines/reprice'
+import { RATE_ITEMS, type RateKey, type TreeRates } from '@/engines/economics'
+import type { RateShift, RepriceSummary } from '@/engines/reprice'
 
 /** Предпросмотр пересчёта: сводка и итоги до и после (stores/calcTree.ts, repricePreview). */
 export interface RepricePreview {
@@ -25,6 +26,11 @@ export function pluralRu(n: number, one: string, few: string, many: string): str
   return many
 }
 
+/** «а», «а и б», «а, б и в». */
+function listRu(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} и ${items[items.length - 1]}`
+}
+
 const fmt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 3 })
 const fmtRub = (n: number) => `${n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`
 
@@ -36,21 +42,35 @@ export function costShiftText(before: number, after: number): string {
   return `${pct > 0 ? '+' : ''}${pct.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %`
 }
 
+/** Сдвиг ставки словами: «ставка «Накладные расходы» 1 584,73 → 1 650 ₽/чел.ч». */
+export function rateShiftText(r: RateShift): string {
+  const { label, per } = RATE_ITEMS[r.key]
+  const source = r.fromFallback && !r.toFallback
+    ? ' (теперь из прайса)'
+    : r.toFallback && !r.fromFallback ? ' (позиции нет в прайсе — константа программы)' : ''
+  const value = r.from === r.to ? `${fmt(r.to)} ${per}` : `${fmt(r.from)} → ${fmt(r.to)} ${per}`
+  return `ставка «${label}» ${value}${source}`
+}
+
 /**
  * Что даст пересчёт — словами: сколько строк сменит цену, что станет со
- * ставкой ФОТ, себестоимостью и ценой продажи, чего нет в новом прайсе.
+ * ставками, себестоимостью и ценой продажи, чего нет в новом прайсе.
  */
 export function repriceSummaryText(p: RepricePreview): string {
   const s = p.summary
   const parts: string[] = []
-  if (!s.changed && !s.fotRate) {
-    parts.push('Цены строк расчёта в нём те же — пересчёт только отметит версию.')
+  const shifts = s.rateShifts ?? []
+  if (!s.changed && !s.fotRate && !shifts.length) {
+    parts.push('Цены строк и ставки расчёта в нём те же — пересчёт только отметит версию.')
   } else {
     const what: string[] = []
     if (s.changed) what.push(`цена ${s.changed} ${pluralRu(s.changed, 'строки', 'строк', 'строк')}`)
-    if (s.fotRate) what.push(`ставка ФОТ ${s.fotRate.from == null ? '—' : fmt(s.fotRate.from)} → ${fmt(s.fotRate.to)} ₽`)
+    // Ставка ФОТ дерева и у спутников — одна: сдвиг показывается один раз.
+    const fotInShifts = shifts.some((r) => r.key === 'fotRub')
+    if (s.fotRate && !fotInShifts) what.push(`ставка ФОТ ${s.fotRate.from == null ? '—' : fmt(s.fotRate.from)} → ${fmt(s.fotRate.to)} ₽`)
+    for (const r of shifts) what.push(rateShiftText(r))
     parts.push(
-      `Изменится ${what.join(' и ')}: себестоимость ${fmtRub(p.costBefore)} → ${fmtRub(p.costAfter)} ` +
+      `Изменится ${listRu(what)}: себестоимость ${fmtRub(p.costBefore)} → ${fmtRub(p.costAfter)} ` +
         `(${costShiftText(p.costBefore, p.costAfter)}), цена продажи ${fmtRub(p.saleBefore)} → ${fmtRub(p.saleAfter)}.`,
     )
     if (s.changedUnderManual) {
@@ -61,6 +81,36 @@ export function repriceSummaryText(p: RepricePreview): string {
     parts.push(`${s.notFound} ${pluralRu(s.notFound, 'позиции', 'позиций', 'позиций')} нет в новом прайсе — их цены останутся прежними.`)
   }
   return parts.join(' ')
+}
+
+/**
+ * Откуда ставка расчёта — для сносок строк экономики: значение и источник.
+ *
+ * @param priceListVersion версия прайса, из которой ставка взята
+ */
+export function rateSourceText(key: RateKey, rates: TreeRates, priceListVersion: number): string {
+  const { label, per } = RATE_ITEMS[key]
+  const value = `Ставка «${label}» — ${fmt(rates[key])} ${per}`
+  return rates.fallback?.includes(key)
+    ? `${value}: константа программы — позиции нет в прайсе, КП не выпускается.`
+    : `${value}, из прайса НН v${priceListVersion}; в расчёте она до пересчёта по прайсу.`
+}
+
+/**
+ * Ставки не из прайса — заголовок плашки, пояснение и текст отказа в выпуске
+ * КП (решение Р5).
+ */
+export function rateFallbackText(keys: readonly RateKey[]): { title: string; detail: string; blocked: string } {
+  const names = keys.map((k) => `«${RATE_ITEMS[k].label}»`)
+  const items = keys.map((k) => `«${RATE_ITEMS[k].category} / ${RATE_ITEMS[k].name} / ${RATE_ITEMS[k].unit}»`)
+  const many = keys.length > 1
+  return {
+    title: `${many ? 'Ставок' : 'Ставки'} ${listRu(names)} нет в прайсе`,
+    detail:
+      `Расчёт посчитан по ${many ? 'константам' : 'константе'} программы, и КП по нему не выпускается. ` +
+      `Добавьте в прайс ${many ? 'позиции' : 'позицию'} ${listRu(items)} и пересчитайте расчёт по нему.`,
+    blocked: `КП не выпущено: ${many ? 'ставок' : 'ставки'} ${listRu(names)} нет в прайсе — расчёт посчитан по константам программы`,
+  }
 }
 
 /** Итог пересчёта для тоста. */

@@ -29,6 +29,7 @@ import {
 import { materializeNode, type CatalogNode, type NodeDefBody, type NodeParamValues } from './node-def'
 import { BUILTIN_TEMPLATES, builtinNode, builtinNodesOf, type DeviceSurvey } from './code-nodes'
 import { builtinRevision } from './builtin-revisions'
+import { ratesFromPrices } from './economics'
 import { computeEmkGeometry, computeKolGeometry } from './survey-emk-kol'
 import { emkLadderHeightMm } from './template-emk-kol'
 import {
@@ -347,6 +348,8 @@ export function materializeTemplate(ctx: MaterializeContext, env: DeviceEnv, tem
     deviceType: env.device,
     survey: env.survey as unknown as Record<string, unknown>,
     priceListVersion: ctx.priceListVersion,
+    // Ставки экономики — из того же прайса, что и цены строк.
+    rates: ratesFromPrices(ctx.priceOf),
     templateVersion: template.version,
     builtinRevision: builtinRevision(env.device),
     sections,

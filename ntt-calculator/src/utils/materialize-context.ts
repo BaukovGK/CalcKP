@@ -1,5 +1,5 @@
 import type { DeviceType } from '@/types/device'
-import type { Rates } from '@/engines/economics'
+import { FALLBACK_RATES, ratesFromPrices, type TreeRates } from '@/engines/economics'
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
 import { matrixLengthBucketMm } from '@/engines/survey-emk-kol'
 import type { MaterializeContext } from '@/engines/template-kns'
@@ -52,13 +52,8 @@ function jointLayerIndex(rows: ReadonlyArray<{ d: number; pn: number; massKg: nu
   return new Map([...min].map(([d, v]) => [d, v.massKg]))
 }
 
-/** Ставки по умолчанию — fallback, если позиции нет в прайсе (Механика §9). */
-export const FALLBACK_RATES: Rates = {
-  fotRub: 1207.8,
-  overheadRub: 1584.73,
-  acetoneRub: 109.4,
-  ppeRub: 122,
-}
+/** Ставки по умолчанию живут в движке (engines/economics.ts) — рядом с позициями ставок. */
+export { FALLBACK_RATES }
 
 /** Позиция прайса плоским списком — поиск «Компонент из каталога». */
 export interface CatalogItem {
@@ -79,7 +74,8 @@ export interface RefsData {
 
 export interface LoadedContext {
   ctx: MaterializeContext
-  rates: Rates
+  /** Ставки действующего прайса — для деревьев, собранных до фиксации ставок. */
+  rates: TreeRates
   catalog: CatalogItem[]
   priceListVersion: number
   templates: ActiveTemplates
@@ -108,14 +104,9 @@ export function buildMaterializeContext(refs: RefsData): LoadedContext {
   for (const w of weights.grp) weightIdx.set(`${w.dn}|${w.pn}|${w.sn}`, w.kgPerM)
 
   // Все четыре ставки — позиции прайса (Механика §9): обновление прайса
-  // меняет экономику новых расчётов. Fallback — если позиции в базе нет
-  // (например, БД засеяна до их добавления).
-  const rates: Rates = {
-    fotRub: priceIdx.get(priceKey('ФОТ', 'ФОТ', 'чел. ч')) ?? FALLBACK_RATES.fotRub,
-    overheadRub: priceIdx.get(priceKey('ФОТ', 'Накладные расходы', 'чел. ч')) ?? FALLBACK_RATES.overheadRub,
-    acetoneRub: priceIdx.get(priceKey('Прочие материалы', 'Ацетон', 'кг')) ?? FALLBACK_RATES.acetoneRub,
-    ppeRub: priceIdx.get(priceKey('Прочие материалы', 'СИЗ и РМ', 'ед.')) ?? FALLBACK_RATES.ppeRub,
-  }
+  // меняет экономику новых расчётов, старые держат ставки своего дерева.
+  // Позиции в базе нет — константа с отметкой (engines/economics.ts).
+  const rates = ratesFromPrices((c, n, u) => priceIdx.get(priceKey(c, n, u)) ?? null)
 
   // Нормы патрубков — источник массы формовки гильз (лист «Для расчетов»).
   // Ключ — DN гильзы; сетка дискретна, промахи дают «красную» строку.

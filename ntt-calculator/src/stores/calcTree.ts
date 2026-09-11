@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type Rates } from '@/engines/economics'
+import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type RateKey, type TreeRates } from '@/engines/economics'
 import { recalcFotSatellites, resolveFotK } from '@/engines/fot'
 import { computeRow, resolveQty } from '@/engines/row'
 import {
@@ -69,7 +69,18 @@ const RENAMED_COMPONENTS: Readonly<Record<string, string>> = {
 export const useCalcTreeStore = defineStore('calcTree', () => {
   const estimate = ref<EstimateDetail | null>(null)
   const tree = ref<CalcTree | null>(null)
-  const rates = ref<Rates>({ ...FALLBACK_RATES })
+  /**
+   * Ставки действующего прайса. Экономика берёт их только у дерева, собранного
+   * до фиксации ставок, — и до его первого сохранения (План_устранения, 1.3).
+   */
+  const liveRates = ref<TreeRates>({ ...FALLBACK_RATES })
+  /** Ставки, по которым считается экономика: дерева, а у старого дерева — прайса. */
+  const rates = computed<TreeRates>(() => tree.value?.rates ?? liveRates.value)
+  /**
+   * Ставки, которых не нашлось в прайсе: взяты константы кода. КП по такому
+   * расчёту не выпускается (решение Р5), экран предупреждает.
+   */
+  const rateFallbacks = computed<RateKey[]>(() => rates.value.fallback ?? [])
   const priceListVersion = ref(1)
   /** Плоский прайс — источник для модала «Компонент из каталога». */
   const catalog = ref<CatalogItem[]>([])
@@ -117,7 +128,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     // и топбар обязан показывать то же самое (ТЗ §3).
     priceListVersion.value = loaded.priceListVersion
     catalog.value = loaded.catalog
-    rates.value = loaded.rates
+    liveRates.value = loaded.rates
     templates.value = loaded.templates
     ctxCache = loaded.ctx
     ctxLoads.value++
@@ -808,9 +819,10 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     const drift = priceDrift.value
     if (!drift || !hasPriceDrift(drift.summary)) return null
     const { tree: next, summary } = drift
+    // После пересчёта — ставки нового прайса: он ставит их дереву.
     const after = computeEconomics(
       aggregateRows(flattenRows(next), { sectionEnabled: sectionEnabledFor(next), tirage: tirage.value }),
-      rates.value,
+      next.rates ?? rates.value,
       { markup: markup.value },
     )
     return {
@@ -1221,9 +1233,19 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     if (tree.value && drift && !hasPriceDrift(drift.summary)) tree.value.priceListVersion = priceListVersion.value
   }
 
+  /**
+   * Дерево, собранное до фиксации ставок, получает ставки действующего
+   * прайса — те, по которым оно сейчас и посчитано. С этого сохранения его
+   * экономика больше не зависит от прайса, а снапшот её восстанавливает.
+   */
+  function stampRates() {
+    if (tree.value && !tree.value.rates) tree.value.rates = { ...liveRates.value }
+  }
+
   async function saveNow() {
     if (!estimate.value || !tree.value) return
     catchUpPriceVersion()
+    stampRates()
     const current = estimate.value
     let updated: EstimateDetail
     try {
@@ -1258,7 +1280,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   }
 
   return {
-    estimate, tree, rates, markup, tirage, loading, error, catalog,
+    estimate, tree, rates, rateFallbacks, markup, tirage, loading, error, catalog,
     // Активная версия прайса на сервере. Отличается от tree.priceListVersion,
     // который хранит версию, из которой расчёт был материализован, — топбар
     // показывает именно её.

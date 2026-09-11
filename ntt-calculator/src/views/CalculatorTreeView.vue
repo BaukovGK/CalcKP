@@ -84,6 +84,13 @@
       >{{ repricing ? 'Пересчитываем…' : `Пересчитать по прайсу v${st.priceListVersion}` }}</button>
     </div>
 
+    <!-- Ставки экономики, которых нет в прайсе: расчёт посчитан по константам
+         программы, КП не выпускается (План_устранения 1.3, решение Р5). -->
+    <div v-if="!st.loading && st.rateFallbacks.length" class="pbar">
+      <span v-hint="RATE_FALLBACK_HINT" class="pbar-t">{{ rateFallback.title }}</span>
+      <span class="pbar-d">{{ rateFallback.detail }}</span>
+    </div>
+
     <!-- Состав расчёта собран не тем шаблоном, что действует: технолог
          опубликовал другую версию, либо релиз завёл новую редакцию
          встроенных узлов. -->
@@ -249,10 +256,10 @@
              непонятно, откуда берётся сумма (§9.5). -->
         <details class="tot-d">
           <summary>Прочие — из чего</summary>
-          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.pzr">ПЗР ({{ fmt(e.pzrHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.pzrRub) }}</span></div>
-          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.acetone">Ацетон ({{ fmt(e.acetoneKg) }} кг)</span><span class="num">{{ fmtInt(e.acetoneRub) }}</span></div>
-          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.ppe">СИЗ ({{ fmtInt(e.ppeUnits) }} ед.)</span><span class="num">{{ fmtInt(e.ppeRub) }}</span></div>
-          <div class="tot-r tot-s"><span v-hint="TOTAL_HINTS.overhead">Накладные ({{ fmt(e.overheadHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.overheadRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="rateHints.pzr">ПЗР ({{ fmt(e.pzrHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.pzrRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="rateHints.acetone">Ацетон ({{ fmt(e.acetoneKg) }} кг)</span><span class="num">{{ fmtInt(e.acetoneRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="rateHints.ppe">СИЗ ({{ fmtInt(e.ppeUnits) }} ед.)</span><span class="num">{{ fmtInt(e.ppeRub) }}</span></div>
+          <div class="tot-r tot-s"><span v-hint="rateHints.overhead">Накладные ({{ fmt(e.overheadHours) }} чел.ч)</span><span class="num">{{ fmtInt(e.overheadRub) }}</span></div>
           <div class="tot-note">ПЗР входит в «Работы, ФОТ», а не в «Прочие»</div>
         </details>
 
@@ -411,12 +418,12 @@ import { useCalcTreeStore } from '@/stores/calcTree'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
 import { toast } from '@/composables/useToast'
-import { COST_BUCKETS } from '@/engines/economics'
+import { COST_BUCKETS, type RateKey } from '@/engines/economics'
 import { BUCKET_HINTS, FILTER_HINTS, TOTAL_HINTS } from '@/hints/calc'
 import type { Hint } from '@/directives/hint'
 import { tryEvalExpr } from '@/engines/expr'
 import { handleCellNav } from '@/utils/cell-nav'
-import { repricedToastText, repriceSummaryText } from '@/utils/reprice-text'
+import { rateFallbackText, rateSourceText, repricedToastText, repriceSummaryText } from '@/utils/reprice-text'
 import type { CalcComponent, CalcRowNode, LostEdit, MaterializeContext } from '@/engines/template-kns'
 import { defaultParams, materializeNode, type CatalogNode, type NodeParamDef, type NodeParamValues } from '@/engines/node-def'
 import { surveyScope, type DeviceEnv } from '@/engines/template-def'
@@ -513,7 +520,7 @@ const STATUS_HINT: Hint = {
 const PRICE_LIST_HINT: Hint = {
   title: 'Версия прайса',
   text: [
-    'Цены строк фиксируются при сборке расчёта вместе с версией прайса; ставки — ФОТ, накладные, ацетон, СИЗ — берутся из действующего прайса при каждом открытии.',
+    'Цены строк и ставки экономики — ФОТ, накладные, ацетон, СИЗ — фиксируются при сборке расчёта вместе с версией прайса.',
     'Импортировали новый прайс или поправили цену на экране прайса — цены строк остаются прежними, пока расчёт не пересчитают по нему: кнопкой под фильтрами или правкой опросного листа.',
     'Пересчитать предлагается, только если цены строк этого расчёта и правда разошлись с прайсом; совпадают — расчёт при сохранении просто переходит на действующую версию.',
   ],
@@ -522,8 +529,17 @@ const REPRICE_HINT: Hint = {
   title: 'Пересчитать по действующему прайсу',
   text: [
     'Цена каждой строки берётся заново из действующего прайса. Строки, у которых она сменилась, получают отметку «было … ₽» и янтарную рамку цены: ✓ принимает новую, ↶ оставляет прежнюю ручной.',
+    'Ставки экономики тоже берутся из действующего прайса: ПЗР и ФОТ строк считаются по одной ставке.',
     'Ручные цены остаются ручными. Договорная труба и позиции, которых в новом прайсе нет, не меняются. Расчёт сохраняется сразу.',
   ],
+}
+const RATE_FALLBACK_HINT: Hint = {
+  title: 'Ставка не из прайса',
+  text: [
+    'Ставки ФОТ, накладных, ацетона и СИЗ — позиции прайса. Позиции не нашлось, и расчёт взял константу программы — она может не совпадать с ценой завода.',
+    'КП по такому расчёту не выпускается. Когда позиция появится в прайсе, над таблицей появится пересчёт по нему.',
+  ],
+  tone: 'warn',
 }
 const VERSIONS_HINT: Hint = {
   title: 'История версий',
@@ -641,6 +657,29 @@ const outdatedDetail = computed(() => {
   if (st.templateChanged) return `Шаблон изделия обновили. ${after}`
   const changes = st.builtinChanges.map((r) => `ред. ${r.version} от ${fmtRevDate(r.date)} — ${r.note}`)
   return changes.length ? `Что изменилось: ${changes.join('; ')}. ${after}` : after
+})
+
+/** Ставки не из прайса — тексты плашки (решение Р5). */
+const rateFallback = computed(() => rateFallbackText(st.rateFallbacks))
+
+/**
+ * Сноски строк экономики — со ставкой, по которой строка посчитана, и её
+ * источником: ставки фиксируются в дереве (План_устранения, 1.3).
+ */
+const rateHints = computed(() => {
+  // Дерево без ставок считается по действующему прайсу.
+  const version = st.tree?.rates ? treePriceVersion.value : st.priceListVersion
+  const withRate = (base: Hint, key: RateKey): Hint => {
+    const text = base.text == null ? [] : typeof base.text === 'string' ? [base.text] : [...base.text]
+    const fallback = st.rates.fallback?.includes(key) ?? false
+    return { ...base, text: [...text, rateSourceText(key, st.rates, version)], tone: fallback ? 'warn' : base.tone }
+  }
+  return {
+    pzr: withRate(TOTAL_HINTS.pzr, 'fotRub'),
+    acetone: withRate(TOTAL_HINTS.acetone, 'acetoneRub'),
+    ppe: withRate(TOTAL_HINTS.ppe, 'ppeRub'),
+    overhead: withRate(TOTAL_HINTS.overhead, 'overheadRub'),
+  }
 })
 
 /** Что даст пересчёт по действующему прайсу — словами (utils/reprice-text.ts). */
@@ -1023,6 +1062,12 @@ async function kpIssueAsIs() {
 
 async function issueKp() {
   if (!st.estimate) return
+  // Ставки не из прайса — итог посчитан по константам программы, а не по
+  // ценам завода: КП не выпускается (решение Р5). Сервер держит тот же гейт.
+  if (st.rateFallbacks.length) {
+    toast(rateFallback.value.blocked, 'error')
+    return
+  }
   kpBusy.value = true
   try {
     await st.save()
