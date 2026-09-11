@@ -3,7 +3,8 @@
 # Тесты (frontend, backend) — на каждый push и pull request.
 # Деплой — только при push в master и ТОЛЬКО после зелёных тестов:
 #   на сервере git pull + docker compose up -d --build (стек проверен, см.
-#   docker-compose.yml). Требуемые секреты репозитория перечислены в job deploy.
+#   docker-compose.yml), и деплой ждёт, пока бэкенд станет healthy.
+#   Требуемые секреты репозитория перечислены в job deploy.
 
 name: CI/CD
 
@@ -124,5 +125,12 @@ jobs:
             git fetch --all
             git reset --hard origin/master
             docker compose pull || true
-            docker compose up -d --build --remove-orphans
+            # --wait ждёт, пока сервисы поднимутся, а бэкенд пройдёт свой
+            # healthcheck. Не прошёл за 3 минуты (упала миграция, сид, нет БД)
+            # — деплой красный, а не зелёный (doc/План_устранения.md, 0.3).
+            if ! docker compose up -d --build --remove-orphans --wait --wait-timeout 180; then
+              echo "стек не поднялся за 3 минуты — хвост логов бэкенда:" >&2
+              docker compose logs --tail=150 backend >&2
+              exit 1
+            fi
             docker image prune -f

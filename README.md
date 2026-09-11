@@ -155,7 +155,9 @@ check:lint` — проверяющий вариант без `--fix`) и тес�
 
 **Деплой** (автоматически при push в `master` после зелёного CI): GitHub
 заходит на сервер по SSH и выполняет `git reset --hard origin/master` +
-`docker compose up -d --build`. Настройка — один раз (подробно в
+`docker compose up -d --build --wait` — и ждёт, пока бэкенд станет healthy.
+Не поднялся за 3 минуты — деплой красный, в логе job — хвост логов бэкенда.
+Настройка — один раз (подробно в
 `РАЗВЁРТЫВАНИЕ.md`):
 
 1. Сервер: Docker, `git clone` по HTTPS с токеном на чтение, `cp .env.example .env`
