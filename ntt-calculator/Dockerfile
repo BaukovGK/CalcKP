@@ -19,4 +19,6 @@ RUN npm run build-only
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY ntt-calculator/nginx.conf /etc/nginx/conf.d/default.conf
+# Заголовки безопасности — подключаются из nginx.conf (План_устранения 2.4).
+COPY ntt-calculator/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
 EXPOSE 80
