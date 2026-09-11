@@ -30,8 +30,16 @@ import { materializeNode, type CatalogNode, type NodeDefBody, type NodeParamValu
 import { BUILTIN_TEMPLATES, builtinNode, builtinNodesOf, type DeviceSurvey } from './code-nodes'
 import { builtinRevision } from './builtin-revisions'
 import { computeEmkGeometry, computeKolGeometry } from './survey-emk-kol'
-import { emkLadderHeightMm, GRP_PIPE_MATERIAL } from './template-emk-kol'
-import { nextId, stationHeightM, type CalcComponent, type CalcSection, type CalcTree, type MaterializeContext } from './template-kns'
+import { emkLadderHeightMm } from './template-emk-kol'
+import {
+  GRP_PIPE_MATERIAL,
+  nextId,
+  stationHeightM,
+  type CalcComponent,
+  type CalcSection,
+  type CalcTree,
+  type MaterializeContext,
+} from './template-kns'
 
 // ─── Модель ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +117,7 @@ const KNS_FIELDS: Fields<DeviceSurvey['KNS']> = [
   num('inletTrayDepthMm', 'Глубина лотка подводящего', 'мм'),
   num('outletDn', 'DN напорного патрубка', 'мм'),
   num('outletCount', 'Напорных патрубков', 'шт'),
+  ...materialFields<DeviceSurvey['KNS']>('напорной'),
   num('pumpsWorking', 'Рабочих насосов', 'шт'),
   num('pumpsReserve', 'Резервных насосов', 'шт'),
   num('pumpsSpare', 'Запасных насосов на склад', 'шт'),
@@ -131,16 +140,19 @@ const KNS_FIELDS: Fields<DeviceSurvey['KNS']> = [
 const emkGeo = (s: DeviceSurvey['EMK']) => computeEmkGeometry(s)
 
 /**
- * Материал подходящих труб ёмкости и колодца: под стеклокомпозитную трубу
- * патрубок стеклопластиковый (buildSleeveNozzles). Пусто — как у расчётов до
+ * Материал подходящих труб: под стеклокомпозитную трубу патрубок
+ * стеклопластиковый (buildSleeveNozzles). Пусто — как у расчётов до
  * появления поля: гильза под проход трубы.
+ *
+ * @param outlet как изделие зовёт вторую трубу: «напорной» у КНС, «отводящей» у ёмкости и колодца
  */
-function materialFields<S extends DeviceSurvey['EMK'] | DeviceSurvey['KOL']>(): Fields<S> {
+function materialFields<S extends DeviceSurvey[DeviceType]>(outlet: string): Fields<S> {
+  const cap = outlet[0]!.toUpperCase() + outlet.slice(1)
   return [
     { key: 'inletMaterial', label: 'Материал подводящей трубы', type: 'text', input: true, options: PIPE_MATERIALS, get: (s) => s.inletMaterial ?? '' },
-    { key: 'outletMaterial', label: 'Материал отводящей трубы', type: 'text', input: true, options: PIPE_MATERIALS, get: (s) => s.outletMaterial ?? '' },
+    { key: 'outletMaterial', label: `Материал ${outlet} трубы`, type: 'text', input: true, options: PIPE_MATERIALS, get: (s) => s.outletMaterial ?? '' },
     { key: 'inletGrp', label: 'Подводящая труба стеклокомпозитная', type: 'bool', get: (s) => s.inletMaterial === GRP_PIPE_MATERIAL },
-    { key: 'outletGrp', label: 'Отводящая труба стеклокомпозитная', type: 'bool', get: (s) => s.outletMaterial === GRP_PIPE_MATERIAL },
+    { key: 'outletGrp', label: `${cap} труба стеклокомпозитная`, type: 'bool', get: (s) => s.outletMaterial === GRP_PIPE_MATERIAL },
   ]
 }
 
@@ -170,7 +182,7 @@ const EMK_FIELDS: Fields<DeviceSurvey['EMK']> = [
   num('inletTrayDepthMm', 'Глубина лотка подводящего', 'мм'),
   num('outletDn', 'DN отводящего патрубка', 'мм'),
   num('outletCount', 'Отводящих патрубков', 'шт'),
-  ...materialFields<DeviceSurvey['EMK']>(),
+  ...materialFields<DeviceSurvey['EMK']>('отводящей'),
   bool('hasPumps', 'Насосное оборудование'),
   num('pumpsWorking', 'Рабочих насосов', 'шт'),
   num('pumpsReserve', 'Резервных насосов', 'шт'),
@@ -206,7 +218,7 @@ const KOL_FIELDS: Fields<DeviceSurvey['KOL']> = [
   num('inletTrayDepthMm', 'Глубина лотка подводящего', 'мм'),
   num('outletDn', 'DN отводящего патрубка', 'мм'),
   num('outletCount', 'Отводящих патрубков', 'шт'),
-  ...materialFields<DeviceSurvey['KOL']>(),
+  ...materialFields<DeviceSurvey['KOL']>('отводящей'),
   bool('hasBasket', 'Корзина для мусора'),
   bool('hasGrinder', 'Дробилка'),
   bool('insulationEnabled', 'Теплоизоляция'),

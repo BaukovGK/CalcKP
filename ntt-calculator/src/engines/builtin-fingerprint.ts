@@ -81,6 +81,9 @@ const SURVEYS: { readonly [D in DeviceType]: ReadonlyArray<DeviceEnv['survey']> 
     { dn: 2500, depthMm: 9000, pipeExecution: 'частями' },
     // Порог формованной гильзы напорного — DN 300 включительно.
     { outletDn: 300, outletCount: 1 },
+    // Трубы из стеклокомпозита заводятся через муфту: гильза из трубы (DN400)
+    // и формованная (DN150).
+    { inletMaterial: 'стеклокомпозит', inletDn: 400, outletMaterial: 'стеклокомпозит' },
   ].map((v) => ({ ...KNS, ...v }) as KnsSurveyParams),
   EMK: [
     {},

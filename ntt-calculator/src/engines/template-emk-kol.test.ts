@@ -662,6 +662,10 @@ describe('патрубки под стеклокомпозитную трубу'
     const flange = rows.find((r) => r.name === 'Ручная формовка стеклокомпозитного фланца')!
     expect(flange.qtyCalc).toBeCloseTo(6.2, 9)
     expect(flange.fotK).toBe(1)
+    // Фланцевому соединению — болтовой комплект: DN300 — 12 отверстий М24х100 × 2.
+    expect(rows.find((r) => r.name === 'Болт М24-6gх100.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)')!.qtyCalc).toBe(24)
+    expect(rows.find((r) => r.name.startsWith('Шайба 2.М24'))!.qtyCalc).toBe(48)
+    expect(rows.find((r) => r.name.startsWith('Гайка М24'))!.qtyCalc).toBe(24)
     expect(rows.find((r) => r.name === 'Ламинирование патрубка к корпусу')!.qtyCalc).toBeCloseTo(0.66, 9)
     expect(rows.find((r) => r.name === 'Прорезка отверстия патрубка в корпусе')!.qtyCalc).toBeCloseTo(((400 * Math.PI) / 1000) * 0.5 * 2, 9)
     expect(rows.some((r) => r.name.startsWith('Труба СК') || r.name === 'Ручная формовка патрубка')).toBe(false)
@@ -689,6 +693,10 @@ describe('патрубки под стеклокомпозитную трубу'
     const flange = inlet!.rows.find((r) => r.name === 'Ручная формовка стеклокомпозитного фланца')!
     expect(flange.qtyCalc).toBeNull()
     expect(flange.note).toContain('введите массу вручную')
+    // И болтов по норме нет — количество не выдумывается.
+    const bolt = inlet!.rows.find((r) => r.name === 'Болт фланцевого соединения')!
+    expect(bolt.qtyCalc).toBeNull()
+    expect(bolt.note).toContain('не найдена')
   })
 
   it('колодец: гильза и «Муфта-2» по DN трубы, ламинируется проходная муфта', () => {
@@ -705,6 +713,7 @@ describe('патрубки под стеклокомпозитную трубу'
     // DN250 → гильза Ø400 формуется: Мф 1,1 кг.
     expect(inlet!.title).toBe('Патрубок подводящий стеклопластиковый DN250 ×1')
     expect(inlet!.rows.find((r) => r.name === 'Формовка гильз')!.qtyCalc).toBeCloseTo(1.1, 9)
+    // «Муфта-2» — та же «Муфта-1», только без центрального ограничителя.
     const coupling = inlet!.rows.find((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')!
     expect(coupling.qtyCalc).toBe(1)
     expect(coupling.unit).toBe('шт')

@@ -93,6 +93,13 @@ export interface KnsSurveyParams {
   /** Напорные патрубки. */
   outletDn: number
   outletCount: number
+  /**
+   * Материал подходящих труб (ОЛ «Материал»). Стеклокомпозитная труба
+   * заводится внутрь станции через муфту, прочие — через гильзу (уточнение
+   * завода 11.09.2026, `grpNozzleOf`). Пусто — гильза.
+   */
+  inletMaterial?: PipeMaterial | null
+  outletMaterial?: PipeMaterial | null
 
   pumpsWorking: number
   pumpsReserve: number
@@ -288,6 +295,7 @@ export interface CalcSection {
 /** Тип изделия (ТЗ §3) — определение в `types/device.ts`, здесь реэкспорт. */
 export type { DeviceType } from '@/types/device'
 import type { DeviceType } from '@/types/device'
+import type { PipeMaterial } from '@/types/survey'
 
 export interface CalcTree {
   deviceType: DeviceType
@@ -482,9 +490,30 @@ export const FORMED_SLEEVE_MAX_DN = 300
 
 /**
  * Чем стеклопластиковый патрубок соединяется со стеклокомпозитной трубой: у
- * ёмкости — фланцем, у колодца — муфтой (уточнение 11.09.2026).
+ * ёмкости — фланцем, у колодца и КНС — муфтой, через которую труба
+ * заводится внутрь (уточнения 11.09.2026).
  */
 export type GrpNozzleJoint = 'flange' | 'coupling'
+
+/**
+ * Материал подходящей трубы, под который патрубок — стеклопластиковый: в
+ * листах «Труба стеклокомпозитная».
+ */
+export const GRP_PIPE_MATERIAL: PipeMaterial = 'стеклокомпозит'
+
+/**
+ * Патрубок под стеклокомпозитную трубу: гильза до DN 300 включительно
+ * формуется, к ней — соединение `joint`. Прочие материалы — `null`: гильза
+ * под проход трубы, как в листах.
+ */
+export function grpNozzleOf(
+  material: PipeMaterial | null | undefined,
+  joint: GrpNozzleJoint,
+): Pick<SleeveNozzle, 'formed' | 'grpJoint'> | null {
+  return material === GRP_PIPE_MATERIAL
+    ? { formed: { maxDn: FORMED_SLEEVE_MAX_DN, why: 'стеклопластиковый патрубок' }, grpJoint: joint }
+    : null
+}
 
 /** Патрубок изделия: заголовок узла, DN и число, наименование прорезки по прайсу. */
 export interface SleeveNozzle {
@@ -528,12 +557,13 @@ export interface SleeveNozzle {
  *   стеклокомпозитную трубу это сам стеклопластиковый патрубок;
  * - `grpJoint` — патрубок под стеклокомпозитную трубу соединяется с ней: у
  *   ёмкости «Ручная формовка стеклокомпозитного фланца» = Мф фланца(DN) ×
- *   кол-во, у колодца муфта «Муфта-2 СК/НПС-К DN-1» на патрубок (цена
- *   договорная); ламинируется тогда проходная муфта — так строку называет
- *   лист колодца (строки 28, 33).
+ *   кол-во с болтовым комплектом на каждый фланец, у колодца и КНС муфта
+ *   «Муфта-2 СК/НПС-К DN-1» на патрубок — та же «Муфта-1», только без
+ *   центрального ограничителя, труба проходит насквозь (цена договорная);
+ *   ламинируется тогда проходная муфта — так строку называет лист колодца
+ *   (строки 28, 33).
  *
- * Ламинирование к корпусу и прорезка у всех патрубков одни. Материал
- * патрубка КНС в расчёт пока не передаётся (разбор КНС §4).
+ * Ламинирование к корпусу и прорезка у всех патрубков одни.
  */
 export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzle[]): CalcComponent[] {
   const out: CalcComponent[] = []
@@ -591,17 +621,21 @@ export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzl
     const flangeMass = flangeNorm?.flangeMassKg != null ? flangeNorm.flangeMassKg * n.count : null
     const jointRows: CalcRowNode[] =
       n.grpJoint === 'flange'
-        ? operationWithFot(ctx, {
-            category: 'Собственное производство',
-            name: 'Ручная формовка стеклокомпозитного фланца',
-            unit: 'кг',
-            qtyCalc: flangeMass,
-            fotK: FOT_K_MANUAL,
-            note:
-              flangeMass == null
-                ? `Мф фланца для DN${n.dn} в нормах «Для расчетов» нет — введите массу вручную`
-                : `ƒ Мф фланца(DN${n.dn}) ${fmtNum(flangeNorm!.flangeMassKg!)} кг × ${n.count} = ${fmtNum(flangeMass)} кг — фланец под стеклокомпозитную трубу`,
-          })
+        ? [
+            ...operationWithFot(ctx, {
+              category: 'Собственное производство',
+              name: 'Ручная формовка стеклокомпозитного фланца',
+              unit: 'кг',
+              qtyCalc: flangeMass,
+              fotK: FOT_K_MANUAL,
+              note:
+                flangeMass == null
+                  ? `Мф фланца для DN${n.dn} в нормах «Для расчетов» нет — введите массу вручную`
+                  : `ƒ Мф фланца(DN${n.dn}) ${fmtNum(flangeNorm!.flangeMassKg!)} кг × ${n.count} = ${fmtNum(flangeMass)} кг — фланец под стеклокомпозитную трубу`,
+            }),
+            // Фланцевому соединению с трубой — болтовой комплект.
+            ...flangeBoltRows(ctx, n.dn, n.count, `${n.count} фланц. соединений с трубой`),
+          ]
         : n.grpJoint === 'coupling'
         ? [
             {
@@ -612,7 +646,9 @@ export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzl
                 unit: 'шт',
                 qtyCalc: n.count,
                 bucket: 'Труба, муфта',
-                note: `Муфта под стеклокомпозитную трубу DN${n.dn} × ${n.count} · цена договорная — введите`,
+                note:
+                  `Муфта под стеклокомпозитную трубу DN${n.dn} × ${n.count}: та же «Муфта-1», без центрального ` +
+                  'ограничителя — труба проходит насквозь · цена договорная — введите',
               }),
               priceCatalog: null,
             },
@@ -823,16 +859,21 @@ export function buildKnsBottom(ctx: MaterializeContext, s: Pick<KnsSurveyParams,
  */
 export function buildKnsNozzles(
   ctx: MaterializeContext,
-  s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
+  s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount' | 'inletMaterial' | 'outletMaterial'>,
 ): CalcComponent[] {
   // Наименования прорезок — ДОСЛОВНО из прайса НН: ключ поиска это тройка
   // (категория, наименование, ЕИ), и любое расхождение даёт «красную» строку.
+  //
+  // Трубы заводятся внутрь станции через гильзу или — стеклокомпозитная —
+  // через муфту; фланцы стоят уже внутри: у подводящего — патрубок под
+  // задвижку (A6), у напорных — стык с ниткой напорного трубопровода (C2).
   return buildSleeveNozzles(ctx, [
     {
       title: 'Патрубок подводящий',
       dn: s.inletDn,
       count: s.inletCount,
       cutoutName: 'Прорезка отверстия под гильзу входящего патрубка',
+      ...grpNozzleOf(s.inletMaterial, 'coupling'),
     },
     {
       title: 'Патрубок напорный',
@@ -841,6 +882,7 @@ export function buildKnsNozzles(
       cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)',
       // Гильза под протяжку напорной трубы малого диаметра формуется.
       formed: { maxDn: FORMED_SLEEVE_MAX_DN, why: 'гильза под протяжку напорной трубы' },
+      ...grpNozzleOf(s.outletMaterial, 'coupling'),
     },
   ])
 }
@@ -947,6 +989,9 @@ export function buildKnsInletFlange(
               ? `Мф для DN${dn} в нормах «Для расчетов» нет — введите массу вручную`
               : `ƒ Мф(DN${dn}) ${fmtNum(norm!.moldingMassKg)} кг × 3/10 × ${n} = ${fmtNum(lamination)} кг`,
         }),
+        // Фланец патрубка стыкуется с задвижкой — болтовой комплект на
+        // соединение (всем фланцевым соединениям, уточнение 11.09.2026).
+        ...flangeBoltRows(ctx, dn, n, `${n} фланц. соединений с задвижкой`),
       ],
     },
   ]
@@ -1620,68 +1665,71 @@ export function fastenerSetNames(bolt: string): { washer: string; lockWasher: st
   }
 }
 
-// ─── Раздел 6: Крепёж (C3) ──────────────────────────────────────────────────
-
-export function buildFasteners(ctx: MaterializeContext, s: { outletDn: number; outletCount: number }): CalcComponent[] {
-  // Норма болтов на фланцевое соединение = f(DN) из матрицы «Для расчетов».
-  const norm = ctx.nozzleNormOf?.(s.outletDn) ?? null
-  const joints = s.outletCount
+/**
+ * Болтовой комплект фланцевых соединений одного DN: болт по норме патрубка
+ * «Для расчетов» (марка и число отверстий фланца), на болт две плоские
+ * шайбы, гроверная и гайка — соотношения листа КНС (раздел 6), от заказа
+ * они не зависят. Комплект нужен каждому фланцевому соединению (уточнение
+ * завода 11.09.2026): стыкам напорного трубопровода (C3), фланцевому
+ * патрубку под задвижку (A6), фланцу стеклопластикового патрубка ёмкости.
+ *
+ * @param joints число соединений; `jointsNote` — откуда оно, в пояснение
+ */
+export function flangeBoltRows(ctx: MaterializeContext, dn: number, joints: number, jointsNote: string): CalcRowNode[] {
+  const norm = ctx.nozzleNormOf?.(dn) ?? null
   const bolts = norm?.boltCount != null ? norm.boltCount * joints : null
   const set = norm?.bolt ? fastenerSetNames(norm.bolt) : null
+  const metiz = (name: string, qtyCalc: number | null, note: string) =>
+    makeRow(ctx, { kind: 'МАТЕРИАЛ', category: 'Метизы', name, unit: 'шт', qtyCalc, note })
+  return [
+    // Полное наименование болта из прайса: у каждого DN своя марка
+    // (М16х80…М27х110), а имя строится по единому шаблону НН
+    // «Болт {М}-6gх{L}.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)».
+    metiz(
+      norm?.bolt ? boltFullName(norm.bolt) : 'Болт фланцевого соединения',
+      bolts,
+      bolts == null
+        ? `Норма крепежа для DN${dn} в матрице «Для расчетов» не найдена — введите вручную`
+        : `ƒ ${norm!.boltCount} отв. × ${jointsNote} = ${bolts} шт (${norm!.bolt})`,
+    ),
+    ...(set
+      ? [
+          metiz(set.washer, bolts == null ? null : bolts * 2, 'ƒ 2 шайбы на болт'),
+          metiz(set.lockWasher, bolts, 'ƒ 1 гроверная шайба на болт'),
+          metiz(set.nut, bolts, 'ƒ 1 гайка на болт'),
+        ]
+      : []),
+  ]
+}
 
+// ─── Раздел 6: Крепёж (C3) ──────────────────────────────────────────────────
+
+/**
+ * C3 — болтовой комплект стыков напорного трубопровода: соединений столько
+ * же, сколько свободных фланцев нитки (`pressureFlangeCount`): у насоса,
+ * задвижки и обратного клапана, по два на расходомер, по одному на
+ * отводящий. Так считает и лист ёмкости (H247 = отверстий × свободных
+ * фланцев); лист КНС умножает на прокладки — на две больше (строка 383).
+ * Прежде соединений было по одному на отводящий — болтов втрое-вчетверо
+ * меньше, чем фланцев.
+ */
+export function buildFasteners(
+  ctx: MaterializeContext,
+  s: { outletDn: number; outletCount: number; pumpsWorking: number; pumpsReserve: number; hasFlowMeter?: boolean },
+): CalcComponent[] {
+  const joints = pressureFlangeCount({
+    pumpsWorking: s.pumpsWorking,
+    pumpsReserve: s.pumpsReserve,
+    outletCount: s.outletCount,
+    hasFlowMeter: Boolean(s.hasFlowMeter),
+  })
   return [
     {
       id: nextId('c'),
       nodeCode: 'C3',
       title: 'Крепёжный комплект фланцевых соединений',
       enabled: true,
-      rows: [
-        makeRow(ctx, {
-          kind: 'МАТЕРИАЛ',
-          category: 'Метизы',
-          // Полное наименование болта из прайса: у каждого DN своя марка
-          // (М16х80…М27х110), а имя строится по единому шаблону НН
-          // «Болт {М}-6gх{L}.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)».
-          name: norm?.bolt ? boltFullName(norm.bolt) : 'Болт фланцевого соединения',
-          unit: 'шт',
-          qtyCalc: bolts,
-          note:
-            bolts == null
-              ? `Норма крепежа для DN${s.outletDn} в матрице «Для расчетов» не найдена — введите вручную`
-              : `ƒ ${norm!.boltCount} отв. × ${joints} соединений = ${bolts} шт (${norm!.bolt})`,
-        }),
-        // Спутники болта. Соотношения заданы эталоном (раздел 6) и от заказа
-        // не зависят: две плоские шайбы, одна гроверная и одна гайка на болт.
-        // Раньше их не было вовсе — комплект собирался из каталога по памяти.
-        ...(set
-          ? [
-              makeRow(ctx, {
-                kind: 'МАТЕРИАЛ',
-                category: 'Метизы',
-                name: set.washer,
-                unit: 'шт',
-                qtyCalc: bolts == null ? null : bolts * 2,
-                note: 'ƒ 2 шайбы на болт',
-              }),
-              makeRow(ctx, {
-                kind: 'МАТЕРИАЛ',
-                category: 'Метизы',
-                name: set.lockWasher,
-                unit: 'шт',
-                qtyCalc: bolts,
-                note: 'ƒ 1 гроверная шайба на болт',
-              }),
-              makeRow(ctx, {
-                kind: 'МАТЕРИАЛ',
-                category: 'Метизы',
-                name: set.nut,
-                unit: 'шт',
-                qtyCalc: bolts,
-                note: 'ƒ 1 гайка на болт',
-              }),
-            ]
-          : []),
-      ],
+      rows: flangeBoltRows(ctx, s.outletDn, joints, `${joints} соединений (по свободным фланцам нитки)`),
     },
   ]
 }

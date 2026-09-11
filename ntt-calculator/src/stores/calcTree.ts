@@ -394,6 +394,9 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       inletCount: n(kns.podvKol),
       outletDn: n(kns.napDn),
       outletCount: n(kns.napKol),
+      // Стеклокомпозитная труба заводится через муфту, прочие — через гильзу.
+      inletMaterial: formMaterial(kns.podvMat),
+      outletMaterial: formMaterial(kns.napMat),
       pumpsWorking: n(kns.nRab),
       pumpsReserve: n(kns.nRez),
       // Запасные на склад — в поставку насосов, но не в монтаж и такелаж.

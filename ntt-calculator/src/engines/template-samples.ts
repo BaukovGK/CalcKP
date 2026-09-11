@@ -23,6 +23,8 @@ export const SAMPLE_SURVEYS: { readonly [D in DeviceType]: DeviceSurvey[D] } = {
     inletTrayDepthMm: 9910,
     outletDn: 150,
     outletCount: 2,
+    inletMaterial: 'ПЭ',
+    outletMaterial: 'ПЭ',
     pumpsWorking: 2,
     pumpsReserve: 1,
     pumpsSpare: 0,

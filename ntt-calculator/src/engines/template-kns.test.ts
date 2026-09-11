@@ -396,13 +396,23 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
 })
 
 describe('раздел 6 «Крепёж» (C3)', () => {
-  it('болты = отверстий(DN напорного) × кол-во соединений, марка из норм', () => {
+  // Болтовой комплект — каждому фланцевому соединению (уточнение завода
+  // 11.09.2026): соединений столько же, сколько свободных фланцев нитки.
+  it('болты = отверстий(DN напорного) × соединений по свободным фланцам, марка из норм', () => {
     const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '6')!.components.flatMap((c) => c.rows)
-    // DN150 -> 8 отверстий, М20х90 (лист «Для расчетов»); напорных 2.
+    // DN150 -> 8 отверстий, М20х90 (лист «Для расчетов»); фланцев 3×3 насоса + 2 отводящих = 11.
     const bolt = rows.find((r) => r.category === 'Метизы')!
-    expect(bolt.qtyCalc).toBe(16)
+    expect(bolt.qtyCalc).toBe(88)
     // Полное наименование по шаблону НН, а не краткая марка норм.
     expect(bolt.name).toBe('Болт М20-6gх90.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)')
+    expect(rows.map((r) => r.qtyCalc)).toEqual([88, 176, 88, 88])
+  })
+
+  it('расходомер добавляет по два фланцевых соединения на отводящий', () => {
+    const rows = materializeKns(ctx, { ...OL3487, hasFlowMeter: true })
+      .sections.find((s) => s.code === '6')!.components.flatMap((c) => c.rows)
+    // 11 + 2 × 2 = 15 соединений × 8 отверстий.
+    expect(rows[0]!.qtyCalc).toBe(120)
   })
 
   it('без норм для DN количество не выдумывается', () => {
@@ -487,6 +497,16 @@ describe('раздел 1 «Корпус»', () => {
     expect(a6.some((r) => r.name.startsWith('Труба СК'))).toBe(false)
   })
 
+  it('фланцевый патрубок под задвижку — с болтовым комплектом на соединение', () => {
+    const a6 = korpus.components.find((c) => c.nodeCode === 'A6')!
+    // DN250: 12 отверстий, М24х100; подводящий один.
+    const bolt = a6.rows.find((r) => r.name.startsWith('Болт'))!
+    expect(bolt.name).toBe('Болт М24-6gх100.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)')
+    expect(bolt.qtyCalc).toBe(12)
+    expect(a6.rows.find((r) => r.name.startsWith('Шайба 2.М24'))!.qtyCalc).toBe(24)
+    expect(a6.rows.find((r) => r.name.startsWith('Гайка М24'))!.qtyCalc).toBe(12)
+  })
+
   it('фланцевый патрубок от DN 300 — отрезок трубы Ø гильзы 0,3 м с товарным видом', () => {
     const a6 = materializeKns(ctx, { ...OL3487, inletDn: 400 })
       .sections.find((s) => s.code === '1')!
@@ -551,6 +571,29 @@ describe('раздел 1 «Корпус»', () => {
     const big = nozzle(350)
     expect(big.find((r) => r.name === 'Труба СК/НПС-К 500-0,1-2500')!.qtyCalc).toBeCloseTo(1, 9)
     expect(big.some((r) => r.name === 'Формовка гильз')).toBe(false)
+  })
+
+  // Трубы заводятся внутрь станции через гильзу или — стеклокомпозитная —
+  // через муфту (уточнение завода 11.09.2026); фланцы стоят уже внутри.
+  it('стеклокомпозитные трубы — через «Муфту-2»: гильза до DN 300 формуется', () => {
+    const a5 = materializeKns(ctx, { ...OL3487, inletMaterial: 'стеклокомпозит', outletMaterial: 'стеклокомпозит' })
+      .sections.find((s) => s.code === '1')!
+      .components.filter((c) => c.nodeCode === 'A5')
+    expect(a5.map((c) => c.title)).toEqual(['Патрубок подводящий стеклопластиковый DN250 ×1', 'Патрубок напорный стеклопластиковый DN150 ×2'])
+    const [inlet, outlet] = a5.map((c) => c.rows)
+    // Подводящий DN250 → гильза Ø400: формовка 1,1 кг, муфта по DN трубы.
+    expect(inlet!.find((r) => r.name === 'Формовка гильз')!.qtyCalc).toBeCloseTo(1.1, 9)
+    const coupling = inlet!.find((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')!
+    expect(coupling.qtyCalc).toBe(1)
+    expect(coupling.priceCatalog).toBeNull()
+    expect(coupling.note).toContain('та же «Муфта-1»')
+    expect(inlet!.find((r) => r.name === 'Ламинирование проходной муфты к корпусу')!.qtyCalc).toBeCloseTo(0.33, 9)
+    expect(inlet!.some((r) => r.name.startsWith('Труба СК') || r.name.includes('фланца'))).toBe(false)
+    // Напорные DN150 ×2: гильза Ø250 формуется 0,6 × 2, муфт две.
+    const formed = outlet!.find((r) => r.name === 'Формовка гильз')!
+    expect(formed.qtyCalc).toBeCloseTo(1.2, 9)
+    expect(formed.note).toContain('стеклопластиковый патрубок')
+    expect(outlet!.find((r) => r.name === 'Муфта-2 СК/НПС-К 150-1')!.qtyCalc).toBe(2)
   })
 
   // Малый подводящий идёт по листу: ручная формовка 0,5 кг на патрубок.
@@ -951,6 +994,16 @@ describe('сверка с образцом эталона «Калькулято
 
   it('высота станции 11,8 м (H5 = I5 + возвышение)', () => {
     expect(stationHeightM(REF)).toBeCloseTo(11.8, 9)
+  })
+
+  // Лист: болтов М20 = 8 отверстий × 16 прокладок (14 вписанных свободных
+  // фланцев + 2) = 128. У нас соединений — по свободным фланцам нитки:
+  // 3 × 3 насоса + 2 × 2 расходомера + 2 напорных = 15, болтов 120; прежде
+  // было 16 — по одному соединению на напорный.
+  it('крепёж: болтов М20 120 по фланцевым соединениям нитки (лист 128), шайб 240', () => {
+    const bolt = 'Болт М20-6gх90.58.12Х18Н10Т ГОСТ 7798-70 (DIN 931, DIN 933)'
+    expect(qty(bolt, '6')).toBe(120)
+    expect(qty('Шайба 2.М20.12Х18Н10Т ГОСТ 11371-78 (DIN125)', '6')).toBe(240)
   })
 
   it('корпус: подготовка трубы 28,8, товарный вид 26,6, теплоизоляция 33,5 чел.ч', () => {

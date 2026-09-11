@@ -286,6 +286,20 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(pump?.qtyCalc).toBe(4) // раб 3 + рез 1
   })
 
+  // Стеклокомпозитная труба заводится внутрь станции через муфту.
+  it('материал труб КНС берётся из ОЛ: стеклокомпозитная — через «Муфту-2»', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+
+    const grp = kns({ podvMat: 'стеклокомпозит', napMat: 'ПЭ' })
+    await store.applySurvey('e1', { form: grp, kns: grp, derived, surveyRev: 2 })
+    const titles = store.tree!.sections.flatMap((s) => s.components).filter((c) => c.nodeCode === 'A5').map((c) => c.title)
+    expect(titles).toEqual(['Патрубок подводящий стеклопластиковый DN250 ×1', 'Патрубок напорный DN150 ×2'])
+    expect(store.rows.some((r) => r.name === 'Муфта-2 СК/НПС-К 250-1')).toBe(true)
+  })
+
   it('ручное количество переживает правку ОЛ, а конфликт остаётся в дереве', async () => {
     const est = freshEstimate()
     estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))

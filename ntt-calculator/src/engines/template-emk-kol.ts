@@ -42,7 +42,7 @@ import type { PipeMaterial } from '@/types/survey'
 import {
   boundPrice,
   buildSleeveNozzles,
-  FORMED_SLEEVE_MAX_DN,
+  grpNozzleOf,
   inletGateValveName,
   makeRow,
   nextId,
@@ -149,9 +149,9 @@ export interface EmkSurveyParams {
   outletCount: number
   /**
    * Материал подходящей трубы (ОЛ «Материал»). Под стеклокомпозитную трубу
-   * патрубок стеклопластиковый: гильза (до DN 300 формуется) и фланец —
-   * уточнение завода 11.09.2026. Пусто — у расчётов до появления поля:
-   * берётся из формы ОЛ, иначе гильза под проход трубы.
+   * патрубок стеклопластиковый: гильза (до DN 300 формуется) и фланец с
+   * болтовым комплектом — уточнение завода 11.09.2026. Пусто — у расчётов до
+   * появления поля: берётся из формы ОЛ, иначе гильза под проход трубы.
    */
   inletMaterial?: PipeMaterial | null
   outletMaterial?: PipeMaterial | null
@@ -605,12 +605,6 @@ export function buildEmkShaft(ctx: MaterializeContext, s: EmkSurveyParams): Calc
   ]
 }
 
-/**
- * Материал подходящей трубы, под который патрубок — стеклопластиковый: в
- * листах «Труба стеклокомпозитная».
- */
-export const GRP_PIPE_MATERIAL: PipeMaterial = 'стеклокомпозит'
-
 type NozzlesParams = Pick<
   EmkSurveyParams,
   'inletDn' | 'inletCount' | 'outletDn' | 'outletCount' | 'inletMaterial' | 'outletMaterial'
@@ -629,10 +623,13 @@ type NozzlesParams = Pick<
  */
 function emkKolNozzles(s: NozzlesParams, joint: GrpNozzleJoint): SleeveNozzle[] {
   const cutoutName = 'Прорезка отверстия патрубка в корпусе'
-  const nozzle = (title: string, dn: number, count: number, material: PipeMaterial | null | undefined): SleeveNozzle =>
-    material === GRP_PIPE_MATERIAL
-      ? { title, dn, count, cutoutName, formed: { maxDn: FORMED_SLEEVE_MAX_DN, why: 'стеклопластиковый патрубок' }, grpJoint: joint }
-      : { title, dn, count, cutoutName }
+  const nozzle = (title: string, dn: number, count: number, material: PipeMaterial | null | undefined): SleeveNozzle => ({
+    title,
+    dn,
+    count,
+    cutoutName,
+    ...grpNozzleOf(material, joint),
+  })
   return [
     nozzle('Патрубок подводящий', s.inletDn, s.inletCount, s.inletMaterial),
     nozzle('Патрубок отводящий', s.outletDn, s.outletCount, s.outletMaterial),
