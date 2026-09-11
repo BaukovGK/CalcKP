@@ -52,7 +52,7 @@ export const NON_PURCHASE_CATEGORIES: readonly Category[] = [
 ]
 
 /** ЕИ, определяющая физический смысл строки (Механика §5.3). */
-export const UNIT_MASS = 'кг' // формовка/ламинат: участвует в массе формовки и ацетоне
+export const UNIT_MASS = 'кг' // формовка/ламинат — кроме покупного (economics.ts, isMoldingRow): масса формовки и ацетон
 export const UNIT_HOURS = 'чел. ч' // труд: участвует в часах и накладных
 
 /**

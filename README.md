@@ -210,8 +210,8 @@ npm run db:seed                      # → в базу
 ## Тесты
 
 ```powershell
-cd ntt-calculator; npm test     # 887 тестов в 49 файлах
-cd backend;        npm test     # 309 тестов в 21 файле
+cd ntt-calculator; npm test     # 903 теста в 51 файле
+cd backend;        npm test     # 312 тестов в 22 файлах
 ```
 
 **Упал тест «сборка совпадает с последней редакцией»** (`engines/builtin-revisions.test.ts`)

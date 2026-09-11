@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { homeRedirect, passwordGate } from './guards'
+import { homeRedirect, passwordGate, surveyGate } from './guards'
 import { useAuthStore } from '@/stores/auth'
 import type { UserRole } from '@/stores/auth'
 
@@ -51,14 +51,16 @@ const router = createRouter({
     {
       // Единый опросный лист — вход в процесс: ОЛ → материализация →
       // калькулятор. Один экран, ветвление по типу изделия (ТЗ §5.6).
-      // Без :id — создание (?type=KNS|EMK|KOL, ?project=<id> привязывает
-      // к проекту); с :id — редактирование ОЛ существующего расчёта.
+      // Без :id — создание единицы в проекте ?project=<id> (?type=KNS|EMK|KOL —
+      // стартовая вкладка); без проекта — к проектам (surveyGate). С :id —
+      // редактирование ОЛ существующего расчёта.
       path: '/survey/:id?',
       name: 'survey',
       component: () => import('@/views/SurveyView.vue'),
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
     },
-    // Прежние адреса трёх отдельных ОЛ — редиректы на единый экран.
+    // Прежние адреса трёх отдельных ОЛ — редиректы на единый экран. Проекта
+    // в них нет, поэтому дальше они ведут к проектам (surveyGate).
     { path: '/survey/kns', redirect: { name: 'survey', query: { type: 'KNS' } } },
     { path: '/survey/emk', redirect: { name: 'survey', query: { type: 'EMK' } } },
     { path: '/survey/kol', redirect: { name: 'survey', query: { type: 'KOL' } } },
@@ -138,6 +140,9 @@ router.beforeEach(async (to, from) => {
   if (allowed && auth.role && !allowed.includes(auth.role)) {
     return { name: 'dashboard' }
   }
+
+  const survey = surveyGate(to)
+  if (survey) return survey
 
   const home = homeRedirect(auth.role, to, from)
   if (home) return home

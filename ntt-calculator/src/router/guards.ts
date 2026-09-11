@@ -20,6 +20,23 @@ export function passwordGate(mustChangePassword: boolean, to: Pick<RouteLocation
   return null
 }
 
+/** Почему новую единицу нельзя создать вне проекта — для сообщения на экране. */
+export const UNIT_NEEDS_PROJECT = 'Единица создаётся в проекте: откройте проект и нажмите «Добавить единицу»'
+
+/**
+ * Новая единица — только в проекте (План_устранения 3.8). Расчёт без проекта
+ * не виден нигде в интерфейсе: дашборд показывает проекты. Опросный лист без
+ * расчёта и без `?project=` — прежние адреса `/survey/kns`, `/survey/emk`,
+ * `/survey/kol`, набранный вручную `/survey` — ведёт к проектам. `null` —
+ * пропустить.
+ */
+export function surveyGate(to: Pick<RouteLocationNormalized, 'name' | 'params' | 'query'>): RouteLocationRaw | null {
+  if (to.name !== 'survey') return null
+  const filled = (v: unknown) => typeof v === 'string' && v !== ''
+  if (filled(to.params.id) || filled(to.query.project)) return null
+  return { name: 'dashboard' }
+}
+
 /**
  * Домашний экран роли: технолог живёт в «Шаблонах» — проекты ему бесполезны.
  * Снабженец — в прайсе, но только при входе: проекты он открывает сам, из

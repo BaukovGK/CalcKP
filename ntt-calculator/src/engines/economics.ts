@@ -18,7 +18,7 @@
  * строками расчёта (Библиотека §1.4).
  */
 
-import { computeRow } from './row'
+import { computeRow, isPurchase } from './row'
 import { roundUp, roundUpHours, roundUpPrice } from './rounding'
 import { UNIT_HOURS, UNIT_MASS, type EngineRow } from './types'
 
@@ -136,10 +136,26 @@ export interface RowAggregate {
   hoursFittings: number
   /** Σ чел.ч работ С «изготов» в наименовании. */
   hoursRmu: number
-  /** Σ кол-ва строк с ЕИ «кг». */
+  /** Σ кол-ва строк формовки, кг ({@link isMoldingRow}). */
   moldingMassKg: number
   /** Суммы строк по корзинам (без «Прочих» — они вычисляются). */
   bucketSums: Record<Exclude<CostBucket, 'Прочие затраты'>, number>
+}
+
+/**
+ * Строка формовки — масса, которую завод формует сам (План_устранения 3.8):
+ * ЕИ «кг» у операции или у непокупной категории («Собственное производство»,
+ * «Работы», «ФОТ»). Из таких строк — корзина «Формовка» и масса для ацетона.
+ *
+ * Эталон берёт в «Формовку» любую строку в кг (`SUMIFS(J; K; "кг")` в
+ * «в т.ч. Формовка:»), а «Материалы на закупку» собирает по категории:
+ * покупное в кг — сорбент, щебень — попало бы в обе корзины, и его масса шла
+ * в ацетон. Здесь покупное в кг — материал на закупку, ацетона на него не
+ * идёт. Строка прайса «Собственное производство … кг», добавленная вручную
+ * (вид у неё — МАТЕРИАЛ), остаётся формовкой.
+ */
+export function isMoldingRow(row: Pick<EngineRow, 'kind' | 'category' | 'unit'>): boolean {
+  return row.unit === UNIT_MASS && (row.kind === 'ОПЕРАЦИЯ' || !isPurchase(row.category))
 }
 
 /**
@@ -148,6 +164,8 @@ export interface RowAggregate {
  * Определяется ЕДИНИЦЕЙ ИЗМЕРЕНИЯ, а не категорией — так устроен эталон:
  * `N441` суммирует по `K = "чел. ч"`, `K452` — по массе. Механика §5.3:
  * «ЕИ определяет физический смысл: кг — формовка/ламинат, чел. ч — труд».
+ * Одно исключение: покупное в кг — материал, а не формовка
+ * ({@link isMoldingRow}).
  *
  * Показательный случай: строка «Монтаж поплавковых выключателей» имеет
  * категорию «Собственное производство», но ЕИ «чел. ч» — и идёт в труд,
@@ -159,7 +177,7 @@ export interface RowAggregate {
 export function classifyRow(row: EngineRow & { bucket?: CostBucket }): Exclude<CostBucket, 'Прочие затраты'> {
   if (row.bucket && row.bucket !== 'Прочие затраты') return row.bucket
   if (row.unit === UNIT_HOURS) return 'Работы, ФОТ'
-  if (row.unit === UNIT_MASS) return 'Формовка'
+  if (isMoldingRow(row)) return 'Формовка'
   return 'Материалы на закупку'
 }
 
@@ -193,7 +211,7 @@ export function aggregateRows(
       if (isRmuWork(row.name)) hoursRmu += res.qty
       else hoursFittings += res.qty
     }
-    if (row.unit === UNIT_MASS) moldingMassKg += res.qty
+    if (isMoldingRow(row)) moldingMassKg += res.qty
 
     bucketSums[classifyRow(row)] += res.sum
   }

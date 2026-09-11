@@ -124,6 +124,8 @@ jobs:
             cd "${{ secrets.DEPLOY_PATH }}"
             git fetch --all
             git reset --hard origin/master
+            # Коммит сборки — в /api/health: по нему видно, что развёрнуто.
+            export APP_BUILD="$(git rev-parse --short HEAD)"
             docker compose pull || true
             # --wait ждёт, пока сервисы поднимутся, а бэкенд пройдёт свой
             # healthcheck. Не прошёл за 3 минуты (упала миграция, сид, нет БД)

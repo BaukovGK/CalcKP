@@ -50,6 +50,13 @@ describe('сноска строки расчёта', () => {
     expect(h.tone).toBeUndefined()
   })
 
+  // План_устранения 3.8: щебень и сорбент не формуют — это покупное.
+  it('покупное в кг — в материалах, и сноска говорит почему', () => {
+    const h = calcRowHint(row({ kind: 'МАТЕРИАЛ', category: 'Прочие материалы', name: 'Щебень 5-20 мм' }), res(), ctx())
+    expect(all(h)).toContain('В итогах — «Материалы на закупку»: покупное в кг не формуют, в массу для ацетона оно не входит.')
+    expect(all(h)).not.toContain('«Формовка»')
+  })
+
   it('нет цены — сноска-ошибка: строка не даёт выпустить КП', () => {
     const h = calcRowHint(row({ priceCatalog: null }), res({ price: null, sum: 0, missingPrice: true }), ctx())
     expect(h.tone).toBe('error')

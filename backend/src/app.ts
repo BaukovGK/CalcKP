@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { logger } from './utils/logger'
+import { readAppVersion } from './utils/app-version'
 import { errorHandler } from './middleware/errorHandler'
 import { authRouter }      from './routes/auth.routes'
 import { adminRouter }     from './routes/admin.routes'
@@ -103,8 +104,12 @@ app.use('/api/templates', templatesRouter)
 app.use('/api/templates', catalogRouter)
 app.use('/api/pump-station', pumpStationRouter)
 
+// Версия и коммит сборки читаются один раз, при старте: за время работы
+// они не меняются (utils/app-version.ts, План_устранения 3.8).
+const APP_VERSION = readAppVersion()
+
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', version: process.env.npm_package_version })
+  res.json({ status: 'ok', ...APP_VERSION })
 })
 
 // Неизвестный маршрут API. Без этого express отдавал свою HTML-страницу 404,

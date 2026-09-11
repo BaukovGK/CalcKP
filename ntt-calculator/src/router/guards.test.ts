@@ -1,8 +1,9 @@
 /**
- * Заслон обязательной смены пароля (План_устранения 2.1).
+ * Правила переходов (План_устранения): смена пароля (2.1), домашний экран
+ * роли (3.7), новая единица — только в проекте (3.8).
  */
 import { describe, expect, it } from 'vitest'
-import { homeRedirect, passwordGate } from './guards'
+import { homeRedirect, passwordGate, surveyGate } from './guards'
 
 describe('заслон обязательной смены пароля', () => {
   it('пароль задан не самим пользователем — любой экран ведёт на смену и помнит, куда шли', () => {
@@ -42,5 +43,27 @@ describe('домашний экран роли', () => {
     expect(homeRedirect('TECHNOLOG', dash, fromPrices)).toEqual({ name: 'templates' })
     expect(homeRedirect('ENGINEER', dash, fromLogin)).toBeNull()
     expect(homeRedirect('BUYER', { name: 'prices' }, fromLogin)).toBeNull()
+  })
+})
+
+// План_устранения 3.8: расчёт без проекта не виден нигде в интерфейсе, а
+// прежние адреса /survey/kns|emk|kol открывали лист создания без проекта.
+describe('новая единица — только в проекте', () => {
+  const survey = (params: Record<string, string>, query: Record<string, string>) =>
+    ({ name: 'survey', params, query }) as never
+
+  it('лист без расчёта и без проекта — к проектам', () => {
+    expect(surveyGate(survey({}, {}))).toEqual({ name: 'dashboard' })
+    expect(surveyGate(survey({}, { type: 'KNS' }))).toEqual({ name: 'dashboard' })
+    expect(surveyGate(survey({ id: '' }, { project: '' }))).toEqual({ name: 'dashboard' })
+  })
+
+  it('из проекта и для существующего расчёта — пускает', () => {
+    expect(surveyGate(survey({}, { project: 'p1', type: 'EMK' }))).toBeNull()
+    expect(surveyGate(survey({ id: 'e1' }, {}))).toBeNull()
+  })
+
+  it('других экранов не касается', () => {
+    expect(surveyGate({ name: 'calculator', params: {}, query: {} } as never)).toBeNull()
   })
 })

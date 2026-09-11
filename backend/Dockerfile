@@ -56,4 +56,10 @@ EXPOSE 3000
 COPY --chmod=755 docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY --chmod=755 scripts/ /app/scripts/
 
+# Коммит, из которого собран образ, — в /api/health (План_устранения 3.8).
+# Задаёт docker-compose.yml из APP_BUILD; стоит последним, чтобы новый коммит
+# не сбрасывал кэш тяжёлых слоёв выше.
+ARG APP_BUILD=
+ENV APP_BUILD=$APP_BUILD
+
 CMD ["/app/docker-entrypoint.sh"]

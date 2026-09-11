@@ -66,12 +66,6 @@ export interface KpResult {
   snapshot: { version: number; priceListVersion: number; createdAt: string }
 }
 
-export interface CreateEstimateDto {
-  title: string
-  deviceType: DeviceType
-  surveyData?: Record<string, unknown>
-}
-
 export const estimatesApi = {
   list(): Promise<EstimateListItem[]> {
     return api.get<EstimateListItem[]>('/estimates').then((r) => r.data)
@@ -81,9 +75,9 @@ export const estimatesApi = {
     return api.get<EstimateDetail>(`/estimates/${id}`).then((r) => r.data)
   },
 
-  create(dto: CreateEstimateDto): Promise<EstimateDetail> {
-    return api.post<EstimateDetail>('/estimates', dto).then((r) => r.data)
-  },
+  // Создания здесь нет намеренно: единица создаётся в проекте
+  // (`projectsApi.addEstimate`) — расчёт вне проекта не виден нигде в
+  // интерфейсе (План_устранения 3.8).
 
   patchSurvey(id: string, surveyData: Record<string, unknown>): Promise<EstimateDetail> {
     return api.patch<EstimateDetail>(`/estimates/${id}/survey`, surveyData).then((r) => r.data)

@@ -92,8 +92,16 @@
               <select v-model="form.pnManual"><option value="">расч.</option><option v-for="p in PN_LIST" :key="p">{{ p }}</option></select>
             </label>
             <label class="fld fld--3"><span v-hint="H.snManual">SN, Па</span>
-              <select v-model="form.snManual"><option value="">расч.</option><option v-for="v in SN_LIST" :key="v">{{ v }}</option></select>
+              <select v-model="form.snManual">
+                <option value="">расч.</option>
+                <option v-for="v in SN_MANUAL_OPTIONS" :key="v">{{ v }}</option>
+                <!-- Выбранное до правила завода (1250, 2500) видно, пока не сменят. -->
+                <option v-if="legacySnManual(form.snManual)" :value="form.snManual">{{ form.snManual }} (прежний)</option>
+              </select>
             </label>
+            <div v-if="legacySnManual(form.snManual)" class="ol-pick ol-pick--warn fld--12">
+              SN {{ form.snManual }} выбран раньше, а завод делает корпус из трубы SN 5000 или 10000 — выберите одну из них.
+            </div>
             <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
           </div>
         </div>
@@ -273,6 +281,7 @@ import { COMMON_HINTS, KOL_HINTS } from '@/hints/survey'
 import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
 import type { DeviceType } from '@/api/estimates'
 import { useKolSurvey } from '@/composables/useEmkKolSurvey'
+import { legacySnManual, SN_MANUAL_OPTIONS } from '@/composables/usePipeOverride'
 import { toast } from '@/composables/useToast'
 import { useSurveySync } from '@/composables/useSurveySync'
 import { useCalcTreeStore } from '@/stores/calcTree'
@@ -282,6 +291,7 @@ import { makeDefaultKolSurvey, resinGrade, type KolSurveyForm } from '@/types/su
 import { grinderValue, hasBasketIn, hasGrinderIn, pickCommon, PIPE_MATERIALS } from '@/types/survey'
 import { estimatesApi } from '@/api/estimates'
 import { projectsApi } from '@/api/projects'
+import { UNIT_NEEDS_PROJECT } from '@/router/guards'
 import { KOL_SECTIONS } from '@/engines/template-emk-kol'
 
 /** Ветка КОЛ единого опросного листа — режимы как у КНС (см. SurveyKnsView). */
@@ -340,7 +350,6 @@ const MATERIALS = PIPE_MATERIALS
 const RESINS = ['Стандарт', 'Винилэфирная стандарт', 'Винилэфирная высокотемп.'] as const
 const EFFLUENTS = ['Хозяйственно-бытовые', 'Ливневые', 'Промышленные', 'Агрессивные'] as const
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
-const SN_LIST = ['1250', '2500', '5000', '10000'] as const
 const DN_LIST = [300, 350, 400, 450, 500].concat(Array.from({ length: 25 }, (_, i) => 600 + i * 100)).map(String)
 
 const activeSec = ref(1)
@@ -539,9 +548,11 @@ async function createEstimate() {
         sections: KOL_SECTIONS.map((x) => ({ code: x.code, title: x.title, enabled: true, components: [] })),
       },
     }
-    const est = props.projectId
-      ? await projectsApi.addEstimate(props.projectId, dto)
-      : await estimatesApi.create(dto)
+    // Единица создаётся только в проекте: расчёт без проекта не виден нигде
+    // в интерфейсе — дашборд показывает проекты (План_устранения 3.8).
+    // Роутер без проекта сюда не пускает (surveyGate), проверка — на всякий.
+    if (!props.projectId) throw new Error(UNIT_NEEDS_PROJECT)
+    const est = await projectsApi.addEstimate(props.projectId, dto)
     await store.applySurvey(est.id, { ...surveyPayload(), surveyRev: 2 })
     // Временной слепок исходного состояния: дальше ОЛ пересобирает расчёт
     // при каждой правке, и то, с чего единица начала, иначе не восстановить.

@@ -216,8 +216,18 @@ describe('classifyRow — корзина определяется ЕИ, а не 
     expect(classifyRow(row({ unit: 'чел. ч' }))).toBe('Работы, ФОТ')
   })
 
-  it('ЕИ «кг» → «Формовка»', () => {
-    expect(classifyRow(row({ unit: 'кг' }))).toBe('Формовка')
+  it('ЕИ «кг» у операции → «Формовка»', () => {
+    expect(classifyRow(row({ kind: 'ОПЕРАЦИЯ', category: 'Собственное производство', unit: 'кг' }))).toBe('Формовка')
+  })
+
+  // План_устранения 3.8: эталон кладёт в «Формовку» любую строку в кг, а в
+  // «Материалы на закупку» — по категории, и покупное в кг попадало в обе.
+  it('покупное в кг — материал на закупку, а не формовка', () => {
+    expect(classifyRow(row({ category: 'Прочие материалы', name: 'Щебень 5-20 мм', unit: 'кг' }))).toBe('Материалы на закупку')
+  })
+
+  it('«Собственное производство» в кг, добавленное из прайса вручную (МАТЕРИАЛ), — формовка', () => {
+    expect(classifyRow(row({ kind: 'МАТЕРИАЛ', category: 'Собственное производство', unit: 'кг' }))).toBe('Формовка')
   })
 
   it('прочие ЕИ → «Материалы на закупку»', () => {
@@ -254,6 +264,8 @@ describe('aggregateRows', () => {
       priceManual: null,
       ...o,
     }) as EngineRow & { bucket?: CostBucket }
+  /** Операция формовки: масса, которую завод формует сам. */
+  const op = { kind: 'ОПЕРАЦИЯ', category: 'Собственное производство', unit: 'кг' } as const
 
   it('разделяет часы на фитинги и РМУ', () => {
     const a = aggregateRows([
@@ -264,13 +276,24 @@ describe('aggregateRows', () => {
     expect(a.hoursRmu).toBe(4)
   })
 
-  it('суммирует массу формовки по ЕИ «кг»', () => {
+  it('суммирует массу формовки по операциям в кг', () => {
     const a = aggregateRows([
-      mk({ unit: 'кг', qtyCalc: 262.8, priceCatalog: 214.4 }),
-      mk({ unit: 'кг', qtyCalc: 78.9, priceCatalog: 310.2 }),
+      mk({ ...op, qtyCalc: 262.8, priceCatalog: 214.4 }),
+      mk({ ...op, qtyCalc: 78.9, priceCatalog: 310.2 }),
       mk({ unit: 'шт', qtyCalc: 5 }),
     ])
     expect(a.moldingMassKg).toBeCloseTo(341.7, 6)
+  })
+
+  // План_устранения 3.8: щебень и сорбент не формуют — ацетона на них нет.
+  it('покупное в кг в массу для ацетона не входит, его сумма — в материалах', () => {
+    const a = aggregateRows([
+      mk({ ...op, qtyCalc: 100, priceCatalog: 10 }),
+      mk({ category: 'Прочие материалы', name: 'Сорбент Активированный уголь марки АГ-3', unit: 'кг', qtyCalc: 40, priceCatalog: 5 }),
+    ])
+    expect(a.moldingMassKg).toBe(100)
+    expect(a.bucketSums.Формовка).toBe(1000)
+    expect(a.bucketSums['Материалы на закупку']).toBe(200)
   })
 
   it('строка без цены не ломает агрегат и даёт сумму 0', () => {
@@ -284,7 +307,7 @@ describe('aggregateRows', () => {
   })
 
   it('тираж домножает количества (Механика §9.1)', () => {
-    const a = aggregateRows([mk({ unit: 'кг', qtyCalc: 100, priceCatalog: 10 })], { tirage: 3 })
+    const a = aggregateRows([mk({ ...op, qtyCalc: 100, priceCatalog: 10 })], { tirage: 3 })
     expect(a.moldingMassKg).toBe(300)
     expect(a.bucketSums.Формовка).toBe(3000)
   })

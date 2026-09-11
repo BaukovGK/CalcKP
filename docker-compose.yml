@@ -45,6 +45,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Коммит сборки — в /api/health (План_устранения 3.8). Деплой задаёт его
+      # сам (.github/workflows/ci-cd.yml), вручную:
+      #   APP_BUILD=$(git rev-parse --short HEAD) docker compose up -d --build
+      args:
+        APP_BUILD: ${APP_BUILD:-}
     restart: unless-stopped
     depends_on:
       db:

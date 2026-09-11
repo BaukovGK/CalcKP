@@ -8,7 +8,7 @@
  */
 
 import type { Hint } from '@/directives/hint'
-import { classifyRow, type CostBucket } from '@/engines/economics'
+import { classifyRow, isMoldingRow, type CostBucket } from '@/engines/economics'
 import { computeRow } from '@/engines/row'
 import type { CalcRowNode } from '@/engines/template-kns'
 import type { PriceBinding, RowResult } from '@/engines/types'
@@ -37,7 +37,9 @@ function bucketReason(row: CalcRowNode): string {
   const bucket = classifyRow(row)
   if (row.bucket === 'Труба, муфта') return 'В итогах — «Труба, муфта»: труба и муфты корпуса выделены отдельно.'
   if (row.unit === UNIT_HOURS) return 'В итогах — «Работы, ФОТ» (ЕИ «чел. ч»); часы идут и в ПЗР, СИЗ и накладные.'
-  if (row.unit === UNIT_MASS) return 'В итогах — «Формовка» (ЕИ «кг»); 5 % массы уходит в ацетон.'
+  if (isMoldingRow(row)) return 'В итогах — «Формовка» (ЕИ «кг»); 5 % массы уходит в ацетон.'
+  // Покупное в кг — сорбент, щебень — не формуют (План_устранения 3.8).
+  if (row.unit === UNIT_MASS) return `В итогах — «${bucket}»: покупное в кг не формуют, в массу для ацетона оно не входит.`
   return `В итогах — «${bucket}» (ЕИ «${row.unit}»).`
 }
 
@@ -162,7 +164,7 @@ export function calcRowHint(row: CalcRowNode, res: RowResult, ctx: RowHintContex
 export const BUCKET_HINTS: Record<CostBucket, Hint> = {
   'Материалы на закупку': {
     title: 'Материалы на закупку',
-    text: 'Покупные позиции: строки в штуках, метрах, м² и комплектах — всё, что не «кг» и не «чел. ч», кроме трубы и муфт корпуса.',
+    text: 'Покупные позиции: строки в штуках, метрах, м² и комплектах, покупное в кг (сорбент, щебень) — всё, кроме формовки, человеко-часов, трубы и муфт корпуса.',
     formula: 'Σ кол-во × цена',
   },
   'Труба, муфта': {
@@ -172,7 +174,7 @@ export const BUCKET_HINTS: Record<CostBucket, Hint> = {
   },
   Формовка: {
     title: 'Формовка',
-    text: 'Строки в килограммах: формовка и ламинирование. Та же масса даёт ацетон в «Прочих».',
+    text: 'Строки в килограммах, которые завод делает сам: формовка и ламинирование. Та же масса даёт ацетон в «Прочих». Покупное в кг сюда не входит — оно в материалах.',
     formula: 'Σ масса × цена за кг',
   },
   'Работы, ФОТ': {
