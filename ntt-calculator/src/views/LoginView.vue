@@ -40,11 +40,15 @@
         </button>
       </form>
 
-      <div class="auth-sep"></div>
+      <!-- Демо-вход без сервера — только в dev-сборке (План_устранения 2.5):
+           в рабочей он открывал экраны без учётной записи. -->
+      <template v-if="demoAvailable">
+        <div class="auth-sep"></div>
 
-      <button class="btn btn-full btn-g" @click="onDemo" :disabled="loading">
-        Войти как демо (без сервера)
-      </button>
+        <button class="btn btn-full btn-g" @click="onDemo" :disabled="loading">
+          Войти как демо (без сервера)
+        </button>
+      </template>
 
       <div class="auth-footer">
         НТТ Калькулятор · v{{ version }}
@@ -65,6 +69,8 @@ const form    = reactive({ email: '', password: '' })
 const loading = ref(false)
 const version = import.meta.env.VITE_APP_VERSION ?? '0.0.0'
 const error   = ref('')
+/** Демо-вход — только при `npm run dev`: в собранном приложении его нет. */
+const demoAvailable = import.meta.env.DEV
 
 async function onSubmit() {
   error.value = ''

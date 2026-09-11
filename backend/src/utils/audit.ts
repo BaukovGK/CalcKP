@@ -15,6 +15,8 @@ import { logger } from './logger'
  */
 export type AuditAction =
   | 'estimate.create'
+  /** Расчёт удалён — необратимо; в meta — название, тип, проект и итог. */
+  | 'estimate.delete'
   | 'estimate.status_change'
   | 'estimate.snapshot'
   /** Выпуск КП — точка фиксации процесса (ТЗ §4.3 v1.5). */

@@ -217,7 +217,7 @@
       </div>
       <div class="ff">
         <label class="fl">Пароль <span style="color:var(--danger)">*</span></label>
-        <input class="fi" type="password" v-model="newForm.password" placeholder="Минимум 6 символов" />
+        <input class="fi" type="password" v-model="newForm.password" :placeholder="`Минимум ${MIN_PASSWORD_LENGTH} символов`" />
       </div>
       <div v-if="newFormError" class="auth-err" style="margin-top:8px">{{ newFormError }}</div>
       <template #footer>
@@ -239,6 +239,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
 import { ADMIN_PASSWORD_HINTS } from '@/hints/account'
 import { useAuthStore } from '@/stores/auth'
+import { MIN_PASSWORD_LENGTH } from '@/utils/password-form'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -332,7 +333,7 @@ function closeNewUser() {
 async function createUser() {
   if (!newForm.name.trim())     { newFormError.value = 'Укажите имя';  return }
   if (!newForm.email.trim())    { newFormError.value = 'Укажите email'; return }
-  if (newForm.password.length < 6) { newFormError.value = 'Пароль минимум 6 символов'; return }
+  if (newForm.password.length < MIN_PASSWORD_LENGTH) { newFormError.value = `Пароль — минимум ${MIN_PASSWORD_LENGTH} символов`; return }
   creating.value = true; newFormError.value = ''
   try {
     const user = await adminApi.createUser({
@@ -344,7 +345,9 @@ async function createUser() {
     users.value.unshift(user)
     closeNewUser()
   } catch (e: unknown) {
-    newFormError.value = e instanceof Error ? e.message : 'Ошибка создания'
+    // Текст сервера — «пользователь с таким email уже есть» и подобные.
+    const r = (e as { response?: { data?: { message?: string } } }).response
+    newFormError.value = r?.data?.message ?? (e instanceof Error ? e.message : 'Ошибка создания')
   } finally {
     creating.value = false
   }

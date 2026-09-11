@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { stat, unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { logger } from '../utils/logger'
-import { temporaryPassword } from '../utils/password'
+import { MIN_PASSWORD_LENGTH, temporaryPassword } from '../utils/password'
 import {
   acceptUpload, BACKUP_DIR, createDump, deleteDump, dumpPath, dumpStream, DumpError,
   isValidDumpName, listDumps, MAX_DUMP_BYTES, restoreDump,
@@ -45,13 +45,19 @@ const createUserSchema = z.object({
   email:    z.string().email(),
   name:     z.string().min(1),
   role:     z.enum(ROLES),
-  password: z.string().min(6),
+  password: z.string().min(MIN_PASSWORD_LENGTH),
 })
 
 // POST /api/admin/users
 adminRouter.post('/users', validate(createUserSchema), async (req, res: Response, next: NextFunction) => {
   try {
     const { email, name, role, password } = req.body
+    // Повтор email — 409 с понятным текстом, а не 500 от уникального индекса
+    // (План_устранения 2.5). Гонку двух одновременных созданий ловит errorHandler.
+    if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
+      res.status(409).json({ message: `Пользователь с email ${email} уже есть`, code: 'EMAIL_TAKEN' })
+      return
+    }
     const passwordHash = await bcrypt.hash(password, 10)
     // Пароль задал администратор — пользователь сменит его при первом входе
     // (План_устранения 2.1).

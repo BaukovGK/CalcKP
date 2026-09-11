@@ -48,3 +48,13 @@ describe('errorHandler', () => {
     expect(logger.log).toHaveBeenLastCalledWith('error', "Can't reach database server", expect.objectContaining({ status: 500 }))
   })
 })
+
+// План_устранения 2.5: нарушение уникальности (повтор email и подобное) — 409
+// с общим текстом, а не 500 «внутренняя ошибка».
+describe('errorHandler: нарушение уникальности', () => {
+  it('Prisma P2002 — 409 без текста Prisma', () => {
+    const res = respond(prismaError('P2002', 'Unique constraint failed on the fields: (`email`)'))
+    expect(res.statusCode).toBe(409)
+    expect(res.body).toEqual({ message: 'Запись с такими данными уже есть' })
+  })
+})

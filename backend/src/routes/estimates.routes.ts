@@ -278,6 +278,14 @@ estimatesRouter.delete('/:id', async (req, res: Response, next: NextFunction) =>
     }
 
     await prisma.estimate.delete({ where: { id } })
+    // Удаление необратимо — в аудит, с тем, по чему расчёт можно узнать
+    // (План_устранения 2.5).
+    await audit(auth.userId, 'estimate.delete', 'Estimate', id, {
+      title: estimate.title,
+      deviceType: estimate.deviceType,
+      projectId: estimate.projectId,
+      totalRub: estimate.totalRub,
+    })
     res.status(204).send()
   } catch (e) { next(e) }
 })

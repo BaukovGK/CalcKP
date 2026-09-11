@@ -26,9 +26,13 @@ const failedByEmail = createLimiter({ windowMs: WINDOW_MS, max: 10 })
 /** Обновления токена с одного адреса: каждая вкладка — раз в 15 минут. */
 const refreshByIp = createLimiter({ windowMs: WINDOW_MS, max: 300 })
 
+/**
+ * Длину пароля вход не проверяет: учётки, созданные при прежнем минимуме в
+ * 6 знаков, должны войти — и сменить пароль (План_устранения 2.5).
+ */
 const loginSchema = z.object({
   email:    z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(1),
 })
 
 /**
@@ -55,6 +59,12 @@ authRouter.post('/login', limitByIp(loginByIp, 'Слишком много поп
       res.status(401).json({ message: 'Неверный email или пароль' }); return
     }
     failedByEmail.reset(key)
+    // Пароль короче нынешнего минимума (заведён при прежних 6 знаках) —
+    // войти можно, но сначала сменить: длину знаем только сейчас, по вводу.
+    if (password.length < MIN_PASSWORD_LENGTH && !user.mustChangePassword) {
+      await prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: true } })
+      user.mustChangePassword = true
+    }
     const payload = { userId: user.id, role: user.role, tokenVersion: user.tokenVersion }
     const [accessToken, refreshToken] = await Promise.all([
       signAccess(payload),
