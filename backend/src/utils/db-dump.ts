@@ -75,6 +75,39 @@ function databaseUrl(): string {
   return url
 }
 
+/**
+ * Подключение для `pg_dump`/`pg_restore`: строка без пароля — в аргумент,
+ * пароль — в окружение (`PGPASSWORD`).
+ *
+ * Аргументы процесса видны в `ps`, а `execFile` вписывает всю командную
+ * строку в текст ошибки. Прежде пароль БД шёл в `--dbname=URL` — и при
+ * неудачном восстановлении возвращался в админку в ответе API.
+ */
+export function pgConnection(url: string): { dbname: string; env: NodeJS.ProcessEnv } {
+  const u = new URL(url)
+  const password = decodeURIComponent(u.password)
+  u.password = ''
+  return { dbname: u.toString(), env: password ? { PGPASSWORD: password } : {} }
+}
+
+/** Команда с доступом к БД: аргумент без пароля, пароль — в окружении. */
+function runWithDb(command: string, args: string[], opts: { maxBuffer?: number } = {}) {
+  const { dbname, env } = pgConnection(databaseUrl())
+  return run(command, [`--dbname=${dbname}`, ...args], { ...opts, env: { ...process.env, ...env } })
+}
+
+/**
+ * Текст ошибки без секретов: пароль в строке подключения заменяется на `***`.
+ * Страховка к {@link pgConnection} — на случай, если строка с паролем попадёт
+ * в сообщение другим путём (текст самой утилиты, чужая обёртка).
+ */
+export function redact(text: string): string {
+  return text.replace(/(postgres(?:ql)?:\/\/[^:/@\s]*):[^@\s]*@/gi, '$1:***@')
+}
+
+/** Сообщение ошибки утилиты — без секретов. */
+const errorText = (e: unknown) => redact(e instanceof Error ? e.message : String(e))
+
 /** Список дампов, свежие первыми. */
 export async function listDumps(): Promise<DumpInfo[]> {
   await mkdir(BACKUP_DIR, { recursive: true })
@@ -118,8 +151,7 @@ export async function createDump(label = 'manual', now = new Date()): Promise<Du
   const file = path.join(BACKUP_DIR, name)
 
   try {
-    await run('pg_dump', [
-      `--dbname=${databaseUrl()}`,
+    await runWithDb('pg_dump', [
       '--format=custom',
       '--compress=6',
       '--no-owner',
@@ -128,7 +160,7 @@ export async function createDump(label = 'manual', now = new Date()): Promise<Du
     ])
   } catch (e) {
     await unlink(file).catch(() => {})
-    throw new DumpError(`Не удалось снять дамп: ${(e as Error).message}`, 'DUMP_FAILED')
+    throw new DumpError(`Не удалось снять дамп: ${errorText(e)}`, 'DUMP_FAILED')
   }
 
   try {
@@ -218,7 +250,7 @@ export async function inspectDump(file: string): Promise<DumpCheck> {
       maxBuffer: 256 * 1024 * 1024,
     })).stdout
   } catch (e) {
-    return { ok: false, problems: [`Не удалось развернуть архив в SQL: ${(e as Error).message}`], tables: [...tables] }
+    return { ok: false, problems: [`Не удалось развернуть архив в SQL: ${errorText(e)}`], tables: [...tables] }
   }
 
   for (const re of FORBIDDEN_SQL) {
@@ -252,14 +284,14 @@ export async function restoreDump(name: string): Promise<{ safetyDump: string }>
   const safety = await createDump('pre-restore')
 
   try {
-    await run(
+    await runWithDb(
       'pg_restore',
-      [`--dbname=${databaseUrl()}`, '--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error', file],
+      ['--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error', file],
       { maxBuffer: 64 * 1024 * 1024 },
     )
   } catch (e) {
     throw new DumpError(
-      `Восстановление не удалось: ${(e as Error).message}. Текущее состояние сохранено в ${safety.name}`,
+      `Восстановление не удалось: ${errorText(e)}. Текущее состояние сохранено в ${safety.name}`,
       'RESTORE_FAILED',
     )
   }

@@ -9,6 +9,8 @@ import { audit } from '../utils/audit'
 import multer from 'multer'
 import { randomUUID } from 'node:crypto'
 import { stat, unlink } from 'node:fs/promises'
+import { pipeline } from 'node:stream/promises'
+import { logger } from '../utils/logger'
 import {
   acceptUpload, BACKUP_DIR, createDump, deleteDump, dumpPath, dumpStream, DumpError,
   isValidDumpName, listDumps, MAX_DUMP_BYTES, restoreDump,
@@ -183,7 +185,13 @@ adminRouter.get('/backups/:name', async (req, res: Response, next: NextFunction)
 
     res.setHeader('Content-Type', 'application/octet-stream')
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`)
-    dumpStream(name).pipe(res)
+    // pipeline, а не pipe: у pipe ошибка чтения (файл удалили между проверкой
+    // и чтением, сбой диска) остаётся без обработчика и роняет весь процесс.
+    // Заголовки уже ушли — ответить JSON нельзя, соединение закрывается.
+    await pipeline(dumpStream(name), res).catch((e: unknown) => {
+      logger.warn('Выгрузка дампа прервана', { name, error: e instanceof Error ? e.message : String(e) })
+      res.destroy()
+    })
   } catch (e) { next(e) }
 })
 
