@@ -12,6 +12,7 @@
       </div>
       <div class="tpl-spacer" />
       <ThemeToggle />
+      <UserMenu inline />
     </header>
 
     <!-- ── Вкладки ── -->
@@ -225,6 +226,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import UserMenu from '@/components/ui/UserMenu.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import ProductTemplateEditor from '@/components/templates/ProductTemplateEditor.vue'
 import NodeCatalogEditor from '@/components/templates/NodeCatalogEditor.vue'

@@ -14,7 +14,7 @@
       </div>
       <div class="sidebar-footer">
         <ThemeToggle />
-        <button class="btn btn-g btn-full" @click="handleLogout">Выйти</button>
+        <UserMenu />
       </div>
     </aside>
 
@@ -106,6 +106,7 @@ import { projectsApi } from '@/api/projects'
 import ProjectCard  from '@/components/dashboard/ProjectCard.vue'
 import BaseModal    from '@/components/ui/BaseModal.vue'
 import ThemeToggle  from '@/components/ui/ThemeToggle.vue'
+import UserMenu     from '@/components/ui/UserMenu.vue'
 
 const router   = useRouter()
 const auth     = useAuthStore()
@@ -174,12 +175,6 @@ async function confirmDeleteProject() {
   } finally {
     deleting.value = false
   }
-}
-
-async function handleLogout() {
-  await auth.logout()
-  projects.clear()
-  router.push('/login')
 }
 
 onMounted(() => projects.fetchAll())

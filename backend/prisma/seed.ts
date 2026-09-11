@@ -119,8 +119,8 @@ type SeedUser = { email: string; name: string; role: 'ADMIN' | 'MANAGER' | 'ENGI
  * Первый администратор. Заводится всегда: без него в свежую систему было бы
  * не войти и некому создать остальных.
  *
- * Пароль надо сменить сразу после первого входа — `POST /api/auth/password`
- * или раздел «Администрирование» в интерфейсе.
+ * Пароль надо сменить сразу после первого входа — кнопка «Сменить пароль»
+ * в подвале боковой панели (`components/ui/UserMenu.vue`).
  */
 const ADMIN: SeedUser = { email: 'admin@ntt.local', name: 'Администратор', role: 'ADMIN', password: 'admin123' }
 

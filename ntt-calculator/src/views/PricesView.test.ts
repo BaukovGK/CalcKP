@@ -29,7 +29,7 @@ const ITEMS = [
 
 async function mountView() {
   const wrapper = mount(PricesView, {
-    global: { stubs: { ThemeToggle: true, ToastHost: true } },
+    global: { stubs: { ThemeToggle: true, ToastHost: true, UserMenu: true } },
     attachTo: document.body,
   })
   await flushPromises()

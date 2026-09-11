@@ -13,6 +13,7 @@
       </div>
       <div class="sidebar-footer">
         <ThemeToggle />
+        <UserMenu />
       </div>
     </aside>
 
@@ -195,6 +196,7 @@ import { useRouter } from 'vue-router'
 import { adminApi, type AdminUser, type AuditEntry, type DumpInfo } from '@/api/admin'
 import BaseModal   from '@/components/ui/BaseModal.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import UserMenu from '@/components/ui/UserMenu.vue'
 
 const router = useRouter()
 const tab = ref<'users' | 'audit' | 'db'>('users')

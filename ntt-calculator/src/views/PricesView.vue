@@ -25,6 +25,7 @@
       </div>
       <div class="sidebar-footer">
         <ThemeToggle />
+        <UserMenu />
       </div>
     </aside>
 
@@ -287,6 +288,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { pricesApi, type ImportResult, type PriceItem } from '@/api/prices'
 import { refsApi } from '@/api/refs'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import UserMenu from '@/components/ui/UserMenu.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { toast } from '@/composables/useToast'
 import { tryEvalExpr } from '@/engines/expr'

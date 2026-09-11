@@ -23,6 +23,7 @@
       </div>
       <div class="sidebar-footer">
         <ThemeToggle />
+        <UserMenu />
       </div>
     </aside>
 
@@ -224,6 +225,7 @@ import { estimatesApi, type EstimateStatus } from '@/api/estimates'
 import type { ProjectEstimate } from '@/api/projects'
 import BaseModal    from '@/components/ui/BaseModal.vue'
 import ThemeToggle  from '@/components/ui/ThemeToggle.vue'
+import UserMenu     from '@/components/ui/UserMenu.vue'
 import { fmt } from '@/engines/format'
 
 const route    = useRoute()

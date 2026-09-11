@@ -103,6 +103,17 @@ describe('стор авторизации', () => {
     for (const key of Object.values(SESSION_KEYS)) expect(localStorage.getItem(key)).toBeNull()
   })
 
+  // План_устранения, 0.5: у смены пароля есть экран; 401 здесь — истёкший
+  // токен, его клиент обновляет, поэтому skipAuthRefresh не ставится.
+  it('смена пароля — через клиент, текущий и новый пароль', async () => {
+    post.mockResolvedValue({ status: 204 })
+    const auth = useAuthStore()
+
+    await auth.changePassword('старый-пароль', 'новый-пароль')
+
+    expect(post).toHaveBeenCalledWith('/auth/password', { currentPassword: 'старый-пароль', newPassword: 'новый-пароль' })
+  })
+
   it('обновление токена — общий механизм клиента', async () => {
     localStorage.setItem(SESSION_KEYS.refresh, 'r1')
     const auth = useAuthStore()

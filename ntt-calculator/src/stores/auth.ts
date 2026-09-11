@@ -71,6 +71,16 @@ export const useAuthStore = defineStore('auth', () => {
     _persist(null, null)
   }
 
+  // ── Смена своего пароля ──────────────────────────────────────────────────
+  /**
+   * Сменить свой пароль (`POST /api/auth/password`): сервер сверяет текущий.
+   * Ошибка — как у любого запроса клиента: код и текст сервера в
+   * `response.data` (`WRONG_PASSWORD`, `SAME_PASSWORD`, `utils/password-form.ts`).
+   */
+  async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await api.post('/auth/password', { currentPassword, newPassword })
+  }
+
   // ── Refresh ───────────────────────────────────────────────────────────────
   async function refresh(): Promise<boolean> {
     if (localStorage.getItem(SESSION_KEYS.refresh) === 'demo-token') return !!user.value
@@ -103,5 +113,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, accessToken, isLoggedIn, role, login, loginDemo, logout, refresh, checkAuth }
+  return { user, accessToken, isLoggedIn, role, login, loginDemo, logout, changePassword, refresh, checkAuth }
 })
