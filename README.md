@@ -145,9 +145,10 @@ docker compose --profile tools run --rm restore --yes latest  # восстано
 запускает CI, а при зелёных тестах — авто-деплой на сервер.
 
 **CI** (на каждый push и pull request): typecheck фронта, линт (`npm run
-check:lint` — проверяющий вариант без `--fix`) и 298 тестов; на бэке —
+check:lint` — проверяющий вариант без `--fix`) и тесты фронта; на бэке —
 `prisma migrate deploy` и сид против сервисного Postgres, затем сборка
-(`npm run build`) и 128 тестов. Ловит расхождение схемы и миграций до деплоя.
+(`npm run build`) и тесты бэка (числа — в «Тестах» ниже). Ловит расхождение
+схемы и миграций до деплоя.
 Линта у бэкенда нет.
 
 **Деплой** (автоматически при push в `master` после зелёного CI): GitHub
@@ -204,7 +205,7 @@ npm run db:seed                      # → в базу
 
 ```powershell
 cd ntt-calculator; npm test     # 756 тестов в 38 файлах
-cd backend;        npm test     # 223 теста в 12 файлах
+cd backend;        npm test     # 238 тестов в 14 файлах
 ```
 
 **Упал тест «сборка совпадает с последней редакцией»** (`engines/builtin-revisions.test.ts`)

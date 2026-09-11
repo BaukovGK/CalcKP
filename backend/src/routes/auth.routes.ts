@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../utils/prisma'
-import { signAccess, signRefresh, verifyToken } from '../utils/jwt'
+import { signAccess, signRefresh, verifyRefresh } from '../utils/jwt'
 import { validate } from '../middleware/validate'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { audit } from '../utils/audit'
@@ -45,7 +45,8 @@ authRouter.post('/refresh', async (req, res, next) => {
   try {
     const { refreshToken } = req.body as { refreshToken?: string }
     if (!refreshToken) { res.status(400).json({ message: 'refreshToken обязателен' }); return }
-    const payload    = await verifyToken(refreshToken)
+    // Только refresh-токен: access сюда не проходит (План_реализации §4.2 №2).
+    const payload    = await verifyRefresh(refreshToken)
     const user       = await prisma.user.findUnique({ where: { id: payload.userId } })
     if (!user || !user.isActive) { res.status(401).json({ message: 'Пользователь не найден' }); return }
     const accessToken = await signAccess({ userId: user.id, role: user.role })
@@ -113,9 +114,10 @@ authRouter.post('/password', requireAuth, validate(changePasswordSchema), async 
 authRouter.delete('/logout', requireAuth, async (_req: AuthRequest, res: Response, next) => {
   try {
     // Stateless JWT — на клиенте просто удалить токены.
-    // TODO: добавить token blacklist через Redis (SET ntt:bl:<jti> EX <ttl>).
-    //       При refresh и requireAuth — проверять наличие jti в blacklist.
-    //       Текущая реализация безопасна пока JWT короткоживущие (15 мин).
+    // TODO: token blacklist через Redis (SET ntt:bl:<jti> EX <ttl>) — jti в
+    //       токенах уже есть. При refresh и requireAuth проверять наличие jti
+    //       в blacklist. Блокировку учётки и смену роли requireAuth видит и
+    //       так: пользователь перечитывается из БД на каждом запросе.
     res.status(204).send()
   } catch (e) { next(e) }
 })
