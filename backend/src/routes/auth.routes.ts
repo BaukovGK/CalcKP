@@ -7,27 +7,54 @@ import { validate } from '../middleware/validate'
 import { requireAuthForPasswordChange, type AuthRequest } from '../middleware/auth'
 import { audit } from '../utils/audit'
 import { MIN_PASSWORD_LENGTH } from '../utils/password'
+import { createLimiter, limitByIp, retryText } from '../utils/rate-limit'
 import type { Response } from 'express'
 
 export const authRouter = Router()
+
+// ── Ограничение частоты (План_устранения 2.2) ───────────────────────────────
+// Первый рубеж — nginx (ntt-calculator/nginx.conf), этот — второй.
+const WINDOW_MS = 15 * 60 * 1000
+/** Входы с одного адреса. Офис за одним NAT входит утром разом — с запасом. */
+const loginByIp = createLimiter({ windowMs: WINDOW_MS, max: 100 })
+/**
+ * Неудачные входы на один адрес почты — с любых адресов: подбор пароля к
+ * одной учётке упирается в лимит, откуда бы ни шли попытки. Удачный вход
+ * счётчик сбрасывает.
+ */
+const failedByEmail = createLimiter({ windowMs: WINDOW_MS, max: 10 })
+/** Обновления токена с одного адреса: каждая вкладка — раз в 15 минут. */
+const refreshByIp = createLimiter({ windowMs: WINDOW_MS, max: 300 })
 
 const loginSchema = z.object({
   email:    z.string().email(),
   password: z.string().min(6),
 })
 
-// POST /api/auth/login
-authRouter.post('/login', validate(loginSchema), async (req, res, next) => {
+/**
+ * POST /api/auth/login. Больше 100 попыток за 15 минут с одного адреса или
+ * 10 неудачных на один адрес почты — 429 с `Retry-After` (План_устранения 2.2).
+ */
+authRouter.post('/login', limitByIp(loginByIp, 'Слишком много попыток входа с этого адреса'), validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body as z.infer<typeof loginSchema>
+    const key = email.trim().toLowerCase()
+    const lock = failedByEmail.blocked(key)
+    if (!lock.allowed) {
+      res.setHeader('Retry-After', String(lock.retryAfterS))
+      res.status(429).json({
+        message: `Слишком много неудачных попыток входа — повторите ${retryText(lock.retryAfterS)}`,
+        code: 'TOO_MANY_ATTEMPTS',
+        retryAfterS: lock.retryAfterS,
+      })
+      return
+    }
     const user = await prisma.user.findUnique({ where: { email } })
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || !(await bcrypt.compare(password, user.passwordHash))) {
+      failedByEmail.hit(key)
       res.status(401).json({ message: 'Неверный email или пароль' }); return
     }
-    const ok = await bcrypt.compare(password, user.passwordHash)
-    if (!ok) {
-      res.status(401).json({ message: 'Неверный email или пароль' }); return
-    }
+    failedByEmail.reset(key)
     const payload = { userId: user.id, role: user.role, tokenVersion: user.tokenVersion }
     const [accessToken, refreshToken] = await Promise.all([
       signAccess(payload),
@@ -42,8 +69,8 @@ authRouter.post('/login', validate(loginSchema), async (req, res, next) => {
   } catch (e) { next(e) }
 })
 
-// POST /api/auth/refresh
-authRouter.post('/refresh', async (req, res, next) => {
+// POST /api/auth/refresh — больше 300 за 15 минут с одного адреса: 429.
+authRouter.post('/refresh', limitByIp(refreshByIp, 'Слишком много обновлений сессии с этого адреса'), async (req, res, next) => {
   try {
     const { refreshToken } = req.body as { refreshToken?: string }
     if (!refreshToken) { res.status(400).json({ message: 'refreshToken обязателен' }); return }

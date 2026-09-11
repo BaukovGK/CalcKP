@@ -75,8 +75,12 @@ async function onSubmit() {
   } catch (e) {
     // Сюда приходит и ошибка сети, и ответ бэкенда — сообщение берём из того,
     // что действительно есть, а не приводим к any.
-    const fromServer = (e as { response?: { data?: { message?: string } } }).response?.data?.message
-    error.value = fromServer ?? (e instanceof Error ? e.message : '') ?? ''
+    const response = (e as { response?: { status?: number; data?: { message?: string } } }).response
+    const fromServer = response?.data?.message
+    // 429 — лимит попыток (План_устранения 2.2): текст сервера, а без него —
+    // свой, а не «Request failed with status code 429».
+    const tooMany = response?.status === 429 ? 'Слишком много попыток входа — подождите несколько минут' : null
+    error.value = fromServer ?? tooMany ?? (e instanceof Error ? e.message : '') ?? ''
     if (!error.value) error.value = 'Не удалось выполнить вход'
   } finally {
     loading.value = false

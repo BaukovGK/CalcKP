@@ -41,6 +41,13 @@ assertEnv()
 const app  = express()
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000
 
+// Адрес клиента за прокси — из X-Forwarded-For. Без доверия к прокси
+// `req.ip` был бы адресом nginx, и лимит входа (utils/rate-limit.ts) считал бы
+// всех пользователей одним. TRUST_PROXY — сколько прокси стоит перед
+// бэкендом; по умолчанию 1 — nginx из docker-compose (План_устранения 2.2).
+const proxyHops = Number(process.env.TRUST_PROXY)
+app.set('trust proxy', process.env.TRUST_PROXY && Number.isInteger(proxyHops) && proxyHops >= 0 ? proxyHops : 1)
+
 // ── Middleware ─────────────────────────────────────────────────────────────
 // Лимит тела. Умолчание express — 100 КБ, а дерево расчёта на 300–450 строк
 // (эталонный КНС — 452) в этот предел уже не помещается: сохранение падало бы
