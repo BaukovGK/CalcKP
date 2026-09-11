@@ -165,4 +165,8 @@ export interface RowResult {
   qtyOverridden: boolean
   /** Цена взята из ручного override. */
   priceOverridden: boolean
+  /** Ручное количество не принято — почему (engines/row.ts, InputIssue). */
+  qtyIssue?: 'unparsed' | 'negative' | null
+  /** Ручная цена не принята: меньше нуля. */
+  priceIssue?: 'unparsed' | 'negative' | null
 }

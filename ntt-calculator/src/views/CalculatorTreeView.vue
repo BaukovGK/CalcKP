@@ -19,7 +19,7 @@
         <span v-if="readOnly" v-hint.plain="'Роль «Наблюдатель»: расчёт открыт только для просмотра'" class="tb-ro">👁 просмотр</span>
         <button
           v-if="hasProblems"
-          v-hint="'Показать только проблемные строки: без цены и с конфликтами. Повторное нажатие вернёт все'"
+          v-hint="'Показать только проблемные строки: без цены, с конфликтами и с непринятым вводом. Повторное нажатие вернёт все'"
           class="tb-prob"
           :class="{ on: filters.problems }"
           @click="toggleProblems"
@@ -51,6 +51,9 @@
       </button>
       <button v-hint="FILTER_HINTS.conflict" class="chip-f chip-amber" :class="{ on: filters.conflict }" @click="filters.conflict = !filters.conflict">
         ⚠ конфликты · {{ st.conflictIds.size }}
+      </button>
+      <button v-if="st.invalidInputIds.size" v-hint="FILTER_HINTS.invalid" class="chip-f chip-red" :class="{ on: filters.invalid }" @click="filters.invalid = !filters.invalid">
+        ✕ ввод не принят · {{ st.invalidInputIds.size }}
       </button>
       <button v-hint="FILTER_HINTS.override" class="chip-f chip-blue" :class="{ on: filters.override }" @click="filters.override = !filters.override">
         override · {{ st.overrideIds.size }}
@@ -497,7 +500,7 @@ async function onManualSnapshot() {
 const activeSec = ref('1')
 const tableEl = ref<HTMLElement | null>(null)
 
-const filters = reactive({ q: '', missing: false, conflict: false, override: false, repriced: false, ghosts: false, problems: false })
+const filters = reactive({ q: '', missing: false, conflict: false, invalid: false, override: false, repriced: false, ghosts: false, problems: false })
 
 const markupText = ref('0,43')
 const tirageText = ref('1')
@@ -686,21 +689,22 @@ const rateHints = computed(() => {
 const repriceText = computed(() => (st.repricePreview ? repriceSummaryText(st.repricePreview) : ''))
 
 /** Счётчик проблем — кнопка появляется только когда есть что показывать. */
-const hasProblems = computed(() => st.missingPriceIds.size > 0 || st.conflictIds.size > 0)
+const hasProblems = computed(() => st.missingPriceIds.size > 0 || st.conflictIds.size > 0 || st.invalidInputIds.size > 0)
 const problemsText = computed(() => {
   const parts: string[] = []
   if (st.missingPriceIds.size) parts.push(`● ${st.missingPriceIds.size} без цены`)
   if (st.conflictIds.size) parts.push(`⚠ ${st.conflictIds.size} конфликт`)
+  if (st.invalidInputIds.size) parts.push(`✕ ${st.invalidInputIds.size} ввод не принят`)
   return parts.join(' · ')
 })
 
 function clearFilters() {
   filters.q = ''
-  filters.missing = filters.conflict = filters.override = filters.repriced = filters.problems = false
+  filters.missing = filters.conflict = filters.invalid = filters.override = filters.repriced = filters.problems = false
 }
 function toggleProblems() {
   filters.problems = !filters.problems
-  filters.missing = filters.conflict = filters.problems
+  filters.missing = filters.conflict = filters.invalid = filters.problems
 }
 
 /** Фильтрация строк компонента — единое правило для таблицы и счётчика. */
@@ -711,11 +715,12 @@ function visibleRows(c: CalcComponent): CalcRowNode[] {
     if (!filters.ghosts && res.qty === 0 && !st.enabledFor(r)) return false
     if (filters.q && !r.name.toLowerCase().includes(filters.q.toLowerCase())) return false
 
-    const chips = filters.missing || filters.conflict || filters.override || filters.repriced
+    const chips = filters.missing || filters.conflict || filters.invalid || filters.override || filters.repriced
     if (!chips) return true
     return (
       (filters.missing && st.missingPriceIds.has(r.id)) ||
       (filters.conflict && st.conflictIds.has(r.id)) ||
+      (filters.invalid && st.invalidInputIds.has(r.id)) ||
       (filters.override && st.overrideIds.has(r.id)) ||
       (filters.repriced && st.priceDeltaIds.has(r.id))
     )
@@ -745,7 +750,7 @@ function secProblems(code: string) {
   if (!sec) return { red: 0, amber: 0 }
   const ids = sec.components.flatMap((c) => c.rows.map((r) => r.id))
   return {
-    red: ids.filter((id) => st.missingPriceIds.has(id)).length,
+    red: ids.filter((id) => st.missingPriceIds.has(id) || st.invalidInputIds.has(id)).length,
     amber: ids.filter((id) => st.conflictIds.has(id)).length,
   }
 }

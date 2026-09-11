@@ -56,6 +56,8 @@ export interface RowHintContext {
   priceDelta?: boolean
   /** Прежняя цена прайса; `null` — её не было. */
   pricePrev?: number | null
+  /** Ввод цены, который ячейка не приняла, — почему. */
+  priceInputError?: string | null
 }
 
 /**
@@ -98,7 +100,14 @@ export function calcRowHint(row: CalcRowNode, res: RowResult, ctx: RowHintContex
         '«Оставить моё» сохранит ручное, «Принять новое» вернёт расчётное.',
     )
   }
-  if (res.qtyOverridden) {
+  if (res.qtyIssue) {
+    tone = 'error'
+    text.push(
+      res.qtyIssue === 'unparsed'
+        ? `Ручное количество «${row.qtyManual}» не разобрано — в расчёте расчётное ${fmt(row.qtyCalc)}. Исправьте выражение или ↺ уберите его.`
+        : `Количество меньше нуля не принимается («${row.qtyManual}»): скидка — через наценку. В расчёте расчётное ${fmt(row.qtyCalc)}; ↺ уберёт ввод.`,
+    )
+  } else if (res.qtyOverridden) {
     tone ??= 'ovr'
     text.push(`Количество введено вручную: «${row.qtyManual}». Расчётное — ${fmt(row.qtyCalc)}, ↺ вернёт его.`)
   } else if (row.qtyCalc == null && !isSatellite) {
@@ -112,6 +121,14 @@ export function calcRowHint(row: CalcRowNode, res: RowResult, ctx: RowHintContex
   if (ctx.tirage >= 2) text.push(`Тираж ${ctx.tirage} корпусов: количество в таблице — на все корпуса.`)
 
   // ── Цена ──
+  if (ctx.priceInputError) {
+    tone = 'error'
+    text.push(`Цена не принята: ${ctx.priceInputError}. В расчёте прежняя — ${fmt(res.price)} ₽.`)
+  }
+  if (res.priceIssue) {
+    tone = 'error'
+    text.push(`Ручная цена ${fmt(row.priceManual)} ₽ меньше нуля и не принимается: скидка — через наценку. В расчёте — цена прайса; ↺ уберёт ручную.`)
+  }
   if (res.missingPrice) {
     tone = 'error'
     text.push('Цены нет ни в прайсе, ни вручную: строка «красная» и не даёт выпустить КП. Введите цену в ячейку.')
@@ -247,6 +264,14 @@ export const FILTER_HINTS = {
     title: 'Ручной ввод',
     text: 'Строки, где количество или цена введены вручную (синие). ↺ в ячейке возвращает расчётное.',
     tone: 'ovr',
+  },
+  invalid: {
+    title: 'Ввод не принят',
+    text: [
+      'Ручное количество не разобралось или меньше нуля, либо ручная цена меньше нуля.',
+      'В расчёте у таких строк расчётное количество и цена прайса. Исправьте ячейку или ↺ уберите ввод.',
+    ],
+    tone: 'error',
   },
   repriced: {
     title: 'Цены изменились',

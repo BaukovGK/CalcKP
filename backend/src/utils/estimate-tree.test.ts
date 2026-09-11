@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { treeBuiltinRevision, treePriceListVersion, treeRateFallbacks, treeTemplateVersion } from './estimate-tree'
+import {
+  isRowNegative,
+  rowsWithNegativeSum,
+  treeBuiltinRevision,
+  treePriceListVersion,
+  treeRateFallbacks,
+  treeTemplateVersion,
+} from './estimate-tree'
 
 describe('версия прайса сохранённого дерева', () => {
   // Расчёт, собранный по прайсу v2 и не пересчитанный после импорта v5,
@@ -62,5 +69,34 @@ describe('ставки экономики не из прайса', () => {
     expect(treeRateFallbacks({ tree: { sections: [] } })).toEqual([])
     expect(treeRateFallbacks({ tree: { rates: { fotRub: 1 } } })).toEqual([])
     expect(treeRateFallbacks({ tree: { rates: { fallback: ['другое', 7, 'acetoneRub'] } } })).toEqual(['acetoneRub'])
+  })
+})
+
+// План_устранения, 1.5 / решение Р4: строка с отрицательной суммой уменьшала
+// себестоимость и пропадала из печатной спецификации — КП с ней не выпускается.
+describe('строки с отрицательной суммой', () => {
+  it('минус в количестве или в цене — отрицательная сумма', () => {
+    expect(isRowNegative({ id: 'a', name: 'Скидка', unit: 'шт', qtyResolved: -5, priceCatalog: 100 })).toBe(true)
+    expect(isRowNegative({ id: 'b', name: 'Задвижка', unit: 'шт', qtyCalc: 2, priceManual: -100 })).toBe(true)
+    expect(isRowNegative({ id: 'c', name: 'Болт', unit: 'шт', qtyManual: '-3', priceCatalog: 6 })).toBe(true)
+  })
+
+  it('нулевые, без цены, выключенные и обычные строки — нет', () => {
+    expect(isRowNegative({ id: 'a', name: 'Болт', unit: 'шт', qtyCalc: 0, priceCatalog: 6 })).toBe(false)
+    expect(isRowNegative({ id: 'b', name: 'Шкаф', unit: 'шт', qtyCalc: 1, priceCatalog: null })).toBe(false)
+    expect(isRowNegative({ id: 'c', name: 'Скидка', unit: 'шт', qtyResolved: -5, priceCatalog: 100, enabled: false })).toBe(false)
+    expect(isRowNegative({ id: 'd', name: 'Болт', unit: 'шт', qtyCalc: 4, priceCatalog: 6 })).toBe(false)
+  })
+
+  it('в выключенном разделе строка в итог не входит', () => {
+    const surveyData = {
+      tree: {
+        sections: [
+          { enabled: false, components: [{ rows: [{ id: 'off', name: 'Скидка', unit: 'шт', qtyResolved: -1, priceCatalog: 10 }] }] },
+          { components: [{ rows: [{ id: 'on', name: 'Скидка', unit: 'шт', qtyResolved: -1, priceCatalog: 10 }] }] },
+        ],
+      },
+    }
+    expect(rowsWithNegativeSum(surveyData).map((r) => r.id)).toEqual(['on'])
   })
 })

@@ -1083,6 +1083,62 @@ describe('стор calcTree: пересчёт по новой версии пр�
  * открытии: смена ставки молча меняла экономику старого расчёта, ФОТ-спутники
  * считались по прежней ставке, а ПЗР — уже по новой.
  */
+/**
+ * Непринятый ручной ввод (План_устранения, 1.5; решение Р4): «-5» в
+ * количестве уменьшало себестоимость, неразобранное выражение молча
+ * откатывалось к расчётному.
+ */
+describe('стор calcTree: отрицательные и неразобранные значения', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  async function loaded() {
+    const est = savedEstimate()
+    ;(est.surveyData.tree as Record<string, unknown>).sections = [
+      {
+        id: 's1', code: '1', title: 'Корпус', enabled: true,
+        components: [
+          {
+            id: 'c1', title: 'Узел', enabled: true,
+            rows: [{ id: 'r1', kind: 'МАТЕРИАЛ', category: 'Метизы', name: 'Болт', unit: 'шт', qtyCalc: 4, qtyManual: null, priceCatalog: 10, priceManual: null }],
+          },
+        ],
+      },
+    ]
+    estimatesGet.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    return store
+  }
+
+  it('отрицательное количество не уменьшает себестоимость — строка в списке непринятого ввода', async () => {
+    const store = await loaded()
+    const before = store.economics.costRub
+
+    store.setQtyManual('r1', '-5')
+
+    expect(store.results.get('r1')).toMatchObject({ qty: 4, sum: 40, qtyIssue: 'negative' })
+    expect(store.economics.costRub).toBe(before)
+    expect([...store.invalidInputIds]).toEqual(['r1'])
+    // Ввод не пропал: он в строке, пока его не исправят или не уберут.
+    expect(store.rows[0]!.qtyManual).toBe('-5')
+    store.resetQty('r1')
+    expect(store.invalidInputIds.size).toBe(0)
+  })
+
+  it('ручная цена меньше нуля не записывается', async () => {
+    const store = await loaded()
+
+    store.setPriceManual('r1', -10)
+
+    expect(store.rows[0]!.priceManual).toBeNull()
+    expect(store.results.get('r1')!.sum).toBe(40)
+  })
+})
+
 describe('стор calcTree: ставки экономики в дереве', () => {
   const RATES_V2 = { fotRub: 1000, overheadRub: 1500, acetoneRub: 100, ppeRub: 120 }
 

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type RateKey, type TreeRates } from '@/engines/economics'
 import { recalcFotSatellites, resolveFotK } from '@/engines/fot'
-import { computeRow, resolveQty } from '@/engines/row'
+import { computeRow, manualQty, resolveQty } from '@/engines/row'
 import {
   flattenRows,
   sectionEnabledFor,
@@ -772,7 +772,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
   const conflictIds = computed(() => {
     const s = new Set<string>()
     for (const r of rows.value) {
-      if (r.qtyManual != null && r.qtyCalcPrev != null && r.qtyCalcPrev !== r.qtyCalc) s.add(r.id)
+      if (manualQty(r).value != null && r.qtyCalcPrev != null && r.qtyCalcPrev !== r.qtyCalc) s.add(r.id)
       // Правки перенесены на строку с другим наименованием — их подтверждает инженер.
       if (r.renamedFrom != null) s.add(r.id)
     }
@@ -851,6 +851,17 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     }
   })
 
+  /**
+   * Строки с непринятым ручным вводом: количество не разобрано или меньше
+   * нуля, ручная цена меньше нуля (План_устранения, 1.5). В расчёте у них
+   * расчётное и цена прайса, ячейка подсвечена ошибкой.
+   */
+  const invalidInputIds = computed(() => {
+    const s = new Set<string>()
+    for (const [id, res] of results.value) if (res.qtyIssue || res.priceIssue) s.add(id)
+    return s
+  })
+
   /** Строки с непринятой отметкой «цена прайса изменилась». */
   const priceDeltaIds = computed(() => new Set(rows.value.filter(hasPriceDelta).map((r) => r.id)))
 
@@ -863,7 +874,9 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     recalcAll()
   }
 
+  /** Ручная цена строки; меньше нуля не принимается (решение Р4). */
   function setPriceManual(id: string, value: number | null) {
+    if (value != null && value < 0) return
     const row = rows.value.find((r) => r.id === id)
     if (row) row.priceManual = value
   }
@@ -1302,7 +1315,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     // который хранит версию, из которой расчёт был материализован, — топбар
     // показывает именно её.
     priceListVersion,
-    rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, enabledFor, prevQtyCalc,
+    rows, results, economics, economicsUnit, missingPriceIds, conflictIds, overrideIds, invalidInputIds, enabledFor, prevQtyCalc,
     // Пересчёт цен по действующему прайсу и отметки «было → стало» у цены.
     priceOutdated, repricePreview, priceDeltaIds,
     repriceToCurrent, acceptPriceDelta, acceptAllPriceDeltas, keepPrevPrice,

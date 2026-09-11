@@ -225,6 +225,26 @@ export function isRowWithoutPrice(row: TreeRow): boolean {
   return true
 }
 
+/**
+ * Строка с отрицательной суммой: количество или цена меньше нуля (решение
+ * Р4, План_устранения 1.5).
+ *
+ * Фронт такой ввод не принимает, но дерево, сохранённое раньше, могло его
+ * нести: «-5» в количестве уменьшало себестоимость, а в печатной
+ * спецификации строка пропадала. Выключенные строки в итог не входят.
+ */
+export function isRowNegative(row: TreeRow): boolean {
+  if (row.enabled === false) return false
+  const price = row.priceManual ?? row.priceCatalog ?? num(row.price)
+  const { qty } = resolveRowQty(row)
+  return qty != null && price != null && qty * price < 0
+}
+
+/** Строки с отрицательной суммой — выпуск КП с ними запрещён. */
+export function rowsWithNegativeSum(surveyData: unknown): TreeRow[] {
+  return extractRows(surveyData).filter(isRowNegative)
+}
+
 /** Строки без цены — они блокируют переход CALC → REVIEW (Механика §10). */
 export function rowsWithoutPrice(surveyData: unknown): TreeRow[] {
   return extractRows(surveyData).filter(isRowWithoutPrice)

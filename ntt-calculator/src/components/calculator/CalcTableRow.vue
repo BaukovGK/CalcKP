@@ -14,7 +14,7 @@
     <!-- Кол-во -->
     <div class="c-qty">
       <button
-        v-if="res.qtyOverridden && !readonly"
+        v-if="(res.qtyOverridden || res.qtyIssue) && !readonly"
         v-hint="qtyResetTitle"
         class="rst"
         :aria-label="qtyResetTitle"
@@ -22,7 +22,7 @@
       >↺</button>
       <input
         class="cell num"
-        :class="{ 'is-ovr': res.qtyOverridden, 'is-conflict': conflict }"
+        :class="{ 'is-ovr': res.qtyOverridden, 'is-conflict': conflict, 'is-bad': res.qtyIssue }"
         :value="qtyText"
         :disabled="disabled || readonly"
         :aria-label="`Количество: ${row.name}`"
@@ -37,7 +37,7 @@
     <!-- Цена -->
     <div class="c-price">
       <button
-        v-if="res.priceOverridden && !readonly"
+        v-if="(res.priceOverridden || res.priceIssue) && !readonly"
         v-hint="priceResetTitle"
         class="rst"
         :aria-label="priceResetTitle"
@@ -45,7 +45,7 @@
       >↺</button>
       <input
         class="cell num"
-        :class="{ 'is-ovr': res.priceOverridden, 'is-missing': res.missingPrice, 'is-repriced': priceDelta && !res.priceOverridden }"
+        :class="{ 'is-ovr': res.priceOverridden, 'is-missing': res.missingPrice, 'is-repriced': priceDelta && !res.priceOverridden, 'is-bad': res.priceIssue || priceError }"
         :value="priceText"
         :disabled="disabled || readonly"
         :placeholder="res.missingPrice ? 'цена?' : ''"
@@ -61,7 +61,9 @@
 
     <!-- Примечание / разрешение конфликта -->
     <div class="c-note">
-      <template v-if="conflict">
+      <!-- Ручной ввод не принят: в расчёте расчётное и цена прайса (План_устранения 1.5). -->
+      <span v-if="inputIssue" class="note-red">{{ inputIssue }}</span>
+      <template v-else-if="conflict">
         <span v-if="row.renamedFrom != null" class="was">было «{{ row.renamedFrom }}»</span>
         <span v-else class="was">было {{ fmt(prevCalc) }}</span>
         <template v-if="!readonly">
@@ -105,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { tryEvalExpr } from '@/engines/expr'
 import { calcRowHint } from '@/hints/calc'
 import type { CalcRowNode } from '@/engines/template-kns'
@@ -176,12 +178,33 @@ const fmt = (n: number | null | undefined) =>
 const fmtInt = (n: number) => n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
 const fmtK = (k: number) => k.toLocaleString('ru-RU', { minimumFractionDigits: 2 })
 
-/** Override хранит ВЫРАЖЕНИЕ, показываем результат (Механика §5.1). */
-const qtyText = computed(() => (props.res.qty === 0 && props.disabled ? '0' : fmt(props.res.qty)))
+/**
+ * Override хранит ВЫРАЖЕНИЕ, показываем результат (Механика §5.1). Непринятое
+ * выражение показывается как введено — видно, что именно не так.
+ */
+const qtyText = computed(() => {
+  if (props.res.qtyIssue && props.row.qtyManual != null) return String(props.row.qtyManual)
+  return props.res.qty === 0 && props.disabled ? '0' : fmt(props.res.qty)
+})
 const priceText = computed(() => (props.res.price == null ? '' : fmt(props.res.price)))
 
 const qtyResetTitle = computed(() => `↺ вернуть расчётное: ${fmt(props.row.qtyCalc)}`)
 const priceResetTitle = computed(() => `↺ вернуть цену прайса: ${fmt(props.row.priceCatalog)}`)
+
+/**
+ * Цена, которую ячейка не приняла (не разобрана, меньше нуля). Модель не
+ * меняется — хранится только до следующего ввода, чтобы объяснить отказ.
+ */
+const priceError = ref<string | null>(null)
+
+/** Что не принято в строке — коротко, для колонки примечаний. */
+const inputIssue = computed(() => {
+  const q = props.res.qtyIssue
+  if (q) return `${q === 'unparsed' ? 'не разобрано' : 'меньше нуля не принято'} · в расчёте ${fmt(props.res.qty)}`
+  if (priceError.value) return `цена не принята: ${priceError.value}`
+  if (props.res.priceIssue) return `цена меньше нуля не принята · в расчёте ${fmt(props.res.price)}`
+  return null
+})
 
 /** Сноска строки — всё, что раньше было разбросано по title ячеек. */
 const hint = computed(() =>
@@ -194,6 +217,7 @@ const hint = computed(() =>
     tirage: props.tirage ?? 1,
     priceDelta: props.priceDelta ?? false,
     pricePrev: props.pricePrev ?? null,
+    priceInputError: priceError.value,
   }),
 )
 
@@ -220,18 +244,27 @@ function onQty(e: Event) {
   // (Механика §5.1). Пустая строка сбрасывает override к расчётному.
   const el = e.target as HTMLInputElement
   emit('qty', props.row.id, el.value)
-  resync(el, () =>qtyText.value)
+  resync(el, () => qtyText.value)
 }
 
 function onPrice(e: Event) {
   // Цена принимает арифметику наравне с количеством («1200*2», «=1 200,5»):
   // движок сам разбирает запятую, ведущий «=» и разряды с неразрывным
   // пробелом. В отличие от количества хранится РЕЗУЛЬТАТ, а не выражение —
-  // priceManual по модели число (Механика §5.2). Пусто и некорректный ввод
-  // дают null, то есть возврат к цене прайса.
+  // priceManual по модели число (Механика §5.2). Пусто — возврат к цене
+  // прайса. Неразобранное и меньше нуля не принимаются (План_устранения 1.5,
+  // решение Р4): прежде «мусор» молча возвращал цену прайса, а минус
+  // уменьшал себестоимость.
   const el = e.target as HTMLInputElement
-  emit('price', props.row.id, tryEvalExpr(el.value))
-  resync(el, () =>priceText.value)
+  const text = el.value.trim()
+  const value = text === '' ? null : tryEvalExpr(text)
+  if (text !== '' && value === null) priceError.value = `«${text}» не разобрано`
+  else if (value != null && value < 0) priceError.value = 'меньше нуля'
+  else {
+    priceError.value = null
+    emit('price', props.row.id, value)
+  }
+  resync(el, () => priceText.value)
 }
 </script>
 
@@ -277,6 +310,8 @@ function onPrice(e: Event) {
 /* Нет цены */
 .cell.is-missing { border-color: var(--acc); color: var(--acc); }
 .cell.is-missing::placeholder { color: var(--acc); opacity: .8; }
+/* Ввод не принят: не разобран или меньше нуля */
+.cell.is-bad { border-color: var(--acc); background: var(--acc-bg); }
 /* Конфликт */
 .cell.is-conflict { border-color: var(--amber); background: var(--amber-bg); }
 /* Цена прайса сдвинулась при пересчёте — отметка не принята */

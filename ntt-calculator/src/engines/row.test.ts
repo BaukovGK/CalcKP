@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeRow, hasQtyConflict, isPurchase, resolvePrice, resolveQty } from './row'
+import { computeRow, hasQtyConflict, isPurchase, manualQty, resolvePrice, resolveQty } from './row'
 import type { EngineRow } from './types'
 
 const row = (o: Partial<EngineRow> = {}): EngineRow => ({
@@ -31,11 +31,11 @@ describe('isPurchase — флаг «Закупка» (Механика §5.3)', 
 
 describe('канал количества (Механика §5.1)', () => {
   it('без override берётся расчётное', () => {
-    expect(resolveQty(row())).toEqual({ qty: 10, overridden: false })
+    expect(resolveQty(row())).toEqual({ qty: 10, overridden: false, issue: null })
   })
 
   it('ручной override перекрывает расчётное', () => {
-    expect(resolveQty(row({ qtyManual: '3' }))).toEqual({ qty: 3, overridden: true })
+    expect(resolveQty(row({ qtyManual: '3' }))).toEqual({ qty: 3, overridden: true, issue: null })
   })
 
   it('override принимает арифметическое выражение', () => {
@@ -43,8 +43,26 @@ describe('канал количества (Механика §5.1)', () => {
     expect(qty).toBeCloseTo(8.86, 10)
   })
 
-  it('некорректное выражение откатывает к расчётному, а не роняет расчёт', () => {
-    expect(resolveQty(row({ qtyManual: 'мусор' }))).toEqual({ qty: 10, overridden: false })
+  it('некорректное выражение — в расчёте расчётное, а ввод помечен «не разобрано»', () => {
+    expect(resolveQty(row({ qtyManual: 'мусор' }))).toEqual({ qty: 10, overridden: false, issue: 'unparsed' })
+  })
+
+  // План_устранения, 1.5 / решение Р4: «-5» в количестве уменьшало себестоимость.
+  it('отрицательное количество не принимается — в расчёте расчётное', () => {
+    expect(resolveQty(row({ qtyManual: '-5' }))).toEqual({ qty: 10, overridden: false, issue: 'negative' })
+    expect(resolveQty(row({ qtyManual: '2-3' })).issue).toBe('negative')
+    expect(computeRow(row({ qtyManual: '-5' })).sum).toBe(1000)
+  })
+
+  it('ручное количество: ноль — значение, пусто — нет ввода', () => {
+    expect(manualQty({ qtyManual: '0' })).toEqual({ value: 0, issue: null })
+    expect(manualQty({ qtyManual: '  ' })).toEqual({ value: null, issue: null })
+    expect(manualQty({ qtyManual: null })).toEqual({ value: null, issue: null })
+  })
+
+  it('непринятый ввод конфликта с ОЛ не создаёт', () => {
+    expect(hasQtyConflict(row({ qtyManual: '-5', qtyCalc: 12 }), 10)).toBe(false)
+    expect(hasQtyConflict(row({ qtyManual: '5', qtyCalc: 12 }), 10)).toBe(true)
   })
 
   it('строка без формулы имеет только ручное количество', () => {
@@ -75,15 +93,20 @@ describe('канал количества (Механика §5.1)', () => {
 
 describe('канал цены (Механика §5.2)', () => {
   it('без override берётся каталожная', () => {
-    expect(resolvePrice(row())).toEqual({ price: 100, overridden: false })
+    expect(resolvePrice(row())).toEqual({ price: 100, overridden: false, issue: null })
   })
 
   it('ручная цена перекрывает каталожную', () => {
-    expect(resolvePrice(row({ priceManual: 250 }))).toEqual({ price: 250, overridden: true })
+    expect(resolvePrice(row({ priceManual: 250 }))).toEqual({ price: 250, overridden: true, issue: null })
   })
 
   it('ручной ноль — это цена, а не отсутствие цены', () => {
-    expect(resolvePrice(row({ priceManual: 0 }))).toEqual({ price: 0, overridden: true })
+    expect(resolvePrice(row({ priceManual: 0 }))).toEqual({ price: 0, overridden: true, issue: null })
+  })
+
+  it('ручная цена меньше нуля не принимается — в расчёте цена прайса', () => {
+    expect(resolvePrice(row({ priceManual: -100 }))).toEqual({ price: 100, overridden: false, issue: 'negative' })
+    expect(computeRow(row({ priceManual: -100 }))).toMatchObject({ sum: 1000, priceIssue: 'negative' })
   })
 })
 

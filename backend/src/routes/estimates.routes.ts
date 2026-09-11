@@ -9,6 +9,7 @@ import { isStaleTreeWrite, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
 import {
   RATE_LABELS,
+  rowsWithNegativeSum,
   rowsWithoutPrice,
   treeBuiltinRevision,
   treePriceListVersion,
@@ -343,7 +344,8 @@ estimatesRouter.post(
  *
  * Здесь, а НЕ при смене статуса:
  *  1. гейт по красным строкам — их сумма равна нулю, то есть такая строка
- *     молча занижает итог; в документ заказчику это попасть не должно; и по
+ *     молча занижает итог; в документ заказчику это попасть не должно; по
+ *     строкам с отрицательной суммой — 422 NEGATIVE_ROWS (решение Р4); по
  *     ставкам экономики, взятым константами программы, — 422
  *     RATES_NOT_IN_PRICE (решение Р5);
  *  2. снапшот — фиксирует, из каких цен и какой версии прайса родилась цифра
@@ -376,6 +378,21 @@ estimatesRouter.post(
           code: 'ROWS_WITHOUT_PRICE',
           rows: unpriced.slice(0, 20).map((r) => ({ id: r.id, name: r.name, unit: r.unit })),
           count: unpriced.length,
+        })
+        return
+      }
+
+      // Отрицательная сумма — количество или цена меньше нуля: такая строка
+      // уменьшает итог, а в спецификации не видна (решение Р4).
+      const negative = rowsWithNegativeSum(estimate.surveyData)
+      if (negative.length > 0) {
+        res.status(422).json({
+          message:
+            `Нельзя выпустить КП: у ${negative.length} ${plural(negative.length)} сумма отрицательная — ` +
+            'количество или цена меньше нуля. Скидка — через наценку.',
+          code: 'NEGATIVE_ROWS',
+          rows: negative.slice(0, 20).map((r) => ({ id: r.id, name: r.name, unit: r.unit })),
+          count: negative.length,
         })
         return
       }

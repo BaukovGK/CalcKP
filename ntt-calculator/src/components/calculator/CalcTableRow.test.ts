@@ -88,9 +88,24 @@ describe('CalcTableRow — ячейка цены', () => {
     expect(await enterPrice('')).toBeNull()
   })
 
-  it('некорректный ввод даёт null, а не NaN', async () => {
-    expect(await enterPrice('abc')).toBeNull()
-    expect(await enterPrice('1200*')).toBeNull()
+  // План_устранения, 1.5: прежде «мусор» уходил наверх как null — цена молча
+  // возвращалась к прайсу, а минус уменьшал себестоимость.
+  it('неразобранная и отрицательная цена наверх не уходят — ячейка объясняет отказ', async () => {
+    for (const [text, why] of [['abc', '«abc» не разобрано'], ['1200*', '«1200*» не разобрано'], ['-100', 'меньше нуля']]) {
+      const w = mountRow()
+      await priceCell(w).setValue(text)
+      expect(w.emitted('price'), text).toBeUndefined()
+      expect(priceCell(w).classes()).toContain('is-bad')
+      expect(w.find('.c-note').text()).toBe(`цена не принята: ${why}`)
+    }
+  })
+
+  it('следующий верный ввод снимает отметку отказа', async () => {
+    const w = mountRow()
+    await priceCell(w).setValue('-1')
+    await priceCell(w).setValue('120')
+    expect(w.emitted('price')).toEqual([['r1', 120]])
+    expect(priceCell(w).classes()).not.toContain('is-bad')
   })
 
   it('сценарий со скриншота: «80000*2» в строке ФОТ', async () => {
@@ -120,6 +135,30 @@ describe('CalcTableRow — поле не оставляет отвергнуты
     await cell.setValue('не число')
     await flushPromises()
     expect(value(cell.element)).toBe('6')
+  })
+})
+
+describe('CalcTableRow — непринятое количество видно', () => {
+  it('неразобранное выражение: как введено, ошибкой, в примечании — что в расчёте', () => {
+    const w = mountRow({ qtyManual: '1,5*' })
+    expect(value(qtyCell(w).element)).toBe('1,5*')
+    expect(qtyCell(w).classes()).toContain('is-bad')
+    expect(w.find('.c-note').text()).toBe('не разобрано · в расчёте 6')
+    // ↺ — убрать непринятый ввод.
+    expect(w.find('.c-qty .rst').exists()).toBe(true)
+  })
+
+  it('отрицательное количество не принято', () => {
+    const w = mountRow({ qtyManual: '-5' })
+    expect(value(qtyCell(w).element)).toBe('-5')
+    expect(w.find('.c-note').text()).toBe('меньше нуля не принято · в расчёте 6')
+  })
+
+  it('ручная цена меньше нуля из сохранённого расчёта — отметка и ↺', () => {
+    const w = mountRow({ priceManual: -100 })
+    expect(priceCell(w).classes()).toContain('is-bad')
+    expect(w.find('.c-note').text()).toBe('цена меньше нуля не принята · в расчёте 100')
+    expect(w.find('.c-price .rst').exists()).toBe(true)
   })
 })
 
