@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SYNC_DELAY_MS } from '@/composables/useSurveySync'
 
 const applySurvey = vi.fn()
+/** Ручные правки, которые пересборка не смогла перенести (стор отдаёт массив). */
+const lostEdits: Array<{ section: string; component: string }> = []
 
 vi.mock('@/stores/calcTree', () => ({
   useCalcTreeStore: () => ({
@@ -22,6 +24,7 @@ vi.mock('@/stores/calcTree', () => ({
     ensureContext: () => Promise.resolve({}),
     catalogPrice: () => null,
     catalog: [],
+    lostEdits,
   }),
 }))
 
@@ -128,6 +131,22 @@ describe.each(VIEWS)('ОЛ $label: автосохранение', ({ view, key, 
     const [id, payload] = applySurvey.mock.calls[0] as [string, Record<string, Record<string, unknown>>]
     expect(id).toBe('e1')
     expect(payload[key]!.dn).toBe(2500)
+  })
+
+  // План_устранения, 1.1: список непереносимых правок — на экране расчёта,
+  // а лист только сообщает, что он есть.
+  it('статус «сохранено» сообщает о непереносимых ручных правках', async () => {
+    lostEdits.push({ section: 'Корпус', component: 'Люк' })
+    try {
+      const wrapper = mountView()
+      const label = wrapper.findAll('label.fld').find((l) => l.text().startsWith(dnLabel))!
+      await label.find('select').setValue('2500')
+      await vi.advanceTimersByTimeAsync(SYNC_DELAY_MS + 10)
+
+      expect(wrapper.find('.ol-draft').text()).toContain('не перенесено ручных правок: 1 — список в расчёте')
+    } finally {
+      lostEdits.length = 0
+    }
   })
 })
 

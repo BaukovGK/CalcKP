@@ -17,6 +17,7 @@ vi.mock('@/stores/calcTree', () => ({
     ensureContext: () => Promise.resolve({}),
     catalogPrice: () => null,
     catalog: [],
+    lostEdits: [],
   }),
 }))
 
