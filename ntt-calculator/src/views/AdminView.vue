@@ -468,7 +468,11 @@ async function onRestore() {
   try {
     const r = await adminApi.restoreBackup(target.name)
     restoreTarget.value = null
-    dbNote.value = `База восстановлена из ${r.restored}. Состояние до замены сохранено в ${r.safetyDump}.`
+    dbNote.value =
+      `База восстановлена из ${r.restored}. Состояние до замены сохранено в ${r.safetyDump}.` +
+      (r.restarting
+        ? ` Дамп старше программы: сервер перезапускается и применит миграции (${(r.missingMigrations ?? []).join(', ')}) — обновите страницу через минуту.`
+        : '')
     await loadBackups()
   } catch (e) { dbError.value = errText(e, 'Не удалось восстановить базу') }
   finally { dbBusy.value = false }

@@ -34,6 +34,9 @@ const run = promisify(execFile)
 
 export const BACKUP_DIR = process.env.BACKUP_DIR ?? '/backups'
 
+/** Миграции Prisma, которые знает эта версия программы (в образе — /app/prisma/migrations). */
+export const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR ?? path.resolve(process.cwd(), 'prisma/migrations')
+
 /** Максимальный размер загружаемого дампа, байт. */
 export const MAX_DUMP_BYTES = 200 * 1024 * 1024
 
@@ -261,6 +264,60 @@ export async function inspectDump(file: string): Promise<DumpCheck> {
   return { ok: problems.length === 0, problems: [...new Set(problems)], tables: [...tables].sort() }
 }
 
+// ── Миграции дампа и кода (План_устранения 3.3) ─────────────────────────────
+
+/** Миграции, которые знает код: каталоги `prisma/migrations`. */
+export async function codeMigrations(dir = MIGRATIONS_DIR): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true })
+  return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort()
+}
+
+/**
+ * Разобрать данные `_prisma_migrations` из SQL дампа (блок COPY): имена
+ * применённых миграций. Незавершённые и откатанные не считаются.
+ */
+export function parseMigrationsCopy(sql: string): string[] {
+  const m = /COPY\s+\S*_prisma_migrations\s*\(([^)]*)\)\s+FROM\s+stdin;\r?\n([\s\S]*?)\r?\n\\\.(?:\r?\n|$)/i.exec(sql)
+  if (!m) return []
+  const cols = m[1]!.split(',').map((c) => c.trim().replace(/"/g, ''))
+  const iName = cols.indexOf('migration_name')
+  const iFinished = cols.indexOf('finished_at')
+  const iRolledBack = cols.indexOf('rolled_back_at')
+  if (iName < 0) return []
+  const names = new Set<string>()
+  for (const line of m[2]!.split(/\r?\n/)) {
+    if (!line) continue
+    const f = line.split('\t')
+    if (iFinished >= 0 && f[iFinished] === '\\N') continue
+    if (iRolledBack >= 0 && f[iRolledBack] !== undefined && f[iRolledBack] !== '\\N') continue
+    if (f[iName]) names.add(f[iName]!)
+  }
+  return [...names].sort()
+}
+
+/** Миграции, записанные в дампе: строки его `_prisma_migrations`. */
+export async function dumpMigrations(file: string): Promise<string[]> {
+  try {
+    const { stdout } = await run('pg_restore', ['--file=-', '--data-only', '--table=_prisma_migrations', file], {
+      maxBuffer: 16 * 1024 * 1024,
+    })
+    return parseMigrationsCopy(stdout)
+  } catch (e) {
+    throw new DumpError(`Не удалось прочитать миграции дампа: ${errorText(e)}`, 'DUMP_UNREADABLE')
+  }
+}
+
+/**
+ * Сравнить миграции дампа и кода: `unknown` — в дампе есть, коду неизвестны
+ * (дамп снят более новой версией программы); `missing` — код знает, в дампе
+ * их нет: применятся при следующем старте.
+ */
+export function compareMigrations(inDump: readonly string[], inCode: readonly string[]): { unknown: string[]; missing: string[] } {
+  const code = new Set(inCode)
+  const dump = new Set(inDump)
+  return { unknown: inDump.filter((n) => !code.has(n)), missing: inCode.filter((n) => !dump.has(n)) }
+}
+
 /**
  * Восстановить базу из дампа.
  *
@@ -273,7 +330,7 @@ export async function inspectDump(file: string): Promise<DumpCheck> {
  * после снятия дампа, исчезают вместе с остальными данными; запись о самом
  * восстановлении переживает его, потому что пишется после.
  */
-export async function restoreDump(name: string): Promise<{ safetyDump: string }> {
+export async function restoreDump(name: string): Promise<{ safetyDump: string; missingMigrations: string[] }> {
   const file = dumpPath(name)
 
   const check = await inspectDump(file)
@@ -281,22 +338,41 @@ export async function restoreDump(name: string): Promise<{ safetyDump: string }>
     throw new DumpError(`Дамп не прошёл проверку:\n— ${check.problems.join('\n— ')}`, 'DUMP_REJECTED')
   }
 
+  // Дамп новее программы — его схему эта версия не знает и не поймёт
+  // (План_устранения 3.3). Старше — нормально: недостающие миграции
+  // применятся при старте.
+  const { unknown, missing } = compareMigrations(await dumpMigrations(file), await codeMigrations())
+  if (unknown.length) {
+    throw new DumpError(
+      `Дамп снят более новой версией программы: в нём миграции, которых эта версия не знает — ${unknown.join(', ')}. ` +
+        'Восстановите его на той версии, которой он снят.',
+      'DUMP_NEWER_THAN_CODE',
+    )
+  }
+
   const safety = await createDump('pre-restore')
 
   try {
-    await runWithDb(
-      'pg_restore',
-      ['--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error', file],
-      { maxBuffer: 64 * 1024 * 1024 },
-    )
+    // В чистую схему: `pg_restore --clean` пересоздаёт только объекты из
+    // дампа — таблицы и колонки более поздних миграций оставались, а
+    // `_prisma_migrations` откатывалась, и следующий старт падал на
+    // `migrate deploy` («колонка уже есть»).
+    await runWithDb('psql', [
+      '-v', 'ON_ERROR_STOP=1', '-q',
+      '-c', 'SET client_min_messages TO warning; DROP SCHEMA public CASCADE; CREATE SCHEMA public;',
+    ])
+    await runWithDb('pg_restore', ['--no-owner', '--no-privileges', '--exit-on-error', file], {
+      maxBuffer: 64 * 1024 * 1024,
+    })
   } catch (e) {
     throw new DumpError(
-      `Восстановление не удалось: ${errorText(e)}. Текущее состояние сохранено в ${safety.name}`,
+      `Восстановление не удалось: ${errorText(e)}. Состояние до замены сохранено в ${safety.name} — восстановите его ` +
+        `(база может быть пустой, и вход не сработает: docker compose exec backend /app/scripts/db-restore.sh --yes ${safety.name})`,
       'RESTORE_FAILED',
     )
   }
 
-  return { safetyDump: safety.name }
+  return { safetyDump: safety.name, missingMigrations: missing }
 }
 
 /**

@@ -122,8 +122,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment: *backup-env
-    volumes: *backup-volumes
+    environment:
+      <<: *backup-env
+      MIGRATIONS_DIR: /migrations
+    volumes:
+      - ./backups:/backups
+      - ./backend/scripts:/scripts:ro
+      # Миграции программы: скрипт сверяет с ними миграции дампа — дамп новее
+      # программы не восстанавливается (План_устранения 3.3).
+      - ./backend/prisma/migrations:/migrations:ro
     entrypoint: ['/scripts/db-restore.sh']
 
   web:

@@ -292,9 +292,18 @@ adminRouter.post('/backups/:name/restore', validate(restoreSchema), async (req, 
     }
     if (!(await stat(dumpPath(name)).catch(() => null))) { res.status(404).json({ message: 'Дамп не найден' }); return }
 
-    const { safetyDump } = await restoreDump(name)
-    await audit(auth.userId, 'db.restore', 'Database', name, { safetyDump })
-    res.json({ restored: name, safetyDump })
+    const { safetyDump, missingMigrations } = await restoreDump(name)
+    await audit(auth.userId, 'db.restore', 'Database', name, { safetyDump, missingMigrations })
+
+    // Дамп старше программы — схеме не хватает миграций. Бэкенд
+    // перезапускается (docker поднимет его снова), и точка входа применит их,
+    // сняв перед этим предмиграционный дамп (План_устранения 3.3).
+    const restarting = missingMigrations.length > 0
+    res.json({ restored: name, safetyDump, missingMigrations, restarting })
+    if (restarting) {
+      logger.warn('База восстановлена из дампа старше программы — перезапуск для миграций', { name, missingMigrations })
+      res.on('finish', () => setTimeout(() => process.exit(0), 300))
+    }
   } catch (e) {
     if (e instanceof DumpError) { res.status(422).json({ message: e.message, code: e.code }); return }
     next(e)

@@ -42,6 +42,10 @@ export interface RestoreResult {
   restored: string
   /** Дамп состояния, снятый ПЕРЕД заменой, — точка возврата. */
   safetyDump: string
+  /** Миграции, которых в дампе нет: применятся при перезапуске (План_устранения 3.3). */
+  missingMigrations?: string[]
+  /** Бэкенд перезапускается, чтобы применить их. */
+  restarting?: boolean
 }
 
 export const adminApi = {
