@@ -143,16 +143,33 @@ const DEMO_USERS: SeedUser[] = [
 
 const USERS: SeedUser[] = process.env.SEED_DEMO_USERS === '1' ? [ADMIN, ...DEMO_USERS] : [ADMIN]
 
+/**
+ * Досоздаёт учётные записи. Существующие не трогает: смена пароля и
+ * выключение учётки переживают деплой.
+ *
+ * Пароли в лог не пишутся: лог контейнера читают не только администраторы, а
+ * прежде сид печатал пары «логин / пароль» при каждом старте — и после смены
+ * пароля тоже. О созданной учётной записи — одна строка, в момент создания.
+ */
 async function seedUsers() {
+  let created = 0
   for (const u of USERS) {
+    if (await prisma.user.findUnique({ where: { email: u.email }, select: { id: true } })) continue
     const passwordHash = await bcrypt.hash(u.password, 10)
+    // upsert, а не create: второй экземпляр, стартующий одновременно, не
+    // должен падать на уникальном email.
     await prisma.user.upsert({
       where: { email: u.email },
       update: {},
       create: { email: u.email, name: u.name, role: u.role, passwordHash },
     })
+    created++
+    console.log(`  создана учётная запись ${u.email} [${u.role}]`)
+    if (u.role === 'ADMIN') {
+      console.log('  пароль первого администратора — из документации (README); смените его после первого входа')
+    }
   }
-  console.log(`  пользователи: ${USERS.length}`)
+  console.log(`  пользователи: создано ${created}, уже были ${USERS.length - created}`)
 }
 
 // ─── Прайс ───────────────────────────────────────────────────────────────────
@@ -460,12 +477,7 @@ async function main() {
     console.warn(`\nСид завершён с предупреждениями (${warnings.length}) — запуск продолжается.`)
   }
 
-  console.log('\nГотово. Заведённые учётные записи:')
-  USERS.forEach((u) => console.log(`  ${u.email.padEnd(20)} / ${u.password}  [${u.role}]`))
-  if (process.env.SEED_DEMO_USERS !== '1') {
-    console.log('  Смените пароль администратора сразу после первого входа.')
-    console.log('  Демо-учётки остальных ролей не заводятся; для разработки — SEED_DEMO_USERS=1.')
-  }
+  console.log('\nГотово.')
 }
 
 main()
