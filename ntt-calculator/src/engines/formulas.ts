@@ -304,17 +304,6 @@ export function lookupNozzleNorm(norms: NozzleNorm[], dn: number): NozzleNorm | 
   return norms.find((n) => n.dn === dn) ?? null
 }
 
-/**
- * Масса формовки гильзы, кг: `Мф общая(DN гильзы) × кол-во`.
- *
- * DN здесь — диаметр ГИЛЬЗЫ (`sleeveDiameter(DN патрубка)`), а не патрубка:
- * формуется именно гильза. `null` — нормы для такого диаметра нет.
- */
-export function sleeveMoldingMassKg(norms: NozzleNorm[], sleeveDn: number, count: number): number | null {
-  const norm = lookupNozzleNorm(norms, sleeveDn)
-  return norm ? norm.moldingMassKg * count : null
-}
-
 // ─── Патрубки ────────────────────────────────────────────────────────────────
 
 /**

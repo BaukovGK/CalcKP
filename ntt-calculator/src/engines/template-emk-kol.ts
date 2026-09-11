@@ -37,15 +37,18 @@ import {
   pipePrepHours,
   type InsulationResult,
 } from './formulas'
-import { FOT_K_LAMIN, FOT_K_MANUAL, FOT_K_MECH } from './fot'
+import { FOT_K_LAMIN, FOT_K_MECH } from './fot'
 import {
   boundPrice,
+  buildSleeveNozzles,
   inletGateValveName,
   makeRow,
   nextId,
   operationWithFot,
+  ownPipeRow,
   PUMP_PRICE_CATEGORY,
   pumpRowName,
+  SERVICE_PIPE_PN,
   surveyToggled,
   TYPICAL_HATCH_MM,
   type CalcComponent,
@@ -65,7 +68,7 @@ import {
   type Placement,
   type TankType,
 } from './survey-emk-kol'
-import { floatSwitchCount, pnForWeightLookup, sleeveDiameter } from './survey-kns'
+import { floatSwitchCount, pnForWeightLookup } from './survey-kns'
 import { buildAutomation, buildServiceEquipment, floatSwitchRow, STATION_WORKS, work } from './station-equipment'
 
 /** Число для примечаний — по-русски: запятая, до двух знаков. */
@@ -220,23 +223,14 @@ export interface KolSurveyParams {
 // ─── Трубы и муфты из стеклокомпозита ───────────────────────────────────────
 
 /**
- * Марка трубы шахты, горловины и гильз. PN и SN вписаны в листах числом и
- * от корпуса не зависят: шахта ёмкости — SN 5000 (лист ЕМК, H54), горловина
- * колодца — SN 2500 (лист колодца, H36), гильзы патрубков — SN 2500
- * (в наименовании, строки 37 и 26); PN у всех 0,1 — давления они не несут.
+ * Марка трубы шахты и горловины. PN и SN вписаны в листах числом и от
+ * корпуса не зависят: шахта ёмкости — SN 5000 (лист ЕМК, H54), горловина
+ * колодца — SN 2500 (лист колодца, H36); PN 0,1 — давления они не несут.
+ * Гильзы патрубков — общий узел трёх изделий (`buildSleeveNozzles`,
+ * template-kns.ts), марка у них там же.
  */
-const SERVICE_PIPE_PN = '0,1'
 export const SHAFT_PIPE_SN = 5000
 export const NECK_PIPE_SN = 2500
-export const SLEEVE_PIPE_SN = 2500
-
-/** Труба из стеклокомпозита своего производства: цена договорная, в прайсе её нет. */
-function ownPipeRow(ctx: MaterializeContext, name: string, qtyCalc: number, note: string): CalcRowNode {
-  return {
-    ...makeRow(ctx, { kind: 'МАТЕРИАЛ', category: 'Собственное производство', name, unit: 'м', qtyCalc, bucket: 'Труба, муфта', note }),
-    priceCatalog: null,
-  }
-}
 
 /**
  * Соединительная муфта своего производства (листы: «Муфта соединительная
@@ -256,101 +250,6 @@ function couplingRow(ctx: MaterializeContext, d: number, qtyCalc: number, note: 
     }),
     priceCatalog: null,
   }
-}
-
-// ─── Патрубки (A5) ───────────────────────────────────────────────────────────
-
-/** Длина гильзы из трубы на патрубок, м (листы: `0,5 × кол-во`). */
-export const SLEEVE_PIPE_M = 0.5
-/** От этого DN гильза — отрезок трубы, ниже — ручная формовка (лист ЕМК, D37). */
-export const SLEEVE_PIPE_FROM_DN = 200
-
-/**
- * Патрубки — общий узел A5 для ёмкости и колодца, по листам «Калькулятор
- * ЕМК» (строки 36–46) и «Калькулятор колодца» (25–34, 80–81):
- *
- * - гильза — отрезок трубы Ø гильзы, 0,5 м на патрубок, с приданием
- *   товарного вида `Ø/1300 × L`; у патрубка меньше DN 200 — «Ручная
- *   формовка патрубка», 0,5 кг на патрубок;
- * - к корпусу гильза ламинируется: `Мф(Ø гильзы) × 3/10 × кол-во`, ФОТ этого
- *   ламинирования в листах k = 1;
- * - прорезка отверстия `Ø·π/1000 × 0,5 × кол-во` — строки колодца 80–81. У
- *   ёмкости на их месте строки 81–82 умножают на длину трубы шахты — сдвиг
- *   при копировании, Вопросы_заводу §6и.
- *
- * Прежде здесь стояла «Формовка гильз» — Мф × кол-во, как у КНС: трубы гильзы
- * не было, а масса и ФОТ выходили втрое больше ламинирования по листу.
- */
-function buildNozzles(
-  ctx: MaterializeContext,
-  nozzles: Array<{ title: string; dn: number; count: number }>,
-): CalcComponent[] {
-  const out: CalcComponent[] = []
-  for (const n of nozzles) {
-    if (n.count <= 0) continue
-    const sleeve = sleeveDiameter(n.dn)
-    const norm = ctx.nozzleNormOf?.(sleeve) ?? null
-    const lamination = norm ? laminationMassKg(norm.moldingMassKg) * n.count : null
-    const sleeveM = SLEEVE_PIPE_M * n.count
-    const fromPipe = n.dn >= SLEEVE_PIPE_FROM_DN
-
-    const sleeveRows: CalcRowNode[] = fromPipe
-      ? [
-          ownPipeRow(
-            ctx,
-            `Труба СК/НПС-К ${sleeve}-${SERVICE_PIPE_PN}-${SLEEVE_PIPE_SN}`,
-            sleeveM,
-            `Гильза Ø${sleeve} — отрезок трубы ${SLEEVE_PIPE_M.toLocaleString('ru-RU')} м × ${n.count} · цена трубы договорная — введите`,
-          ),
-          makeRow(ctx, {
-            kind: 'ОПЕРАЦИЯ',
-            category: 'Собственное производство',
-            name: 'Придание изделию товарного вида',
-            unit: 'чел. ч',
-            qtyCalc: marketableAppearanceHours(sleeve, sleeveM),
-            note: `ƒ Ø${sleeve}/1300 × ${fmt(sleeveM)} м гильз`,
-          }),
-        ]
-      : operationWithFot(ctx, {
-          category: 'Собственное производство',
-          name: 'Ручная формовка патрубка',
-          unit: 'кг',
-          qtyCalc: sleeveM,
-          fotK: FOT_K_MANUAL,
-          note: `ƒ 0,5 кг на патрубок × ${n.count} — меньше DN ${SLEEVE_PIPE_FROM_DN} гильза формуется вручную`,
-        })
-
-    out.push({
-      id: nextId('c'),
-      nodeCode: 'A5',
-      title: `${n.title} DN${n.dn} ×${n.count}`,
-      enabled: true,
-      rows: [
-        ...sleeveRows,
-        ...operationWithFot(ctx, {
-          category: 'Собственное производство',
-          name: 'Ламинирование патрубка к корпусу',
-          unit: 'кг',
-          qtyCalc: lamination,
-          // В листах у этой строки k = 1 («*ламин*» → 1), а не 0,56.
-          fotK: FOT_K_MANUAL,
-          note:
-            lamination == null
-              ? `Мф для гильзы Ø${sleeve} в нормах «Для расчетов» нет — введите массу вручную`
-              : `ƒ Мф(Ø${sleeve}) ${fmt(norm!.moldingMassKg)} кг × 3/10 × ${n.count} = ${fmt(lamination)} кг`,
-        }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: 'Прорезка отверстия патрубка в корпусе',
-          unit: 'чел. ч',
-          qtyCalc: cutoutHours(sleeve, n.count),
-          note: `ƒ Ø${sleeve}·π/1000 × 0,5 чел.ч × ${n.count}`,
-        }),
-      ],
-    })
-  }
-  return out
 }
 
 /**
@@ -686,15 +585,26 @@ export function buildEmkShaft(ctx: MaterializeContext, s: EmkSurveyParams): Calc
   ]
 }
 
+/**
+ * Патрубки ёмкости и колодца для общего узла A5 (`buildSleeveNozzles`): прорезка
+ * у обоих — «Прорезка отверстия патрубка в корпусе» (лист колодца, строки
+ * 80–81; у ёмкости на их месте строки 81–82 умножают на длину трубы шахты —
+ * сдвиг при копировании, Вопросы_заводу §6и).
+ */
+function emkKolNozzles(s: { inletDn: number; inletCount: number; outletDn: number; outletCount: number }) {
+  const cutoutName = 'Прорезка отверстия патрубка в корпусе'
+  return [
+    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount, cutoutName },
+    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount, cutoutName },
+  ]
+}
+
 /** A5 — патрубки ёмкости: подводящие и отводящие, каждый со своей гильзой. */
 export function buildEmkNozzles(
   ctx: MaterializeContext,
   s: Pick<EmkSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
 ): CalcComponent[] {
-  return buildNozzles(ctx, [
-    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount },
-    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount },
-  ])
+  return buildSleeveNozzles(ctx, emkKolNozzles(s))
 }
 
 /** A9 — теплоизоляция ёмкости: шахты и верх, слой 4 мм (лист ЕМК, строки 49–52, 86). */
@@ -1130,10 +1040,7 @@ export function buildKolNozzles(
   ctx: MaterializeContext,
   s: Pick<KolSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
 ): CalcComponent[] {
-  return buildNozzles(ctx, [
-    { title: 'Патрубок подводящий', dn: s.inletDn, count: s.inletCount },
-    { title: 'Патрубок отводящий', dn: s.outletDn, count: s.outletCount },
-  ])
+  return buildSleeveNozzles(ctx, emkKolNozzles(s))
 }
 
 /**

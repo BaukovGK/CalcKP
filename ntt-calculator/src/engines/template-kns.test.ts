@@ -78,6 +78,8 @@ const NOZZLE_NORMS: NozzleNorm[] = [
   { dn: 150, odMm: null, minLengthMm: null, moldingMassKg: 0.6, h1Mm: null, s1Mm: null, flangeMassKg: 1.4, bolt: 'М20х90', boltCount: 8 },
   { dn: 250, odMm: null, minLengthMm: null, moldingMassKg: 0.6, h1Mm: null, s1Mm: null, flangeMassKg: 2.3, bolt: 'М24х100', boltCount: 12 },
   { dn: 400, odMm: 413.1, minLengthMm: 406, moldingMassKg: 1.1, h1Mm: 101, s1Mm: 6.8, flangeMassKg: 4.6, bolt: 'М24х100', boltCount: 16 },
+  // Гильза подводящего DN400 — Ø500: Мф 1,9 кг (лист «Для расчетов»).
+  { dn: 500, odMm: null, minLengthMm: null, moldingMassKg: 1.9, h1Mm: null, s1Mm: null, flangeMassKg: 6.4, bolt: 'М27х110', boltCount: 20 },
 ]
 
 /** Мс при PN 4 — так справочник читают оба калькулятора эталона. */
@@ -470,24 +472,40 @@ describe('раздел 1 «Корпус»', () => {
     expect(Number(byName('Ламинирование дна к фальшполу').qtyCalc!.toFixed(1))).toBe(78.9)
   })
 
-  // Исполнение «целая труба» — умолчание: блок сегментов и стыков в эталоне
-  // обнулён (`IF($E$14=Списки!$AI$2;0;…)`), у нас он просто не создаётся.
-  // A6: фланцевый патрубок под задвижку. Масса — «Мф фланца» из норм по DN
-  // ПОДВОДЯЩЕГО (номинал диктует он), а не по диаметру гильзы.
-  // ОЛ3487: подводящий DN250 → Мф фланца 2,3 кг × 1 патрубок.
+  // A6: фланцевый патрубок под задвижку (лист КНС, строки 32–38). Фланец —
+  // «Мф фланца» по DN ПОДВОДЯЩЕГО (номинал диктует он), ламинирование к
+  // корпусу — Мф того же DN × 3/10 с k ФОТ 1. ОЛ3487: подводящий DN250.
   it('фланец под задвижку: Мф фланца(DN подводящего) × число патрубков', () => {
-    const flange = byName('Ручная формовка фланца для задвижки на подводящем трубопроводе')
-    expect(flange.qtyCalc).toBeCloseTo(2.3, 6)
-    // Ламинирование к корпусу — 3/10 от массы фланца.
-    const lam = rows.filter((r) => r.name === 'Ламинирование патрубка к корпусу')
-    expect(lam[lam.length - 1]!.qtyCalc).toBeCloseTo(0.69, 6)
+    const a6 = korpus.components.find((c) => c.nodeCode === 'A6')!.rows
+    expect(a6.find((r) => r.name === 'Ручная формовка фланца для задвижки на подводящем трубопроводе')!.qtyCalc).toBeCloseTo(2.3, 6)
+    const lam = a6.find((r) => r.name === 'Ламинирование патрубка к корпусу')!
+    expect(lam.qtyCalc).toBeCloseTo(0.6 * 0.3, 9)
+    expect(lam.fotK).toBe(1)
+    // DN250 < 300: сам патрубок формуется вручную — π·DN·0,005·0,3·1850.
+    const molded = a6.find((r) => r.name === 'Ручная формовка патрубка')!
+    expect(molded.qtyCalc).toBeCloseTo(Math.PI * 0.25 * 0.005 * 0.3 * 1850, 9)
+    expect(a6.some((r) => r.name.startsWith('Труба СК'))).toBe(false)
   })
 
-  it('без арматуры на подводящем узел выключен, а не отсутствует', () => {
+  it('фланцевый патрубок от DN 300 — отрезок трубы Ø гильзы 0,3 м с товарным видом', () => {
+    const a6 = materializeKns(ctx, { ...OL3487, inletDn: 400 })
+      .sections.find((s) => s.code === '1')!
+      .components.find((c) => c.nodeCode === 'A6')!.rows
+    const pipe = a6.find((r) => r.name === 'Труба СК/НПС-К 500-0,1-2500')!
+    expect(pipe.qtyCalc).toBeCloseTo(0.3, 9)
+    expect(pipe.priceCatalog).toBeNull()
+    expect(a6.find((r) => r.name === 'Придание изделию товарного вида')!.qtyCalc).toBeCloseTo((500 / 1300) * 0.3, 9)
+    expect(a6.find((r) => r.name === 'Ламинирование патрубка к корпусу')!.qtyCalc).toBeCloseTo(1.1 * 0.3, 9)
+  })
+
+  // Выключенный узел — «призрак» с полными количествами, как теплоизоляция:
+  // включение в расчёте восстанавливает строки, а не нули.
+  it('без арматуры на подводящем узел выключен, а строки держат количества', () => {
     const off = materializeKns(ctx, { ...OL3487, valveOnInlet: false })
       .sections.find((s) => s.code === '1')!
       .components.find((c) => c.nodeCode === 'A6')!
     expect(off.enabled).toBe(false)
+    expect(off.rows.find((r) => r.name === 'Ручная формовка фланца для задвижки на подводящем трубопроводе')!.qtyCalc).toBeCloseTo(2.3, 6)
   })
 
   // Исполнение «целая труба» — умолчание: блок сегментов и стыков в эталоне
@@ -497,48 +515,52 @@ describe('раздел 1 «Корпус»', () => {
     expect(rows.filter((r) => r.name === PIPE_NAME)).toHaveLength(1)
   })
 
-  // Гильза в прайсе — «Формовка гильз» в КГ, а не штучная позиция.
-  // Диаметр уходит в примечание, масса — ручной ввод: матрица «Для расчетов»
-  // ещё не извлечена, а выдуманная масса была бы хуже пустой строки.
-  it('гильзы: диаметры Ø400 (DN250) и Ø250 (DN150) — в примечаниях', () => {
-    const sleeves = rows.filter((r) => r.name === 'Формовка гильз')
-    expect(sleeves).toHaveLength(2)
-    expect(sleeves[0]!.note).toContain('Ø400')
-    expect(sleeves[1]!.note).toContain('Ø250')
+  // Гильза — отрезок трубы Ø гильзы 0,5 м на патрубок (лист КНС, строки
+  // 27–28); меньше DN 200 — ручная формовка 0,5 кг на патрубок (строка 41).
+  // Прежде — «Формовка гильз» Мф × кол-во, которой в листе нет.
+  it('гильзы: подводящий DN250 — труба Ø400 0,5 м, напорные DN150 — ручная формовка', () => {
+    const a5 = korpus.components.filter((c) => c.nodeCode === 'A5')
+    expect(a5.map((c) => c.title)).toEqual(['Патрубок подводящий DN250 ×1', 'Патрубок напорный DN150 ×2'])
+    const inlet = a5[0]!.rows
+    const pipe = inlet.find((r) => r.name === 'Труба СК/НПС-К 400-0,1-2500')!
+    expect(pipe.qtyCalc).toBeCloseTo(0.5, 9)
+    expect(pipe.unit).toBe('м')
+    expect(pipe.priceCatalog).toBeNull()
+    expect(inlet.find((r) => r.name === 'Придание изделию товарного вида')!.qtyCalc).toBeCloseTo((400 / 1300) * 0.5, 9)
+    const outlet = a5[1]!.rows
+    expect(outlet.find((r) => r.name === 'Ручная формовка патрубка')!.qtyCalc).toBe(1)
+    expect(outlet.some((r) => r.name.startsWith('Труба СК'))).toBe(false)
+    expect(rows.some((r) => r.name === 'Формовка гильз')).toBe(false)
   })
 
-  // Масса гильз теперь СЧИТАЕТСЯ из норм листа «Для расчетов» (раньше была
-  // ручным вводом: матрица не была извлечена).
-  it('масса гильз считается из норм: Мф(Ø гильзы) × кол-во', () => {
-    const sleeves = rows.filter((r) => r.name === 'Формовка гильз')
-    // Подводящий DN250 -> гильза Ø400 -> Мф 1,1 кг × 1 шт.
-    expect(sleeves[0]!.qtyCalc).toBeCloseTo(1.1, 6)
-    // Напорный DN150 -> гильза Ø250 -> Мф 0,6 кг × 2 шт.
-    expect(sleeves[1]!.qtyCalc).toBeCloseTo(1.2, 6)
+  // Ламинирование гильзы к корпусу — Мф по диаметру ГИЛЬЗЫ × 3/10 × кол-во,
+  // ФОТ k = 1 (строки 29–30 и 43–44).
+  it('ламинирование гильз: Мф(Ø гильзы) × 3/10 × кол-во, ФОТ k = 1', () => {
+    const lam = korpus.components
+      .filter((c) => c.nodeCode === 'A5')
+      .map((c) => c.rows.find((r) => r.name === 'Ламинирование патрубка к корпусу')!)
+    // Подводящий DN250 → гильза Ø400 → Мф 1,1; напорные DN150 → Ø250 → Мф 0,6 × 2.
+    expect(lam[0]!.qtyCalc).toBeCloseTo(1.1 * 0.3, 9)
+    expect(lam[1]!.qtyCalc).toBeCloseTo(0.6 * 0.3 * 2, 9)
+    expect(lam.map((r) => r.fotK)).toEqual([1, 1])
+    expect(lam[0]!.note).toContain('Ø400')
   })
 
-  it('масса гильзы берётся по диаметру ГИЛЬЗЫ, а не патрубка', () => {
-    // Если бы брали по DN патрубка (250 -> 0,6), вышло бы 0,6, а не 1,1.
-    const sleeve = rows.find((r) => r.name === 'Формовка гильз')!
-    expect(sleeve.qtyCalc).not.toBeCloseTo(0.6, 6)
-    expect(sleeve.note).toContain('Ø400')
-  })
-
-  it('ФОТ-спутник гильзы пересчитывается от её массы', () => {
+  it('ФОТ-спутник ламинирования гильзы пересчитывается от её массы', () => {
     const all = recalcFotSatellites(flattenRows(tree))
-    const sleeve = all.find((r) => r.name === 'Формовка гильз')!
-    const fot = all.find((r) => r.kind === 'ФОТ' && r.parentId === sleeve.id)!
-    // k = 1,0 (ручная формовка): ROUNDUP(1,1 × 1,0; 0,1) = 1,1
-    expect(fot.qtyCalc).toBeCloseTo(1.1, 6)
+    const lam = all.find((r) => r.name === 'Ламинирование патрубка к корпусу')!
+    const fot = all.find((r) => r.kind === 'ФОТ' && r.parentId === lam.id)!
+    // k = 1: ROUNDUP(0,33 × 1; 0,1) = 0,4
+    expect(fot.qtyCalc).toBeCloseTo(0.4, 6)
   })
 
   // Гильза крупного патрубка выходит за сетку норм — молча не выдумываем.
-  it('нет нормы для Ø гильзы → количество null и явное примечание', () => {
+  it('нет нормы для Ø гильзы → ламинирование null и явное примечание', () => {
     // DN1000 -> гильза Ø1100, которой в матрице нет.
     const big = materializeKns(ctx, { ...OL3487, inletDn: 1000 })
-    const sleeve = flattenRows(big).find((r) => r.name === 'Формовка гильз')!
-    expect(sleeve.qtyCalc).toBeNull()
-    expect(sleeve.note).toContain('нормы формовки для Ø1100')
+    const lam = big.sections.find((s) => s.code === '1')!.components.find((c) => c.nodeCode === 'A5')!.rows.find((r) => r.name === 'Ламинирование патрубка к корпусу')!
+    expect(lam.qtyCalc).toBeNull()
+    expect(lam.note).toContain('Мф для гильзы Ø1100')
   })
 
   it('прорезка отверстий — с наименованиями из НН', () => {
@@ -954,6 +976,21 @@ describe('сверка с образцом эталона «Калькулято
     expect(rows.filter((r) => r.name === 'Монтаж датчиков').reduce((n, r) => n + (r.qtyCalc ?? 0), 0)).toBe(3)
     expect(qty('Монтаж расходомера')).toBe(2)
     expect(qty('Монтаж Шкафа управления')).toBe(6)
+  })
+
+  // Патрубки (строки 26–44, 87–88): подводящий DN400 — гильза Ø500, напорные
+  // DN150 ×2 — ручная формовка; фланцевый патрубок под задвижку — один на
+  // подводящий, а не два, как в листе (указание завода).
+  it('патрубки: гильзы 0,5 м и 1 кг, ламинирование 0,57 · 0,36 · 0,33 с ФОТ 0,6 · 0,4 · 0,4, прорезки 0,8 · 0,8', () => {
+    expect(rows.filter((r) => r.name === 'Труба СК/НПС-К 500-0,1-2500').map((r) => r.qtyCalc)).toEqual([0.5, 0.3])
+    expect(qty('Ручная формовка патрубка')).toBe(1)
+    const all = recalcFotSatellites(rows)
+    const lam = all.filter((r) => r.name === 'Ламинирование патрубка к корпусу')
+    expect(lam.map((r) => +computeRow(r).qty.toFixed(2))).toEqual([0.57, 0.36, 0.33])
+    expect(lam.map((op) => all.find((r) => r.kind === 'ФОТ' && r.parentId === op.id)!.qtyCalc)).toEqual([0.6, 0.4, 0.4])
+    expect(qty('Прорезка отверстия под гильзу входящего патрубка')).toBe(0.8)
+    expect(qty('Прорезка отверстия под гильзу напорного патрубка (ов)')).toBe(0.8)
+    expect(qty('Ручная формовка фланца для задвижки на подводящем трубопроводе')).toBe(4.6)
   })
 
   it('задвижка на подводящем — шиберная DN400 со штоком 9710 мм', () => {

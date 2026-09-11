@@ -28,6 +28,7 @@ import {
   frameHours,
   knsInsulation,
   KNS_NECK_INSULATION_M2,
+  LAMINATE_DENSITY,
   ladder,
   laminationMassKg,
   marketableAppearanceHours,
@@ -450,6 +451,121 @@ export function operationWithFot(
   return [op, fot]
 }
 
+// ─── Патрубки: гильза из трубы (A5, общий узел трёх изделий) ────────────────
+
+/** Длина гильзы из трубы на патрубок, м (листы: `0,5 × кол-во`). */
+export const SLEEVE_PIPE_M = 0.5
+/** От этого DN гильза — отрезок трубы, ниже — ручная формовка (листы: `IF(DN>=200; …)`). */
+export const SLEEVE_PIPE_FROM_DN = 200
+/** Марка трубы гильз — SN 2500 (в наименовании строк листов). */
+export const SLEEVE_PIPE_SN = 2500
+/** PN труб, не несущих давления, — гильз, шахты, горловины: «-0,1-» в листах. */
+export const SERVICE_PIPE_PN = '0,1'
+
+/** Труба из стеклокомпозита своего производства: цена договорная, в прайсе её нет. */
+export function ownPipeRow(ctx: MaterializeContext, name: string, qtyCalc: number, note: string): CalcRowNode {
+  return {
+    ...makeRow(ctx, { kind: 'МАТЕРИАЛ', category: 'Собственное производство', name, unit: 'м', qtyCalc, bucket: 'Труба, муфта', note }),
+    priceCatalog: null,
+  }
+}
+
+/** Патрубок изделия: заголовок узла, DN и число, наименование прорезки по прайсу. */
+export interface SleeveNozzle {
+  title: string
+  dn: number
+  count: number
+  cutoutName: string
+}
+
+/**
+ * Патрубки с гильзой — узел A5 трёх изделий, по их листам: КНС (строки
+ * 26–30, 40–44, 87–88), ЕМК (36–46), колодец (25–34, 80–81). Считают они
+ * одинаково:
+ *
+ * - гильза — отрезок трубы Ø гильзы (`sleeveDiameter`, эталон K8/M8), 0,5 м
+ *   на патрубок, с приданием товарного вида `Ø/1300 × L`; у патрубка меньше
+ *   DN 200 — «Ручная формовка патрубка», 0,5 кг на патрубок;
+ * - к корпусу гильза ламинируется: `Мф(Ø гильзы) × 3/10 × кол-во`, ФОТ этого
+ *   ламинирования в листах k = 1;
+ * - прорезка отверстия `Ø·π/1000 × 0,5 × кол-во`; её наименование у изделий
+ *   своё — у КНС «под гильзу входящего / напорного патрубка», у ёмкости и
+ *   колодца «патрубка в корпусе».
+ *
+ * Прежде КНС строила «Формовку гильз» — Мф × кол-во: трубы гильзы не было,
+ * а масса формовки и ФОТ выходили втрое больше ламинирования по листу.
+ * Материал патрубка «Труба стеклокомпозитная» (в листе — «Муфта-2» и порог
+ * DN 300) в расчёт не передаётся: разборы КНС и ЕМК/КОЛ.
+ */
+export function buildSleeveNozzles(ctx: MaterializeContext, nozzles: SleeveNozzle[]): CalcComponent[] {
+  const out: CalcComponent[] = []
+  for (const n of nozzles) {
+    if (n.count <= 0) continue
+    const sleeve = sleeveDiameter(n.dn)
+    const norm = ctx.nozzleNormOf?.(sleeve) ?? null
+    const lamination = norm ? laminationMassKg(norm.moldingMassKg) * n.count : null
+    const sleeveM = SLEEVE_PIPE_M * n.count
+    const fromPipe = n.dn >= SLEEVE_PIPE_FROM_DN
+
+    const sleeveRows: CalcRowNode[] = fromPipe
+      ? [
+          ownPipeRow(
+            ctx,
+            `Труба СК/НПС-К ${sleeve}-${SERVICE_PIPE_PN}-${SLEEVE_PIPE_SN}`,
+            sleeveM,
+            `Гильза Ø${sleeve} — отрезок трубы ${fmtNum(SLEEVE_PIPE_M)} м × ${n.count} · цена трубы договорная — введите`,
+          ),
+          makeRow(ctx, {
+            kind: 'ОПЕРАЦИЯ',
+            category: 'Собственное производство',
+            name: 'Придание изделию товарного вида',
+            unit: 'чел. ч',
+            qtyCalc: marketableAppearanceHours(sleeve, sleeveM),
+            note: `ƒ Ø${sleeve}/1300 × ${fmtNum(sleeveM)} м гильз`,
+          }),
+        ]
+      : operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ручная формовка патрубка',
+          unit: 'кг',
+          qtyCalc: sleeveM,
+          fotK: FOT_K_MANUAL,
+          note: `ƒ 0,5 кг на патрубок × ${n.count} — меньше DN ${SLEEVE_PIPE_FROM_DN} гильза формуется вручную`,
+        })
+
+    out.push({
+      id: nextId('c'),
+      nodeCode: 'A5',
+      title: `${n.title} DN${n.dn} ×${n.count}`,
+      enabled: true,
+      rows: [
+        ...sleeveRows,
+        ...operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ламинирование патрубка к корпусу',
+          unit: 'кг',
+          qtyCalc: lamination,
+          // В листах у этой строки k = 1 («*ламин*» → 1), а не 0,56.
+          fotK: FOT_K_MANUAL,
+          note:
+            lamination == null
+              ? `Мф для гильзы Ø${sleeve} в нормах «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф(Ø${sleeve}) ${fmtNum(norm!.moldingMassKg)} кг × 3/10 × ${n.count} = ${fmtNum(lamination)} кг`,
+        }),
+        makeRow(ctx, {
+          kind: 'ОПЕРАЦИЯ',
+          category: 'Собственное производство',
+          name: n.cutoutName,
+          unit: 'чел. ч',
+          qtyCalc: cutoutHours(sleeve, n.count),
+          note: `ƒ Ø${sleeve}·π/1000 × 0,5 чел.ч × ${n.count}`,
+        }),
+      ],
+    })
+  }
+  return out
+}
+
 // ─── Раздел 1: Корпус ────────────────────────────────────────────────────────
 
 // Раздел 1 «Корпус» собирается из встроенных узлов (engines/code-nodes.ts):
@@ -612,16 +728,17 @@ export function buildKnsBottom(ctx: MaterializeContext, s: Pick<KnsSurveyParams,
   ]
 }
 
-/** A5 — патрубки: подводящие и напорные, каждый со своей гильзой. */
+/**
+ * A5 — патрубки КНС: подводящие и напорные, каждый со своей гильзой из трубы
+ * (`buildSleeveNozzles`; лист КНС, строки 26–30, 40–44, 87–88).
+ */
 export function buildKnsNozzles(
   ctx: MaterializeContext,
   s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount' | 'outletDn' | 'outletCount'>,
 ): CalcComponent[] {
-  const components: CalcComponent[] = []
-
-  // Наименования и категории — ДОСЛОВНО из прайса НН: ключ поиска это тройка
+  // Наименования прорезок — ДОСЛОВНО из прайса НН: ключ поиска это тройка
   // (категория, наименование, ЕИ), и любое расхождение даёт «красную» строку.
-  const nozzles: Array<{ title: string; dn: number; count: number; cutoutName: string }> = [
+  return buildSleeveNozzles(ctx, [
     {
       title: 'Патрубок подводящий',
       dn: s.inletDn,
@@ -634,102 +751,110 @@ export function buildKnsNozzles(
       count: s.outletCount,
       cutoutName: 'Прорезка отверстия под гильзу напорного патрубка (ов)',
     },
-  ]
-
-  for (const n of nozzles) {
-    if (n.count <= 0) continue
-    const sleeve = sleeveDiameter(n.dn)
-    // Нормы приходят через контекст: движок остаётся чистым от БД.
-    const norm = ctx.nozzleNormOf?.(sleeve) ?? null
-    const sleeveMass = norm ? norm.moldingMassKg * n.count : null
-    components.push({
-      id: nextId('c'),
-      nodeCode: 'A5',
-      title: `${n.title} DN${n.dn} ×${n.count}`,
-      enabled: true,
-      rows: [
-        // Гильза в прайсе — «Формовка гильз» в КГ, а не штучная позиция.
-        // ❗ Масса формовки = f(DN) берётся из матрицы листа «Для расчетов»,
-        // которая пока не извлечена (План: этап 1 извлёк прайс и веса труб).
-        // До извлечения количество остаётся ручным вводом: молча подставить
-        // выдуманную массу было бы хуже пустой строки.
-        // Масса формовки гильзы — из норм листа «Для расчетов» по ДИАМЕТРУ
-        // ГИЛЬЗЫ (формуется она, а не патрубок). ФОТ-спутник обязателен для
-        // каждой операции с ЕИ «кг» (Механика §6).
-        ...operationWithFot(ctx, {
-          category: 'Собственное производство',
-          name: 'Формовка гильз',
-          unit: 'кг',
-          qtyCalc: sleeveMass,
-          fotK: FOT_K_MANUAL,
-          note:
-            sleeveMass == null
-              ? `Гильза Ø${sleeve} мм (CEILING(DN${n.dn}+100)) ×${n.count} · нормы формовки для Ø${sleeve} в матрице «Для расчетов» нет — введите массу вручную`
-              : `ƒ Мф(Ø${sleeve}) × ${n.count} = ${sleeveMass.toFixed(2)} кг · гильза = CEILING(DN${n.dn}+100)`,
-        }),
-        makeRow(ctx, {
-          kind: 'ОПЕРАЦИЯ',
-          category: 'Собственное производство',
-          name: n.cutoutName,
-          unit: 'чел. ч',
-          qtyCalc: cutoutHours(sleeve, n.count),
-          note: `ƒ Ø${sleeve}·π/1000 × 0,5 чел.ч/м × ${n.count}`,
-        }),
-      ],
-    })
-  }
-
-  return components
+  ])
 }
 
-/** A6 — фланцевый патрубок под задвижку на подводящем. */
+/** Отрезок трубы фланцевого патрубка, м (лист КНС, J33: `0,3` на патрубок при DN ≥ 300). */
+export const FLANGE_NOZZLE_PIPE_M = 0.3
+/** От этого DN фланцевый патрубок — отрезок трубы, ниже — ручная формовка (J33). */
+export const FLANGE_NOZZLE_PIPE_FROM_DN = 300
+/** Стенка ручной формовки фланцевого патрубка, м (J33: `π·DN·0,005·0,3·1850`). */
+const FLANGE_NOZZLE_WALL_M = 0.005
+
+/**
+ * A6 — фланцевый патрубок под задвижку на подводящем (лист КНС, строки
+ * 32–38), по флагу ОЛ «арматура на подводящем»:
+ *
+ * - патрубок — отрезок трубы Ø гильзы 0,3 м с приданием товарного вида; у
+ *   подводящего меньше DN 300 — ручная формовка `π·DN·0,005·0,3·1850` кг;
+ * - «Ручная формовка фланца» — Мф фланца по DN подводящего (норма
+ *   «Для расчетов»), ФОТ k = 1;
+ * - «Ламинирование патрубка к корпусу» — `Мф(DN подводящего) × 3/10`, ФОТ
+ *   k = 1, как в листе (строка 38).
+ *
+ * Прежде ламинирование считалось 3/10 от массы фланца с k = 0,56, а отрезка
+ * трубы не было. Выключенный в ОЛ узел остаётся «призраком» с полными
+ * количествами: включение в расчёте восстанавливает строки, а не нули.
+ *
+ * ❗ Расхождение с эталоном (осознанное): лист ставит ДВА патрубка на каждый
+ * подводящий (`I32 = 2×K5`), завод уточнил (2026-09-09) — один. Берём один.
+ */
 export function buildKnsInletFlange(
   ctx: MaterializeContext,
   s: Pick<KnsSurveyParams, 'inletDn' | 'inletCount' | 'valveOnInlet'>,
 ): CalcComponent[] {
-  // A6 — Фланцевый патрубок под задвижку на подводящем (лист, строки 32–38).
-  //
   // Номинал диктует подводящий патрубок: течение там безнапорное, но задвижка
   // всегда идёт с номинальным PN в наименовании. Масса ручной формовки фланца
-  // берётся из норм листа «Для расчетов» — колонка «Мф фланца» по DN, а не по
-  // диаметру гильзы: формуется фланец под арматуру, не проходное отверстие.
-  //
-  // ❗ Расхождение с эталоном (осознанное): лист ставит ДВА патрубка на каждый
-  // подводящий (`I32 = 2×K5`), завод уточнил (2026-09-09) — один. Берём один.
-  const inletFlangeNorm = ctx.nozzleNormOf?.(s.inletDn) ?? null
-  const inletFlanges = s.valveOnInlet ? s.inletCount : 0
-  const inletFlangeMass =
-    inletFlangeNorm?.flangeMassKg != null ? inletFlangeNorm.flangeMassKg * inletFlanges : null
+  // и Мф ламинирования берутся из норм листа «Для расчетов» по DN, а не по
+  // диаметру гильзы: формуется фланец под арматуру (строки 35 и 37).
+  const n = s.inletCount
+  if (n <= 0) return []
+  const dn = s.inletDn
+  const sleeve = sleeveDiameter(dn)
+  const norm = ctx.nozzleNormOf?.(dn) ?? null
+  const flangeMass = norm?.flangeMassKg != null ? norm.flangeMassKg * n : null
+  const lamination = norm ? laminationMassKg(norm.moldingMassKg) * n : null
+  const pipeM = FLANGE_NOZZLE_PIPE_M * n
+  const moldedKg = Math.PI * (dn / 1000) * FLANGE_NOZZLE_WALL_M * FLANGE_NOZZLE_PIPE_M * LAMINATE_DENSITY * n
+
+  const nozzleRows: CalcRowNode[] =
+    dn >= FLANGE_NOZZLE_PIPE_FROM_DN
+      ? [
+          ownPipeRow(
+            ctx,
+            `Труба СК/НПС-К ${sleeve}-${SERVICE_PIPE_PN}-${SLEEVE_PIPE_SN}`,
+            pipeM,
+            `Фланцевый патрубок Ø${sleeve} — отрезок трубы ${fmtNum(FLANGE_NOZZLE_PIPE_M)} м × ${n} · цена трубы договорная — введите`,
+          ),
+          makeRow(ctx, {
+            kind: 'ОПЕРАЦИЯ',
+            category: 'Собственное производство',
+            name: 'Придание изделию товарного вида',
+            unit: 'чел. ч',
+            qtyCalc: marketableAppearanceHours(sleeve, pipeM),
+            note: `ƒ Ø${sleeve}/1300 × ${fmtNum(pipeM)} м`,
+          }),
+        ]
+      : operationWithFot(ctx, {
+          category: 'Собственное производство',
+          name: 'Ручная формовка патрубка',
+          unit: 'кг',
+          qtyCalc: moldedKg,
+          fotK: FOT_K_MANUAL,
+          note: `ƒ π·DN${dn}/1000·0,005·0,3·1850 × ${n} = ${fmtNum(moldedKg)} кг — меньше DN ${FLANGE_NOZZLE_PIPE_FROM_DN} патрубок формуется вручную`,
+        })
 
   return [
     {
       id: nextId('c'),
       nodeCode: 'A6',
-      title: `Фланцевый патрубок под задвижку на подводящем DN${s.inletDn}`,
+      title: `Фланцевый патрубок под задвижку на подводящем DN${dn}`,
       ...surveyToggled(s.valveOnInlet),
       rows: [
+        ...nozzleRows,
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ручная формовка фланца для задвижки на подводящем трубопроводе',
           unit: 'кг',
-          qtyCalc: inletFlangeMass,
+          qtyCalc: flangeMass,
           // В листе у этой строки k = 1 («*руч*» → 1), а не 0,56.
           fotK: FOT_K_MANUAL,
           note:
-            inletFlangeMass == null
-              ? `Мф фланца для DN${s.inletDn} в нормах «Для расчетов» нет — введите массу вручную`
-              : `ƒ Мф фланца(DN${s.inletDn}) × ${inletFlanges} = ${inletFlangeMass.toFixed(2)} кг`,
+            flangeMass == null
+              ? `Мф фланца для DN${dn} в нормах «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф фланца(DN${dn}) × ${n} = ${fmtNum(flangeMass)} кг`,
         }),
         ...operationWithFot(ctx, {
           category: 'Собственное производство',
           name: 'Ламинирование патрубка к корпусу',
           unit: 'кг',
-          qtyCalc: inletFlangeMass == null ? null : laminationMassKg(inletFlangeMass),
-          fotK: FOT_K_LAMIN,
+          qtyCalc: lamination,
+          // Лист, строка 38: «*ламин*» → 1, а не 0,56.
+          fotK: FOT_K_MANUAL,
           note:
-            inletFlangeMass == null
-              ? 'ƒ масса фланца × 3/10 — введите после массы фланца'
-              : `ƒ ${inletFlangeMass.toFixed(2)} кг × 3/10`,
+            lamination == null
+              ? `Мф для DN${dn} в нормах «Для расчетов» нет — введите массу вручную`
+              : `ƒ Мф(DN${dn}) ${fmtNum(norm!.moldingMassKg)} кг × 3/10 × ${n} = ${fmtNum(lamination)} кг`,
         }),
       ],
     },
