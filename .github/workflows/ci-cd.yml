@@ -74,12 +74,17 @@ jobs:
       # Дрейф схемы: `migrate deploy` применяет миграции, но НЕ проверяет, что
       # они описывают текущий schema.prisma. Правка схемы без миграции проходила
       # CI незамеченной и падала уже на проде. `migrate diff --exit-code` даёт
-      # ненулевой код, если между схемой и накатанной базой есть разница.
+      # код 2, если между схемой и накатанной базой есть разница.
+      #
+      # Синтаксис Prisma 7: база — datasource из prisma.config.ts (DATABASE_URL
+      # job'а), схема — файл. Прежние флаги --from-schema-datasource и
+      # --to-schema-datamodel в Prisma 7 удалены: с ними шаг падал на каждом
+      # пуше ошибкой разбора аргументов, и деплой не доходил до запуска.
       - name: Схема и миграции совпадают
         run: >-
           npx prisma migrate diff
-          --from-schema-datasource prisma/schema.prisma
-          --to-schema-datamodel prisma/schema.prisma
+          --from-config-datasource
+          --to-schema prisma/schema.prisma
           --exit-code
       # Сид проверяет, что справочники и прайс грузятся в свежую БД.
       - run: npm run db:seed
