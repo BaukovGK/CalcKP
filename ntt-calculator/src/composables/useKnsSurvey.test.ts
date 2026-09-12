@@ -73,3 +73,23 @@ describe('useKnsSurvey — единицы расхода', () => {
     expect(form.value.rashod).toBe('')
   })
 })
+
+// По ТТ МВК изделие маркируется 8000 вместо 5000 и 12000 вместо 10000 — это
+// та же труба. Пояснение стоит прямо под маркой, и без второй цифры «SN 10000»
+// под «…-12000» читается как расхождение.
+describe('useKnsSurvey — жёсткость и обозначение по ТТ МВК', () => {
+  it('с ТТ МВК пояснение называет расчётную ступень и обозначение марки', () => {
+    const form = ref({ ...makeDefaultKnsSurvey(), mvk: true })
+    const s = useKnsSurvey(form)
+    expect(s.snExplain.value).toMatch(/SN 10000 · в марке 12000/)
+    expect(s.pipeMark.value).toContain('-12000')
+  })
+
+  it('без ТТ МВК — одна цифра: обозначение совпадает с расчётной', () => {
+    const form = ref({ ...makeDefaultKnsSurvey(), mvk: false })
+    const s = useKnsSurvey(form)
+    expect(s.snExplain.value).toContain('SN 10000')
+    expect(s.snExplain.value).not.toContain('в марке')
+    expect(s.pipeMark.value).toContain('-10000')
+  })
+})

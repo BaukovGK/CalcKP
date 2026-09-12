@@ -10,6 +10,7 @@ import {
   gateValveCount,
   pipeGradeName,
   snByDepth,
+  snDesignation,
 } from '@/engines/survey-kns'
 import { tryEvalExpr } from '@/engines/expr'
 import { usePipeOverride } from './usePipeOverride'
@@ -109,7 +110,12 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
       form.value.mvk ? 'ТТ МВК' : null,
     ].filter(Boolean)
     const tail = flags.length ? ` · ${flags.join(' · ')}` : ''
-    return `расчётные: глубина ${d} мм → SN ${sn.value}${tail}`
+    // По ТТ МВК та же труба маркируется 8000 или 12000, и марка над этой
+    // строкой показывает обозначение: без второй цифры «SN 10000» под
+    // «…-12000» читается как расхождение, а это одна и та же ступень.
+    const label = snDesignation(sn.value, { mvk: form.value.mvk })
+    const mark = label !== sn.value ? ` · в марке ${label}` : ''
+    return `расчётные: глубина ${d} мм → SN ${sn.value}${mark}${tail}`
   })
 
   // ── Арматура: вычисляемая с override ──
