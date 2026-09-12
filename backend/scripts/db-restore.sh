@@ -141,6 +141,25 @@ pg_restore --dbname="$DATABASE_URL" \
            --exit-on-error \
            "$TARGET"
 
+# Дамп разворачивается администратором и с `--no-owner`: всё восстановленное
+# принадлежит ему, а схему public скрипт пересоздал сам. Если базой работает
+# отдельная роль приложения (План_устранения 2.6), вернуть ей схему и объекты
+# обязательно — иначе бэкенд потеряет права на собственные таблицы.
+APP_USER="${APP_DB_USER:-}"
+if [ -n "$APP_USER" ] && psql "$DATABASE_URL" -tAc "SELECT 1 FROM pg_roles WHERE rolname = '$APP_USER'" | grep -q 1; then
+  echo "db-restore: возвращаю схему и таблицы роли приложения $APP_USER"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -v app_user="$APP_USER" <<'SQL'
+ALTER SCHEMA public OWNER TO :"app_user";
+-- Список команд psql не печатает: их выполняет \gexec, а в выводе нужен итог.
+\o /dev/null
+SELECT format('ALTER TABLE public.%I OWNER TO %I', tablename, :'app_user') FROM pg_tables WHERE schemaname = 'public';
+\gexec
+SELECT format('ALTER SEQUENCE public.%I OWNER TO %I', sequencename, :'app_user') FROM pg_sequences WHERE schemaname = 'public';
+\gexec
+\o
+SQL
+fi
+
 if [ -n "$MISSING" ]; then
   echo "db-restore: готово. Перезапустите бэкенд — он применит недостающие миграции,"
   echo "            сняв перед этим предмиграционный дамп:"

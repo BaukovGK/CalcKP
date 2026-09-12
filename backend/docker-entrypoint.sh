@@ -15,7 +15,28 @@
 #                                  внешнем бэкапе)
 #   BACKUP_DIR=/backups            каталог дампов (том из docker-compose.yml)
 #   RUN_SEED=1                     запускать сид (по умолчанию да)
+#   APP_USER=node                  от кого работает приложение
 set -eu
+
+BACKUP_DIR="${BACKUP_DIR:-/backups}"
+APP_USER="${APP_USER:-node}"
+
+# Приложение работает НЕ от root (План_устранения 2.6): прав суперпользователя
+# ему не нужно ни для чего. Каталог дампов монтируется с хоста, и его владельца
+# изнутри контейнера иначе не сменить, поэтому точка входа стартует от root,
+# отдаёт каталог приложению и тут же переходит на его пользователя. Шагов на
+# сервере это не требует: существующая установка после обновления образа
+# получает и права на каталог, и непривилегированный процесс.
+if [ "$(id -u)" = 0 ]; then
+  mkdir -p "$BACKUP_DIR"
+  if [ "$(stat -c %u "$BACKUP_DIR")" != "$(id -u "$APP_USER")" ]; then
+    echo "entrypoint: отдаю каталог дампов $BACKUP_DIR пользователю $APP_USER"
+    chown -R "$APP_USER" "$BACKUP_DIR" ||
+      echo "entrypoint: сменить владельца $BACKUP_DIR не удалось — проверьте права на хосте" >&2
+  fi
+  echo "entrypoint: дальше — от пользователя $APP_USER (uid $(id -u "$APP_USER"))"
+  exec su-exec "$APP_USER" "$0" "$@"
+fi
 
 MODE="${BACKUP_BEFORE_MIGRATE:-require}"
 

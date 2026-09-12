@@ -29,7 +29,13 @@ ENV NODE_ENV=production
 # Клиент PostgreSQL нужен точке входа: она снимает дамп ДО применения миграций
 # (у `prisma migrate deploy` обратного хода нет). Мажорная версия должна
 # совпадать с сервером — postgres:16 в docker-compose.yml.
-RUN apk add --no-cache postgresql16-client
+# su-exec — переход на непривилегированного пользователя в точке входа
+# (План_устранения 2.6): приложению права root не нужны.
+RUN apk add --no-cache postgresql16-client su-exec
+
+# Домашний каталог пользователя node: туда пишут npx и кеш npm, а от root
+# унаследованный HOME=/root процессу приложения недоступен на запись.
+ENV HOME=/home/node NPM_CONFIG_CACHE=/home/node/.npm
 
 COPY package*.json ./
 # exceljs и multer — рантайм-зависимости (импорт прайса, выгрузка Заявки),

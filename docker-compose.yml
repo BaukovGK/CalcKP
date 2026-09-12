@@ -31,8 +31,16 @@ services:
       # если понадобится русская коллация в ORDER BY, нужен свой образ
       # с locale-gen ru_RU.UTF-8.
       POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C.UTF-8'
+      # Роль приложения без прав суперпользователя (План_устранения 2.6).
+      # Заводится хуком initdb — то есть только при создании базы. Пусто —
+      # приложение ходит ролью POSTGRES_USER, как раньше; переезд рабочей
+      # базы на отдельную роль — процедурой из РАЗВЁРТЫВАНИЕ.md.
+      APP_DB_USER: ${APP_DB_USER:-ntt_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
     volumes:
       - db-data:/var/lib/postgresql/data
+      # Хуки создания базы: выполняются один раз, на пустом каталоге данных.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # backend стартует только после готовности БД: иначе migrate deploy
       # упадёт на первом же запуске.
@@ -55,7 +63,9 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ntt}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ntt_estimates}
+      # Ролью приложения, если она заведена (APP_DB_PASSWORD в .env), иначе —
+      # ролью POSTGRES_USER, как раньше (План_устранения 2.6).
+      DATABASE_URL: postgresql://${APP_DB_USER:-${POSTGRES_USER:-ntt}}:${APP_DB_PASSWORD:-${POSTGRES_PASSWORD}}@db:5432/${POSTGRES_DB:-ntt_estimates}
       NODE_ENV: production
       PORT: 3000
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET обязателен}
@@ -132,6 +142,9 @@ services:
     environment:
       <<: *backup-env
       MIGRATIONS_DIR: /migrations
+      # Кому вернуть схему после восстановления: дамп разворачивается
+      # администратором, а работает с базой роль приложения (2.6).
+      APP_DB_USER: ${APP_DB_USER:-ntt_app}
     volumes:
       - ./backups:/backups
       - ./backend/scripts:/scripts:ro
