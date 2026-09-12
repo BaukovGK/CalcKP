@@ -4,6 +4,7 @@ import App from './App.vue'
 import router from './router'
 import './assets/main.css'
 import { installNumericGuard } from './utils/numeric-input'
+import { installLatinGuard } from './utils/latin-input'
 import { hideHint, vHint } from './directives/hint'
 
 const app = createApp(App)
@@ -20,3 +21,8 @@ app.mount('#app')
 // или выражение — текст в них не попадает. Одно правило на всё приложение:
 // ставится на документ, а не на каждое поле (utils/numeric-input.ts).
 installNumericGuard()
+
+// Логин (поля с `data-latin`) принимает только латиницу: набранный в русской
+// раскладке адрес почты не совпадёт ни с одной учётной записью, а человек
+// будет искать ошибку в пароле (utils/latin-input.ts).
+installLatinGuard()

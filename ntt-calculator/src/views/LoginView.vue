@@ -19,7 +19,11 @@
             autocomplete="email"
             :disabled="loading"
             required
+            data-latin
+            @latin-blocked="onLatinBlocked"
           />
+          <!-- Почему буква не появилась: кириллица в логин не попадает. -->
+          <div v-if="layoutHint" class="auth-note">{{ LATIN_ONLY_HINT }}</div>
         </div>
         <div class="ff">
           <label class="fl" for="password">Пароль</label>
@@ -61,6 +65,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { hasNonLatin, LATIN_ONLY_HINT } from '@/utils/latin-input'
 
 const router = useRouter()
 const auth   = useAuthStore()
@@ -71,8 +76,21 @@ const version = import.meta.env.VITE_APP_VERSION ?? '0.0.0'
 const error   = ref('')
 /** Демо-вход — только при `npm run dev`: в собранном приложении его нет. */
 const demoAvailable = import.meta.env.DEV
+/** В логин попыталась попасть нелатиница — показываем про раскладку. */
+const layoutHint = ref(false)
+
+function onLatinBlocked(e: Event) {
+  layoutHint.value = (e as CustomEvent<{ blocked: boolean }>).detail.blocked
+}
 
 async function onSubmit() {
+  // Нелатиница сюда почти не доходит — правило ввода её не пускает, — но
+  // автозаполнение и вставка в обход событий возможны: отправлять такой
+  // логин бессмысленно, он не совпадёт ни с одной учётной записью.
+  if (hasNonLatin(form.email)) {
+    layoutHint.value = true
+    return
+  }
   error.value = ''
   loading.value = true
   try {

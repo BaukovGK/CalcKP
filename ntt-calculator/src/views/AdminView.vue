@@ -207,7 +207,16 @@
       </div>
       <div class="ff">
         <label class="fl">Email <span style="color:var(--danger)">*</span></label>
-        <input class="fi" type="email" v-model="newForm.email" placeholder="user@example.com" />
+        <!-- Логин латиницей: иначе учётную запись заведут так, что в неё
+             никто не войдёт (utils/latin-input.ts). -->
+        <input
+          class="fi"
+          type="email"
+          v-model="newForm.email"
+          placeholder="user@example.com"
+          data-latin
+          @latin-blocked="onLatinBlocked"
+        />
       </div>
       <div class="ff">
         <label class="fl">Роль</label>
@@ -239,6 +248,7 @@ import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
 import { ADMIN_PASSWORD_HINTS } from '@/hints/account'
 import { useAuthStore } from '@/stores/auth'
+import { hasNonLatin, LATIN_ONLY_HINT } from '@/utils/latin-input'
 import { MIN_PASSWORD_LENGTH } from '@/utils/password-form'
 
 const router = useRouter()
@@ -330,9 +340,16 @@ function closeNewUser() {
   newFormError.value = ''
 }
 
+function onLatinBlocked(e: Event) {
+  if ((e as CustomEvent<{ blocked: boolean }>).detail.blocked) newFormError.value = LATIN_ONLY_HINT
+  else if (newFormError.value === LATIN_ONLY_HINT) newFormError.value = ''
+}
+
 async function createUser() {
   if (!newForm.name.trim())     { newFormError.value = 'Укажите имя';  return }
   if (!newForm.email.trim())    { newFormError.value = 'Укажите email'; return }
+  // Логин латиницей: сервер держит то же правило (admin.routes.ts).
+  if (hasNonLatin(newForm.email.trim())) { newFormError.value = LATIN_ONLY_HINT; return }
   if (newForm.password.length < MIN_PASSWORD_LENGTH) { newFormError.value = `Пароль — минимум ${MIN_PASSWORD_LENGTH} символов`; return }
   creating.value = true; newFormError.value = ''
   try {

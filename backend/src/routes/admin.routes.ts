@@ -12,6 +12,7 @@ import { stat, unlink } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { logger } from '../utils/logger'
 import { MIN_PASSWORD_LENGTH, temporaryPassword } from '../utils/password'
+import { LATIN_LOGIN, LATIN_LOGIN_MESSAGE } from '../utils/login'
 import {
   acceptUpload, BACKUP_DIR, createDump, deleteDump, dumpPath, dumpStream, DumpError,
   isValidDumpName, listDumps, MAX_DUMP_BYTES, restoreDump,
@@ -42,7 +43,8 @@ adminRouter.get('/users', async (_req, res: Response, next: NextFunction) => {
 })
 
 const createUserSchema = z.object({
-  email:    z.string().email(),
+  // Логин — латиницей (`utils/login.ts`): то же правило держит экран входа.
+  email:    z.string().email().regex(LATIN_LOGIN, LATIN_LOGIN_MESSAGE),
   name:     z.string().min(1),
   role:     z.enum(ROLES),
   password: z.string().min(MIN_PASSWORD_LENGTH),
