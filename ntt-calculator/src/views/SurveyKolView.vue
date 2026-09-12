@@ -94,7 +94,7 @@
             <label class="fld fld--3"><span v-hint="H.snManual">SN, Па</span>
               <select v-model="form.snManual">
                 <option value="">расч.</option>
-                <option v-for="v in SN_MANUAL_OPTIONS" :key="v">{{ v }}</option>
+                <option v-for="o in snOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                 <!-- Выбранное до правила завода (1250, 2500) видно, пока не сменят. -->
                 <option v-if="legacySnManual(form.snManual)" :value="form.snManual">{{ form.snManual }} (прежний)</option>
               </select>
@@ -281,7 +281,7 @@ import { COMMON_HINTS, KOL_HINTS } from '@/hints/survey'
 import DeviceTypeSection from '@/components/survey/DeviceTypeSection.vue'
 import type { DeviceType } from '@/api/estimates'
 import { useKolSurvey } from '@/composables/useEmkKolSurvey'
-import { legacySnManual, SN_MANUAL_OPTIONS } from '@/composables/usePipeOverride'
+import { legacySnManual, snManualOptions } from '@/composables/usePipeOverride'
 import { toast } from '@/composables/useToast'
 import { useSurveySync } from '@/composables/useSurveySync'
 import { useCalcTreeStore } from '@/stores/calcTree'
@@ -350,6 +350,9 @@ const MATERIALS = PIPE_MATERIALS
 const RESINS = ['Стандарт', 'Винилэфирная стандарт', 'Винилэфирная высокотемп.'] as const
 const EFFLUENTS = ['Хозяйственно-бытовые', 'Ливневые', 'Промышленные', 'Агрессивные'] as const
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
+
+/** Ступени ручного SN. Требований МВК у этого изделия нет — подписи как значения. */
+const snOptions = snManualOptions()
 const DN_LIST = [300, 350, 400, 450, 500].concat(Array.from({ length: 25 }, (_, i) => 600 + i * 100)).map(String)
 
 const activeSec = ref(1)

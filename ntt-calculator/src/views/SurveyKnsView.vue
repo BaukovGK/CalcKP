@@ -113,9 +113,11 @@
               <label class="fld fld--3"><span v-hint="H.snManual">SN, Па</span>
                 <select v-model="form.snManual">
                   <option value="">расчётное</option>
-                  <option v-for="v in SN_MANUAL_OPTIONS" :key="v">{{ v }}</option>
+                  <!-- Подпись — обозначение (по ТТ МВК 8000 и 12000), значение —
+                       расчётная жёсткость: по ней вес трубы и трудоёмкость. -->
+                  <option v-for="o in snOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                   <!-- Выбранное до правила завода (1250, 2500) видно, пока не сменят. -->
-                  <option v-if="legacySnManual(form.snManual)" :value="form.snManual">{{ form.snManual }} (прежний)</option>
+                  <option v-if="legacySnManual(form.snManual)" :value="form.snManual">{{ snManualLabel(form.snManual, form.mvk) }} (прежний)</option>
                 </select>
               </label>
               <!-- Возвышение, исполнение и теплоизоляция живут здесь же: это
@@ -139,7 +141,7 @@
                 <input v-model="form.tiGlubina" class="num" :placeholder="String(TI_DEPTH_DEFAULT_MM)" />
               </label>
               <div v-if="legacySnManual(form.snManual)" class="ol-pick ol-pick--warn fld--12">
-                SN {{ form.snManual }} выбран раньше, а завод делает корпус из трубы SN 5000 или 10000 — выберите одну из них.
+                SN {{ snManualLabel(form.snManual, form.mvk) }} выбран раньше, а завод делает корпус из трубы SN {{ snOptions[0]?.label }} или {{ snOptions[1]?.label }} — выберите одну из них.
               </div>
               <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
             </div>
@@ -486,7 +488,7 @@ import CalcField from '@/components/survey/CalcField.vue'
 import '@/assets/survey-form.css'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
-import { legacySnManual, SN_MANUAL_OPTIONS } from '@/composables/usePipeOverride'
+import { legacySnManual, snManualLabel, snManualOptions } from '@/composables/usePipeOverride'
 import { usePumpSelection } from '@/composables/usePumpSelection'
 import { useTheme } from '@/composables/useTheme'
 import { useSurveySync } from '@/composables/useSurveySync'
@@ -667,6 +669,9 @@ const NS_TYPES = ['Канализационная', 'Ливневая', 'Дре�
 const STAGES = ['проект', 'рабочая', 'КД', 'продажа', 'тендер'] as const
 const MATERIALS = PIPE_MATERIALS
 const PN_LIST = ['0,1', '0,6', '1', '1,6'] as const
+
+/** Ступени ручного SN: по ТТ МВК показываются обозначениями 8000 и 12000. */
+const snOptions = computed(() => snManualOptions(form.value.mvk))
 
 /** Типовая глубина теплоизоляции, мм — меняется вручную по флажку. */
 const TI_DEPTH_DEFAULT_MM = 2000

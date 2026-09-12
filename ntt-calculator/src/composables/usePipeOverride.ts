@@ -1,6 +1,6 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 import { tryEvalExpr } from '@/engines/expr'
-import { PN_SURVEY_DEFAULT, SN_BASE } from '@/engines/survey-kns'
+import { PN_SURVEY_DEFAULT, SN_BASE, snDesignation } from '@/engines/survey-kns'
 
 /**
  * Ручной SN трубы корпуса — только ступени завода, 5000 и 10000 (решение Р9,
@@ -18,6 +18,33 @@ export const SN_MANUAL_OPTIONS: readonly string[] = [String(SN_BASE.normal), Str
 export function legacySnManual(value: string): string | null {
   const v = value.trim()
   return v && !SN_MANUAL_OPTIONS.includes(v) ? v : null
+}
+
+/** Ступень списка: в форму идёт расчётная жёсткость, инженер видит обозначение. */
+export interface SnOption {
+  /** Значение поля — расчётная жёсткость: по ней вес трубы и трудоёмкость. */
+  value: string
+  /** Что видно в списке: по ТТ МВК та же труба маркируется 8000 и 12000. */
+  label: string
+}
+
+/**
+ * Ступени для списка с учётом ТТ МВК. Под требованиями МВК изделие маркируется
+ * 8000 и 12000 — это те же трубы SN 5000 и 10000 с двумя нитками ровинга
+ * ({@link snDesignation}), и марка в карточке показывает именно обозначение.
+ * Список обязан говорить на том же языке, иначе инженер выбирает «10000», а в
+ * марке видит «12000» и не понимает, та ли это ступень. В форме при этом
+ * хранится расчётная жёсткость: по ней ищется вес трубы, и снятая галочка ТТ
+ * МВК ничего не ломает.
+ */
+export function snManualOptions(mvk = false): SnOption[] {
+  return SN_MANUAL_OPTIONS.map((value) => ({ value, label: String(snDesignation(Number(value), { mvk })) }))
+}
+
+/** Подпись выбранного раньше SN: обозначения у 1250 и 2500 свои же. */
+export function snManualLabel(value: string, mvk = false): string {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? String(snDesignation(n, { mvk })) : value
 }
 
 /**
