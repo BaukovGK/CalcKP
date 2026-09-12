@@ -2,7 +2,8 @@
 #
 # Тесты (frontend, backend) и проверка ссылок на код в документах — на каждый
 # push и pull request.
-# Деплой — только при push в master и ТОЛЬКО после зелёных тестов:
+# Деплой — только при push в master, после зелёных тестов и только когда
+# заведены секреты сервера (без них задача пропускается, а не падает):
 #   на сервере git fetch + reset --hard + docker compose up -d --build (стек проверен, см.
 #   docker-compose.yml), и деплой ждёт, пока бэкенд станет healthy.
 #   Требуемые секреты репозитория перечислены в job deploy.
@@ -118,10 +119,26 @@ jobs:
           node-version: 20
       - run: node tools/check-doc-refs.mjs
 
-  deploy:
-    name: Деплой на сервер (SSH)
+  # Заведены ли секреты выкладки. Отдельной задачей, потому что в `if` самой
+  # задачи контекст `secrets` недоступен — только в шагах. Пока сервера нет,
+  # деплой ПРОПУСКАЕТСЯ: прогон остаётся зелёным, и красный цвет продолжает
+  # означать «что-то сломано», а не «сервер ещё не настроен».
+  deploy-ready:
+    name: Секреты выкладки заданы
     needs: [frontend, backend, docs]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        # Значения секретов сюда не попадают — только «заданы или нет».
+        run: echo "ready=${{ secrets.DEPLOY_SSH_HOST != '' && secrets.DEPLOY_SSH_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Деплой на сервер (SSH)
+    needs: [frontend, backend, docs, deploy-ready]
+    if: needs.deploy-ready.outputs.ready == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: docker compose up на сервере
