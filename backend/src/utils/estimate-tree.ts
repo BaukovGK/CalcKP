@@ -37,6 +37,12 @@ export interface TreeRow {
   qtyResolved?: number | null
   priceCatalog?: number | null
   priceManual?: number | null
+  /**
+   * Корзина итогов, заданная материализацией явно: трубы и муфты своего
+   * производства по ЕИ («м», «шт») неотличимы от прочих материалов
+   * (`engines/economics.ts`, classifyRow).
+   */
+  bucket?: string
   /** Устаревшая форма хранит количество и цену строками. */
   qty?: string | number | null
   price?: string | number | null

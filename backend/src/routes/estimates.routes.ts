@@ -6,6 +6,7 @@ import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { canAccessEstimate, canReadEstimate, seesAllEstimates } from '../utils/access'
+import { verifyKpTotal } from '../utils/estimate-economics'
 import { ESTIMATE_CHANGED, isStaleTreeWrite, isSurveyRevRegression, isVersionConflict, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
 import {
@@ -142,6 +143,11 @@ estimatesRouter.patch('/:id/status', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
     res.json(updated)
   } catch (e) { next(e) }
 })
+
+/** Рубли для сообщения об ошибке: «3 274 000 ₽». */
+function rub(n: number): string {
+  return `${n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`
+}
 
 function plural(n: number): string {
   const d = n % 10
@@ -332,7 +338,10 @@ estimatesRouter.post(
  *     строкам с отрицательной суммой — 422 NEGATIVE_ROWS (решение Р4); по
  *     ставкам экономики, взятым константами программы, — 422
  *     RATES_NOT_IN_PRICE (решение Р5);
- *  2. снапшот — фиксирует, из каких цен и какой версии прайса родилась цифра
+ *  2. сверка итога: цифра документа приходит с клиента, и сервер
+ *     пересчитывает её по сохранённому дереву — 422 TOTAL_MISMATCH, если не
+ *     сошлась (решение Р7, `utils/estimate-economics.ts`);
+ *  3. снапшот — фиксирует, из каких цен и какой версии прайса родилась цифра
  *     в согласуемом документе.
  *
  * Расчёт НЕ замораживается: инженер продолжает править его после выпуска КП —
@@ -396,9 +405,32 @@ estimatesRouter.post(
         return
       }
 
+      // Итог КП — это `totals.salePriceRub` расчёта: сервер его не считал и
+      // печатал как есть. Теперь пересчитывает по сохранённому дереву и
+      // выпускает только сошедшийся (решение Р7, План_устранения 3.5).
+      // Дерево, которое проверить нечем (собрано до фиксации ставок или
+      // хранит количество выражением), не отклоняется — см. verifyKpTotal.
+      const totalCheck = verifyKpTotal(estimate.surveyData, estimate.totalRub)
+      if (!totalCheck.ok) {
+        res.status(422).json({
+          message:
+            `Итог не сошёлся: по сохранённому расчёту это ${rub(totalCheck.serverTotal)}, ` +
+            `а прислан ${rub(totalCheck.clientTotal)}. Откройте расчёт, сохраните его и повторите выпуск. ` +
+            'Если расхождение осталось — это ошибка программы: документ с непроверенным итогом выпускать нельзя.',
+          code: 'TOTAL_MISMATCH',
+          serverTotal: totalCheck.serverTotal,
+          clientTotal: totalCheck.clientTotal,
+        })
+        return
+      }
+
       const snapshot = await createSnapshot(id, estimate.surveyData, estimate.totalRub ?? 0, 'KP')
 
-      await audit(auth.userId, 'estimate.kp', 'Estimate', id, { snapshotVersion: snapshot.version })
+      await audit(auth.userId, 'estimate.kp', 'Estimate', id, {
+        snapshotVersion: snapshot.version,
+        // Чем закончилась сверка итога: сошлась или почему не проверялась.
+        totalCheck: 'skipped' in totalCheck ? totalCheck.skipped : 'ok',
+      })
 
       res.status(201).json({
         estimate: {

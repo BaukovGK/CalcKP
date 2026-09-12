@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import kpTotalVectors from '../../../backend/src/utils/kp-total.vectors.json'
 import {
   FALLBACK_RATES,
   RATE_ITEMS,
@@ -336,5 +337,27 @@ describe('ставки экономики из прайса', () => {
     })
     expect(asked).toEqual(['ФОТ / ФОТ / чел. ч', 'ФОТ / Накладные расходы / чел. ч', 'Прочие материалы / Ацетон / кг', 'Прочие материалы / СИЗ и РМ / ед.'])
     expect(RATE_KEYS.map((k) => RATE_ITEMS[k].label)).toEqual(['ФОТ', 'Накладные расходы', 'Ацетон', 'СИЗ и РМ'])
+  })
+})
+
+// План_устранения 3.5: сервер сверяет итог КП, пересчитывая экономику по
+// сохранённому дереву (`backend/src/utils/estimate-economics.ts`). Пайплайн
+// задан в двух местах, и общие примеры не дают им разойтись молча — здесь
+// прогоняется движок фронта, там же тот же файл прогоняет бэкенд.
+describe('общие примеры экономики: фронт и бэкенд считают одинаково', () => {
+  it.each(kpTotalVectors.cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const rows = c.rows.map((r, i) => ({ id: `r${i}`, qtyManual: null, priceManual: null, ...r })) as unknown as EngineRow[]
+    const e = computeEconomics(aggregateRows(rows, { tirage: c.tirage }), c.rates as Rates, { markup: c.markup })
+    expect({
+      hoursFittings: e.hoursFittings,
+      hoursRmu: e.hoursRmu,
+      moldingMassKg: e.moldingMassKg,
+      pzrHours: e.pzrHours,
+      acetoneKg: e.acetoneKg,
+      ppeUnits: e.ppeUnits,
+      overheadHours: e.overheadHours,
+      costRub: e.costRub,
+      salePriceRub: e.salePriceRub,
+    }).toEqual(c.expect)
   })
 })

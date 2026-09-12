@@ -107,8 +107,9 @@ load(id):
   APPROVED/REJECTED
 - `POST /estimates/:id/kp` — гейты: строки без цены (`rowsWithoutPrice`),
   отрицательные строки (422 `NEGATIVE_ROWS`), ставки не из прайса (422
-  `RATES_NOT_IN_PRICE`) — всё по дереву, estimate-tree.ts; затем снапшот с
-  версией прайса
+  `RATES_NOT_IN_PRICE`) — всё по дереву, estimate-tree.ts; сверка итога с
+  пересчитанным по тому же дереву (`verifyKpTotal`, estimate-economics.ts,
+  422 `TOTAL_MISMATCH`); затем снапшот с версией прайса
 - `PATCH /estimates/:id/status` — переходы сведены к DRAFT→CALC и →REJECTED;
   REVIEW/APPROVED безусловно отклоняются (422 `STATUS_FLOW_REMOVED`,
   estimates.routes.ts), гейта по строкам без цены здесь нет

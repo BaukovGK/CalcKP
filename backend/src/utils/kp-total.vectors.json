@@ -1,0 +1,320 @@
+{
+  "comment": "Экономика расчёта (эталон «Шаблон 3.0.xlsx», лист «Калькулятор КНС», строки 441–458): часы участков, ПЗР, ацетон, СИЗ, накладные, себестоимость и цена продажи. Примеры прогоняют фронтенд (engines/economics.ts — источник истины, им же посчитаны ожидания) и бэкенд (utils/estimate-economics.ts, сверка итога КП — решение Р7, План_устранения 3.5): пайплайн задан в двух местах и обязан давать одно и то же. Строки заданы полями движка; тираж и наценка — как в сохранённых итогах расчёта.",
+  "cases": [
+    {
+      "name": "эталонные ячейки J441–J447: 649 чел.ч фитингов и 892,85 кг формовки",
+      "tirage": 1,
+      "markup": 0.43,
+      "rates": {
+        "fotRub": 1207.8,
+        "overheadRub": 1584.73,
+        "acetoneRub": 109.4,
+        "ppeRub": 122
+      },
+      "rows": [
+        {
+          "kind": "ОПЕРАЦИЯ",
+          "category": "Собственное производство",
+          "name": "Механическая формовка дна",
+          "unit": "кг",
+          "qtyCalc": 892.8508406135089,
+          "priceCatalog": 214.4
+        },
+        {
+          "kind": "ФОТ",
+          "category": "ФОТ",
+          "name": "ФОТ",
+          "unit": "чел. ч",
+          "qtyCalc": 649,
+          "priceCatalog": 1207.8
+        }
+      ],
+      "expect": {
+        "hoursFittings": 649,
+        "hoursRmu": 0,
+        "moldingMassKg": 892.8508406135089,
+        "pzrHours": 59,
+        "acetoneKg": 44.7,
+        "ppeUnits": 951,
+        "overheadHours": 708,
+        "costRub": 2289450.640227536,
+        "salePriceRub": 3274000
+      }
+    },
+    {
+      "name": "«изготов» — участок РМУ: в ПЗР, СИЗ и накладные не идёт, в себестоимость — идёт",
+      "tirage": 1,
+      "markup": 0.43,
+      "rates": {
+        "fotRub": 1207.8,
+        "overheadRub": 1584.73,
+        "acetoneRub": 109.4,
+        "ppeRub": 122
+      },
+      "rows": [
+        {
+          "kind": "ФОТ",
+          "category": "ФОТ",
+          "name": "Монтаж поплавковых выключателей",
+          "unit": "чел. ч",
+          "qtyCalc": 10,
+          "priceCatalog": 1207.8
+        },
+        {
+          "kind": "ФОТ",
+          "category": "ФОТ",
+          "name": "Изготовление рамы насосов",
+          "unit": "чел. ч",
+          "qtyCalc": 4,
+          "priceCatalog": 1207.8
+        },
+        {
+          "kind": "МАТЕРИАЛ",
+          "category": "Металлопрокат",
+          "name": "Уголок 50х50",
+          "unit": "м",
+          "qtyCalc": 12,
+          "priceCatalog": 310.5
+        }
+      ],
+      "expect": {
+        "hoursFittings": 10,
+        "hoursRmu": 4,
+        "moldingMassKg": 0,
+        "pzrHours": 1,
+        "acetoneKg": 0,
+        "ppeUnits": 312,
+        "overheadHours": 11,
+        "costRub": 77339.03,
+        "salePriceRub": 110600
+      }
+    },
+    {
+      "name": "покупное в кг не формуется: щебень — в материалы, ацетон только от операции (3.8)",
+      "tirage": 1,
+      "markup": 0.43,
+      "rates": {
+        "fotRub": 1207.8,
+        "overheadRub": 1584.73,
+        "acetoneRub": 109.4,
+        "ppeRub": 122
+      },
+      "rows": [
+        {
+          "kind": "ОПЕРАЦИЯ",
+          "category": "Собственное производство",
+          "name": "Ламинирование днища к корпусу",
+          "unit": "кг",
+          "qtyCalc": 70,
+          "priceCatalog": 214.4
+        },
+        {
+          "kind": "МАТЕРИАЛ",
+          "category": "Прочие материалы",
+          "name": "Щебень 5-20 мм",
+          "unit": "кг",
+          "qtyCalc": 500,
+          "priceCatalog": 3.2
+        },
+        {
+          "kind": "ФОТ",
+          "category": "ФОТ",
+          "name": "ФОТ",
+          "unit": "чел. ч",
+          "qtyCalc": 39.2,
+          "priceCatalog": 1207.8
+        }
+      ],
+      "expect": {
+        "hoursFittings": 39.2,
+        "hoursRmu": 0,
+        "moldingMassKg": 70,
+        "pzrHours": 3.6,
+        "acetoneKg": 3.5,
+        "ppeUnits": 342,
+        "overheadHours": 42.8,
+        "costRub": 178235.184,
+        "salePriceRub": 254900
+      }
+    },
+    {
+      "name": "тираж 3: трудоёмкость округляется до умножения, ПЗР и СИЗ нелинейны",
+      "tirage": 3,
+      "markup": 0.43,
+      "rates": {
+        "fotRub": 1207.8,
+        "overheadRub": 1584.73,
+        "acetoneRub": 109.4,
+        "ppeRub": 122
+      },
+      "rows": [
+        {
+          "kind": "ОПЕРАЦИЯ",
+          "category": "Собственное производство",
+          "name": "Формовка гильз",
+          "unit": "кг",
+          "qtyCalc": 2.2,
+          "priceCatalog": 310.2
+        },
+        {
+          "kind": "ФОТ",
+          "category": "ФОТ",
+          "name": "ФОТ",
+          "unit": "чел. ч",
+          "qtyCalc": 1.2320000000000002,
+          "priceCatalog": 1207.8
+        },
+        {
+          "kind": "МАТЕРИАЛ",
+          "category": "Метизы",
+          "name": "Анкер М16",
+          "unit": "шт",
+          "qtyCalc": 8,
+          "priceCatalog": 92.4
+        }
+      ],
+      "expect": {
+        "hoursFittings": 3.9,
+        "hoursRmu": 0,
+        "moldingMassKg": 6.6000000000000005,
+        "pzrHours": 0.4,
+        "acetoneKg": 0.4,
+        "ppeUnits": 306,
+        "overheadHours": 4.3,
+        "costRub": 53648.559,
+        "salePriceRub": 76800
+      }
+    },
+    {
+      "name": "ручная цена перекрывает прайс, ручное количество — расчётное",
+      "tirage": 1,
+      "markup": 0.3,
+      "rates": {
+        "fotRub": 1207.8,
+        "overheadRub": 1584.73,
+        "acetoneRub": 109.4,
+        "ppeRub": 122
+      },
+      "rows": [
+        {
+          "kind": "МАТЕРИАЛ",
+          "category": "Собственное производство",
+          "name": "Труба СК/НПС-К 3000-0,1-10000",
+          "unit": "м",
+          "qtyCalc": 11.6,
+          "qtyManual": "12",
+          "priceCatalog": null,
+          "priceManual": 20000
+        },
+        {
+          "kind": "ОПЕРАЦИЯ",
+          "category": "Собственное производство",
+          "name": "Придание товарного вида",
+          "unit": "кг",
+          "qtyCalc": 18.4,
+          "priceCatalog": 214.4,
+          "priceManual": 200
+        },
+        {
+          "kind": "ФОТ",
+          "category": "ФОТ",
+          "name": "ФОТ",
+          "unit": "чел. ч",
+          "qtyCalc": 5.152,
+          "priceCatalog": 1207.8
+        }
+      ],
+      "expect": {
+        "hoursFittings": 5.2,
+        "hoursRmu": 0,
+        "moldingMassKg": 18.4,
+        "pzrHours": 0.5,
+        "acetoneKg": 1,
+        "ppeUnits": 308,
+        "overheadHours": 5.7,
+        "costRub": 297282.821,
+        "salePriceRub": 386500
+      }
+    },
+    {
+      "name": "выключенная строка и строка без цены в итог не входят",
+      "tirage": 1,
+      "markup": 0.43,
+      "rates": {
+        "fotRub": 1207.8,
+        "overheadRub": 1584.73,
+        "acetoneRub": 109.4,
+        "ppeRub": 122
+      },
+      "rows": [
+        {
+          "kind": "МАТЕРИАЛ",
+          "category": "Насосы, АТМ",
+          "name": "Насос VSL.80.37.4.5.0D",
+          "unit": "шт",
+          "qtyCalc": 2,
+          "priceCatalog": null
+        },
+        {
+          "kind": "МАТЕРИАЛ",
+          "category": "Шкафы",
+          "name": "Шкаф управления",
+          "unit": "шт",
+          "qtyCalc": 1,
+          "priceCatalog": 150000,
+          "enabled": false
+        },
+        {
+          "kind": "ОПЕРАЦИЯ",
+          "category": "Собственное производство",
+          "name": "Формовка дна",
+          "unit": "кг",
+          "qtyCalc": 120,
+          "priceCatalog": 214.4
+        },
+        {
+          "kind": "ФОТ",
+          "category": "ФОТ",
+          "name": "ФОТ",
+          "unit": "чел. ч",
+          "qtyCalc": 33.6,
+          "priceCatalog": 1207.8
+        }
+      ],
+      "expect": {
+        "hoursFittings": 33.6,
+        "hoursRmu": 0,
+        "moldingMassKg": 120,
+        "pzrHours": 3.1,
+        "acetoneKg": 6,
+        "ppeUnits": 336,
+        "overheadHours": 36.7,
+        "costRub": 169862.25100000002,
+        "salePriceRub": 243000
+      }
+    },
+    {
+      "name": "пустое дерево: ПЗР нулевой, а СИЗ — базовые 302 ед.",
+      "tirage": 1,
+      "markup": 0.43,
+      "rates": {
+        "fotRub": 1207.8,
+        "overheadRub": 1584.73,
+        "acetoneRub": 109.4,
+        "ppeRub": 122
+      },
+      "rows": [],
+      "expect": {
+        "hoursFittings": 0,
+        "hoursRmu": 0,
+        "moldingMassKg": 0,
+        "pzrHours": 0,
+        "acetoneKg": 0,
+        "ppeUnits": 302,
+        "overheadHours": 0,
+        "costRub": 36844,
+        "salePriceRub": 52700
+      }
+    }
+  ]
+}

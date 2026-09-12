@@ -211,8 +211,8 @@ npm run db:seed                      # → в базу
 ## Тесты
 
 ```powershell
-cd ntt-calculator; npm test     # 903 теста в 51 файле
-cd backend;        npm test     # 312 тестов в 22 файлах
+cd ntt-calculator; npm test     # 910 тестов в 51 файле
+cd backend;        npm test     # 332 теста в 23 файлах
 node tools/check-doc-refs.mjs   # из корня: ссылки на код в документах — без номеров строк
 ```
 
