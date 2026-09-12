@@ -2,11 +2,16 @@
 #
 # Тесты (frontend, backend) и проверка ссылок на код в документах — на каждый
 # push и pull request.
-# Деплой — только при push в master, после зелёных тестов и только когда
-# заведены секреты сервера (без них задача пропускается, а не падает):
-#   на сервере git fetch + reset --hard + docker compose up -d --build (стек проверен, см.
-#   docker-compose.yml), и деплой ждёт, пока бэкенд станет healthy.
-#   Требуемые секреты репозитория перечислены в job deploy.
+# Деплой — только при push в master и после зелёных проверок. Способ выбирает
+# переменная репозитория DEPLOY_MODE (Settings → Secrets and variables →
+# Actions → Variables):
+#   ssh          — GitHub заходит на машину по SSH (нужен доступ снаружи и
+#                  секреты DEPLOY_SSH_*);
+#   self-hosted  — машина сама забирает задание агентом GitHub: наружу она не
+#                  открыта (внутренняя сеть), достаточно исходящих соединений;
+#   не задана    — выкладки нет, задачи пропускаются, прогон остаётся зелёным.
+# В обоих способах шаг один и тот же: git reset --hard + docker compose up -d
+# --build --wait, и выкладка ждёт, пока бэкенд станет healthy.
 
 name: CI/CD
 
@@ -126,7 +131,7 @@ jobs:
   deploy-ready:
     name: Секреты выкладки заданы
     needs: [frontend, backend, docs]
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: vars.DEPLOY_MODE == 'ssh' && github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       ready: ${{ steps.check.outputs.ready }}
@@ -134,6 +139,25 @@ jobs:
       - id: check
         # Значения секретов сюда не попадают — только «заданы или нет».
         run: echo "ready=${{ secrets.DEPLOY_SSH_HOST != '' && secrets.DEPLOY_SSH_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+  # Машина во внутренней сети: снаружи её не видно, поэтому задание забирает
+  # агент GitHub, установленный на ней самой (метка `ntt-deploy`). Репозиторий
+  # здесь НЕ выкачивается: обновляется рабочая установка в DEPLOY_PATH со своим
+  # `.env`, томами и дампами — тем же скриптом, что и cron.
+  #
+  # ⚠️ Репозиторий публичный: задача выполняется на вашей машине, поэтому она
+  # ограничена push в master. Проверки pull request'ов, в том числе из чужих
+  # форков, идут на машинах GitHub и сюда не попадают.
+  deploy-local:
+    name: Выкладка агентом на машине
+    needs: [frontend, backend, docs]
+    if: vars.DEPLOY_MODE == 'self-hosted' && github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: [self-hosted, ntt-deploy]
+    steps:
+      - name: Обновить установку и пересобрать стек
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/CalcKP' }}
+        run: bash "$DEPLOY_PATH/deploy/update.sh"
 
   deploy:
     name: Деплой на сервер (SSH)
