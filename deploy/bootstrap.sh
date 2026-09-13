@@ -17,7 +17,7 @@
 #   --url URL          внешний адрес приложения (по умолчанию http://<IP машины>)
 #   --token TOKEN      токен GitHub на чтение (нужен, только если репозиторий закроют)
 #   --install-docker   поставить Docker официальным скриптом get.docker.com
-#   --skip-firewall    не трогать ufw
+#   --skip-firewall    не трогать ufw (файрвол ведёт сеть компании или площадка)
 #   --skip-swap        не создавать swap-файл
 #
 # Docker по умолчанию НЕ ставится: установка чужим скриптом из сети — решение
@@ -98,11 +98,22 @@ fi
 if [ "$SKIP_FIREWALL" = 0 ]; then
   say "Файрвол: SSH, HTTP, HTTPS"
   if command -v ufw >/dev/null || apt-get install -y ufw >/dev/null 2>&1; then
-    ufw allow OpenSSH >/dev/null
+    # Порт SSH — до включения файрвола, и не только 22: если машина доступна
+    # лишь по SSH на нестандартном порту, «allow OpenSSH» отрезал бы
+    # единственный доступ. Собираем порт отовсюду, где он бывает задан:
+    # текущее подключение, конфигурация sshd и сокет systemd (Ubuntu 22.10+
+    # слушает SSH через ssh.socket, и Port из sshd_config там не действует).
+    SSH_PORTS="22 ${SSH_CONNECTION:+$(echo "$SSH_CONNECTION" | awk '{print $4}')}"
+    SSH_PORTS="$SSH_PORTS $(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}')"
+    SSH_PORTS="$SSH_PORTS $(systemctl show ssh.socket --property=Listen 2>/dev/null | grep -oE ':[0-9]+' | tr -d ':')"
+    # Слова — по одному в строку, цифры, без повторов, обратно в строку.
+    # shellcheck disable=SC2086
+    SSH_PORTS="$(printf '%s\n' $SSH_PORTS | grep -E '^[0-9]+$' | sort -un | xargs)"
+    for port in $SSH_PORTS; do ufw allow "$port/tcp" >/dev/null; done
     ufw allow 80/tcp >/dev/null
     ufw allow 443/tcp >/dev/null
     ufw --force enable >/dev/null
-    echo "   открыты 22, 80, 443"
+    echo "   открыты SSH ($SSH_PORTS), 80, 443"
   else
     echo "   ufw поставить не удалось — откройте 22, 80 и 443 средствами площадки" >&2
   fi

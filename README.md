@@ -141,7 +141,8 @@ docker compose --profile tools run --rm restore --yes latest  # восстано
 ## Развёртывание через GitHub
 
 Репозиторий: `https://github.com/BaukovGK/CalcKP.git`. CI/CD — в
-`.github/workflows/ci-cd.yml`. Пошаговый runbook — `РАЗВЁРТЫВАНИЕ.md`.
+`.github/workflows/ci-cd.yml`. Установка и обновление по SSH коротко —
+`deploy/README.md`, пошаговый runbook с объяснениями — `РАЗВЁРТЫВАНИЕ.md`.
 
 **Релиз:** `git push` в `master` (доступ по HTTPS + токен). Каждый push
 запускает CI, а при зелёных тестах — авто-деплой на сервер. Способ задаёт
