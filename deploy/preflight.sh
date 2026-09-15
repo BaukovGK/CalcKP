@@ -56,7 +56,7 @@ part "Репозиторий"
 if [ -d .git ]; then
   ok "ветка $(git rev-parse --abbrev-ref HEAD), коммит $(git rev-parse --short HEAD)"
   git remote get-url origin >/dev/null 2>&1 && ok "origin: $(git remote get-url origin | sed 's#//[^@]*@#//***@#')"
-  [ -n "$(git status --porcelain)" ] && warn "рабочее дерево изменено — деплой затрёт правки (git reset --hard)"
+  [ -n "$(git status --porcelain --untracked-files=no)" ] && warn "изменены файлы репозитория — деплой затрёт правки (git reset --hard)"
 else
   bad "это не клон репозитория: $ROOT"
 fi

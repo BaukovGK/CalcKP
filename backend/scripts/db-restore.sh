@@ -128,7 +128,7 @@ if [ -z "$CONFIRM" ]; then
 fi
 
 echo "db-restore: страховочный дамп текущего состояния перед заменой"
-BACKUP_LABEL=pre-restore BACKUP_DIR="$BACKUP_DIR" "$(dirname "$0")/db-backup.sh"
+BACKUP_LABEL=pre-restore BACKUP_DIR="$BACKUP_DIR" sh "$(dirname "$0")/db-backup.sh"
 
 echo "db-restore: восстанавливаю из $TARGET"
 # В чистую схему: --clean пересоздавал только объекты из дампа — таблицы и

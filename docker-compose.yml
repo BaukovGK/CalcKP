@@ -124,7 +124,9 @@ services:
     volumes: &backup-volumes
       - ./backups:/backups
       - ./backend/scripts:/scripts:ro
-    entrypoint: ['/scripts/db-backup.sh']
+    # Через sh, а не напрямую: скрипт смонтирован с хоста, и бит исполнения
+    # у него зависит от того, как файл попал в git (из Windows он теряется).
+    entrypoint: ['sh', '/scripts/db-backup.sh']
 
   # Восстановление — отдельным сервисом, а не флагом к предыдущему: операция
   # разрушающая, и запускать её нужно осознанно, целиком написав команду.
@@ -151,7 +153,7 @@ services:
       # Миграции программы: скрипт сверяет с ними миграции дампа — дамп новее
       # программы не восстанавливается (План_устранения 3.3).
       - ./backend/prisma/migrations:/migrations:ro
-    entrypoint: ['/scripts/db-restore.sh']
+    entrypoint: ['sh', '/scripts/db-restore.sh']
 
   web:
     build:
