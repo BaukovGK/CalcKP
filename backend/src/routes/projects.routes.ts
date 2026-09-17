@@ -58,6 +58,10 @@ projectsRouter.post('/', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), validate(c
       data: { ...req.body, authorId: (req as AuthRequest).userId! },
       include: { author: { select: { name: true } }, estimates: true },
     })
+    await audit((req as AuthRequest).userId, 'project.create', 'Project', project.id, {
+      title: project.title,
+      customer: project.customer,
+    })
     res.status(201).json(project)
   } catch (e) { next(e) }
 })
@@ -112,6 +116,12 @@ projectsRouter.patch('/:id', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), valida
       res.status(403).json({ message: 'Нет доступа' }); return
     }
     const updated = await prisma.project.update({ where: { id }, data: req.body })
+    // В журнал — что именно правили: карточка проекта попадает в КП (заказчик,
+    // объект, адрес), и «кто поменял заказчика» — вопрос, который задают.
+    await audit(auth.userId, 'project.update', 'Project', id, {
+      title: updated.title,
+      changed: Object.keys(req.body as Record<string, unknown>),
+    })
     res.json(updated)
   } catch (e) { next(e) }
 })

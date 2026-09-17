@@ -33,7 +33,37 @@ export interface AuditEntry {
   entityId:   string | null
   meta:       unknown
   createdAt:  string
-  user:       { name: string; email: string } | null
+  user:       { id: string; name: string; email: string; position?: string | null } | null
+}
+
+/** Отбор записей журнала — то же, что поля фильтра на экране. */
+export interface AuditFilter {
+  /** Сотрудник — id учётной записи. */
+  user?: string
+  /** Раздел («estimate») или точное действие («estimate.kp»). */
+  action?: string
+  /** Объект: id расчёта, проекта, сотрудника. */
+  entity?: string
+  /** Период — полными моментами: их считает браузер, по часам пользователя. */
+  from?: string
+  to?: string
+  q?: string
+  limit?: number
+  offset?: number
+}
+
+/** Страница журнала: записи и сколько их всего по этому отбору. */
+export interface AuditPage {
+  items: AuditEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
+/** Какие события встречаются в журнале — для выбора в отборе. */
+export interface AuditActionCount {
+  action: string
+  count: number
 }
 
 /** Файл дампа в каталоге бэкапов. */
@@ -79,8 +109,17 @@ export const adminApi = {
     return api.post<{ temporaryPassword: string }>(`/admin/users/${id}/password-reset`).then((r) => r.data)
   },
 
-  listAudit(): Promise<AuditEntry[]> {
-    return api.get<AuditEntry[]>('/admin/audit').then((r) => r.data)
+  /** Страница журнала действий по отбору. */
+  listAudit(filter: AuditFilter = {}): Promise<AuditPage> {
+    const params = Object.fromEntries(
+      Object.entries(filter).filter(([, v]) => v !== undefined && v !== '' && v !== null),
+    )
+    return api.get<AuditPage>('/admin/audit', { params }).then((r) => r.data)
+  },
+
+  /** Встречающиеся в журнале события — список для отбора. */
+  auditActions(): Promise<AuditActionCount[]> {
+    return api.get<AuditActionCount[]>('/admin/audit/actions').then((r) => r.data)
   },
 
   // ── Дампы базы ───────────────────────────────────────────────────────────

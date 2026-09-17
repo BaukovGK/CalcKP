@@ -8,7 +8,7 @@
       <div class="sidebar-scroll">
         <div class="nav-section">Разделы</div>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'users' }"  @click="tab = 'users'">Пользователи</button>
-        <button class="nav-link" :class="{ 'nav-link--active': tab === 'audit' }"  @click="tab = 'audit'; loadAudit()">Аудит-лог</button>
+        <button class="nav-link" :class="{ 'nav-link--active': tab === 'audit' }"  @click="tab = 'audit'; loadAudit()">Журнал действий</button>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'db' }"     @click="tab = 'db'; loadBackups()">База данных</button>
       </div>
       <div class="sidebar-footer">
@@ -108,28 +108,109 @@
         </table>
       </div>
 
-      <!-- ── Audit ── -->
+      <!-- ── Журнал действий ──
+           Кто, что и когда сделал. Таблица кодов («estimate.kp.export») читалась
+           только автором кода, поэтому здесь: понятные названия, отбор по
+           сотруднику, разделу и периоду, подробности события по щелчку. -->
       <div v-if="tab === 'audit'" class="calc-area">
-        <div v-if="auditLoading" class="dash-state"><div class="dash-state-txt">Загрузка…</div></div>
+        <div class="aud-filters">
+          <input
+            v-model="auditFilter.q"
+            v-hint="AUDIT_HINTS.search"
+            class="fi aud-search"
+            placeholder="Поиск по сотруднику, действию, объекту…"
+            @keyup.enter="reloadAudit"
+          />
+          <select v-model="auditFilter.user" v-hint="AUDIT_HINTS.user" class="fi" @change="reloadAudit">
+            <option value="">Все сотрудники</option>
+            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+          </select>
+          <select v-model="auditFilter.action" v-hint="AUDIT_HINTS.action" class="fi" @change="reloadAudit">
+            <option value="">Все разделы</option>
+            <optgroup label="Раздел целиком">
+              <option v-for="g in auditGroupsPresent" :key="g.key" :value="g.key">{{ g.label }}</option>
+            </optgroup>
+            <optgroup label="Отдельное действие">
+              <option v-for="a in auditActions" :key="a.action" :value="a.action">
+                {{ auditLabel(a.action) }} ({{ a.count }})
+              </option>
+            </optgroup>
+          </select>
+          <label class="aud-period" v-hint="AUDIT_HINTS.period">
+            с <input v-model="auditFilter.from" class="fi" type="date" @change="reloadAudit" />
+            по <input v-model="auditFilter.to" class="fi" type="date" @change="reloadAudit" />
+          </label>
+          <button class="btn btn-g" @click="resetAuditFilter">Сбросить</button>
+          <span class="aud-total">{{ auditTotalLabel }}</span>
+        </div>
+
+        <!-- Что отобрано сейчас. Отбор по объекту задаётся щелчком в таблице —
+             поля для него нет: идентификатор объекта руками не набирают. -->
+        <div v-if="auditChips.length" class="aud-chosen">
+          <span class="aud-chosen-lbl">Отобрано:</span>
+          <button
+            v-for="c in auditChips" :key="c.key"
+            v-hint.plain="'Снять это условие'"
+            class="aud-chosen-chip"
+            @click="dropAuditFilter(c.key)"
+          >{{ c.label }} ✕</button>
+        </div>
+
+        <div v-if="auditLoading && !auditLog.length" class="dash-state"><div class="dash-state-txt">Загрузка…</div></div>
         <div v-else-if="auditError" class="dash-state">
           <div class="dash-state-txt dash-err">{{ auditError }}</div>
+          <button class="btn btn-g" @click="reloadAudit">Повторить</button>
         </div>
-        <table v-else class="adm-table">
-          <thead>
-            <tr><th>Действие</th><th>Объект</th><th>Пользователь</th><th>Дата</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="e in auditLog" :key="e.id">
-              <td><span class="adm-action">{{ e.action }}</span></td>
-              <td class="adm-entity">{{ e.entityType ? `${e.entityType}:${e.entityId}` : '—' }}</td>
-              <td>{{ e.user ? e.user.name : '—' }}</td>
-              <td class="adm-date">{{ fmtDateTime(e.createdAt) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-if="!auditLoading && auditLog.length === 0" class="dash-state" style="height:auto;padding:40px 0">
-          <div class="dash-state-txt">Записей нет</div>
+        <div v-else-if="!auditLog.length" class="dash-state" style="height:auto;padding:40px 0">
+          <div class="dash-state-txt">По этому отбору записей нет</div>
         </div>
+        <template v-else>
+          <table class="adm-table aud-table">
+            <thead>
+              <tr><th>Когда</th><th>Сотрудник</th><th>Раздел</th><th>Действие</th><th>Подробности</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="e in auditLog" :key="e.id" :class="{ 'aud-row--alarm': isAlarming(e.action) }">
+                <td class="adm-date">{{ fmtDateTime(e.createdAt) }}</td>
+                <td>
+                  <button
+                    v-if="e.user"
+                    v-hint="AUDIT_HINTS.byUser"
+                    class="aud-link"
+                    @click="filterBy('user', e.user.id)"
+                  >{{ e.user.name }}</button>
+                  <template v-else>—</template>
+                  <span v-if="e.user?.position" class="aud-pos">{{ e.user.position }}</span>
+                </td>
+                <td class="aud-group">{{ auditGroupLabel(e.action) }}</td>
+                <td>
+                  <span class="adm-action">{{ auditLabel(e.action) }}</span>
+                  <button
+                    v-if="e.entityId && entityLabel(e.entityType)"
+                    v-hint="AUDIT_HINTS.byEntity"
+                    class="aud-link aud-entity"
+                    @click="filterBy('entity', e.entityId)"
+                  >{{ entityLabel(e.entityType) }} {{ shortId(e.entityId) }}</button>
+                  <button
+                    v-hint="AUDIT_HINTS.byAction"
+                    class="aud-link aud-only"
+                    @click="filterBy('action', e.action)"
+                  >только такие</button>
+                </td>
+                <td class="aud-meta">
+                  <span v-for="d in auditDetails(e.meta)" :key="d.label" class="aud-chip">
+                    {{ d.label }}: {{ d.value }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="auditLog.length < auditTotal" class="aud-more">
+            <button class="btn btn-g" :disabled="auditLoading" @click="loadMoreAudit">
+              {{ auditLoading ? 'Загрузка…' : `Показать ещё (осталось ${auditTotal - auditLog.length})` }}
+            </button>
+          </div>
+        </template>
       </div>
 
       <!-- ── База данных ── -->
@@ -176,7 +257,7 @@
       </p>
       <p class="db-note">
         Перед заменой сервер сам снимет дамп текущего состояния — вернуться будет куда.
-        Аудит-лог хранится в этой же базе, поэтому он тоже вернётся к состоянию на момент
+        Журнал действий хранится в этой же базе, поэтому он тоже вернётся к состоянию на момент
         дампа: записи о действиях после него исчезнут. Запись о самом восстановлении
         останется — она пишется после.
       </p>
@@ -274,7 +355,17 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { adminApi, type AdminUser, type AuditEntry, type DumpInfo } from '@/api/admin'
+import { adminApi, type AdminUser, type AuditActionCount, type AuditEntry, type DumpInfo } from '@/api/admin'
+import {
+  AUDIT_GROUPS,
+  auditDetails,
+  auditGroupKey,
+  auditGroupLabel,
+  auditLabel,
+  entityLabel,
+  isAlarming,
+} from '@/utils/audit-labels'
+import { AUDIT_HINTS } from '@/hints/account'
 import BaseModal   from '@/components/ui/BaseModal.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
@@ -287,7 +378,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const tab = ref<'users' | 'audit' | 'db'>('users')
 const tabTitle = computed(
-  () => ({ users: 'Пользователи', audit: 'Аудит-лог', db: 'База данных' })[tab.value],
+  () => ({ users: 'Пользователи', audit: 'Журнал действий', db: 'База данных' })[tab.value],
 )
 
 // ── Users ────────────────────────────────────────────────────────────────────
@@ -435,15 +526,132 @@ async function createUser() {
 const auditLog     = ref<AuditEntry[]>([])
 const auditLoading = ref(false)
 const auditError   = ref('')
+const auditTotal   = ref(0)
+const auditActions = ref<AuditActionCount[]>([])
 let auditLoaded = false
 
+/**
+ * Отбор: пустые поля в запрос не уходят.
+ *
+ * `entity` полем не показывается: идентификатор расчёта руками не набирают —
+ * он ставится щелчком по объекту в строке журнала. Так строится цепочка «всё,
+ * что происходило с этим расчётом», а из неё — «всё, что делал этот
+ * сотрудник».
+ */
+const auditFilter = reactive({ q: '', user: '', action: '', entity: '', from: '', to: '' })
+
+/** Короткий вид идентификатора: в журнале он uuid, читать его целиком незачем. */
+const shortId = (id: string) => id.slice(0, 8)
+
+/** Сколько записей просим за раз — «Показать ещё» добавляет столько же. */
+const AUDIT_PAGE = 50
+
+/**
+ * Разделы, которые в журнале действительно есть.
+ *
+ * Предлагать в отборе «Шаблоны», когда технолог ещё ничего не правил, —
+ * обещать пустой список.
+ */
+const auditGroupsPresent = computed(() =>
+  AUDIT_GROUPS.filter((g) => auditActions.value.some((a) => auditGroupKey(a.action) === g.key)),
+)
+
+const auditTotalLabel = computed(() =>
+  auditTotal.value === 0 ? '' : `показано ${auditLog.value.length} из ${auditTotal.value}`,
+)
+
+/**
+ * Границы периода — полными моментами по часам пользователя.
+ *
+ * Поле даты даёт «2026-09-17», а сервер живёт по UTC: без явного момента у
+ * московского пользователя день начинался бы в три часа ночи.
+ */
+function dayStart(value: string): string | undefined {
+  if (!value) return undefined
+  const d = new Date(`${value}T00:00:00`)
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+}
+function dayEnd(value: string): string | undefined {
+  if (!value) return undefined
+  const d = new Date(`${value}T23:59:59.999`)
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+}
+
+async function fetchAudit(offset: number) {
+  auditLoading.value = true
+  auditError.value = ''
+  try {
+    const page = await adminApi.listAudit({
+      q: auditFilter.q.trim() || undefined,
+      user: auditFilter.user || undefined,
+      action: auditFilter.action || undefined,
+      entity: auditFilter.entity || undefined,
+      from: dayStart(auditFilter.from),
+      to: dayEnd(auditFilter.to),
+      limit: AUDIT_PAGE,
+      offset,
+    })
+    auditLog.value = offset === 0 ? page.items : [...auditLog.value, ...page.items]
+    auditTotal.value = page.total
+    auditLoaded = true
+  } catch (e: unknown) {
+    const r = (e as { response?: { data?: { message?: string } } }).response
+    auditError.value = r?.data?.message ?? (e instanceof Error ? e.message : 'Ошибка загрузки')
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+/** Первый заход на вкладку: список событий для отбора — заодно. */
 async function loadAudit() {
   if (auditLoaded) return
-  auditLoading.value = true; auditError.value = ''
-  try { auditLog.value = await adminApi.listAudit(); auditLoaded = true }
-  catch (e: unknown) { auditError.value = e instanceof Error ? e.message : 'Ошибка загрузки' }
-  finally { auditLoading.value = false }
+  void adminApi.auditActions().then((list) => { auditActions.value = list }).catch(() => {})
+  await fetchAudit(0)
 }
+
+const reloadAudit = () => fetchAudit(0)
+const loadMoreAudit = () => fetchAudit(auditLog.value.length)
+
+function resetAuditFilter() {
+  auditFilter.q = ''; auditFilter.user = ''; auditFilter.action = ''; auditFilter.entity = ''
+  auditFilter.from = ''; auditFilter.to = ''
+  void reloadAudit()
+}
+
+/** Отобрать по значению из строки журнала: сотрудник, объект, действие. */
+function filterBy(key: 'user' | 'entity' | 'action', value: string) {
+  auditFilter[key] = value
+  void reloadAudit()
+}
+
+/** Снять одно условие, не трогая остальные. */
+function dropAuditFilter(key: keyof typeof auditFilter) {
+  auditFilter[key] = ''
+  void reloadAudit()
+}
+
+/** Что отобрано сейчас — подписями, которые можно снять по одной. */
+const auditChips = computed(() => {
+  const chips: Array<{ key: keyof typeof auditFilter; label: string }> = []
+  if (auditFilter.user) {
+    const u = users.value.find((x) => x.id === auditFilter.user)
+    chips.push({ key: 'user', label: `Сотрудник: ${u?.name ?? shortId(auditFilter.user)}` })
+  }
+  if (auditFilter.action) {
+    const isGroup = !auditFilter.action.includes('.')
+    chips.push({
+      key: 'action',
+      label: isGroup
+        ? `Раздел: ${AUDIT_GROUPS.find((g) => g.key === auditFilter.action)?.label ?? auditFilter.action}`
+        : `Действие: ${auditLabel(auditFilter.action)}`,
+    })
+  }
+  if (auditFilter.entity) chips.push({ key: 'entity', label: `Объект: ${shortId(auditFilter.entity)}` })
+  if (auditFilter.q) chips.push({ key: 'q', label: `Поиск: ${auditFilter.q}` })
+  if (auditFilter.from) chips.push({ key: 'from', label: `С ${auditFilter.from}` })
+  if (auditFilter.to) chips.push({ key: 'to', label: `По ${auditFilter.to}` })
+  return chips
+})
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -570,6 +778,34 @@ onMounted(loadUsers)
 .adm-table tr:hover td { background: var(--bg3); }
 
 .adm-email  { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--tx3); }
+
+/* Журнал действий */
+.aud-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid var(--bd); }
+.aud-search  { flex: 1; min-width: 220px; }
+.aud-period  { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--tx3); }
+.aud-period input { width: 140px; }
+.aud-total   { margin-left: auto; font-size: 12px; color: var(--tx3); white-space: nowrap; }
+.aud-table td { vertical-align: top; }
+.aud-row--alarm td:first-child { box-shadow: inset 2px 0 0 var(--danger); }
+.aud-pos     { display: block; font-size: 11.4px; color: var(--tx3); }
+.aud-group   { font-size: 12px; color: var(--tx3); white-space: nowrap; }
+.aud-entity  { margin-left: 6px; font-size: 11.4px; color: var(--tx3); border-bottom: 1px dotted var(--bd2); }
+.aud-meta    { display: flex; flex-wrap: wrap; gap: 4px; }
+.aud-chip    { font-size: 11.4px; color: var(--tx2); background: var(--bg3); border: 1px solid var(--bd);
+  border-radius: 3px; padding: 1px 5px; max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.aud-more    { display: flex; justify-content: center; padding: 12px; }
+.aud-chosen  { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 12px;
+  border-bottom: 1px solid var(--bd); background: var(--bg2); }
+.aud-chosen-lbl  { font-size: 11.4px; color: var(--tx3); }
+.aud-chosen-chip { font: inherit; font-size: 11.4px; color: var(--am); background: transparent;
+  border: 1px solid var(--am); border-radius: 3px; padding: 1px 6px; cursor: pointer; }
+.aud-chosen-chip:hover { background: var(--bg3); }
+.aud-link    { font: inherit; font-size: inherit; color: var(--tx1); background: transparent; border: none;
+  padding: 0; cursor: pointer; text-align: left; border-bottom: 1px dotted var(--bd2); }
+.aud-link:hover { color: var(--am); border-bottom-color: var(--am); }
+.aud-only    { margin-left: 6px; font-size: 11.4px; color: var(--tx3); }
 /* ФИО, должность и телефон правятся прямо в таблице: заводятся они редко, а
    дополнять их приходится у всех учётных записей сразу. */
 .adm-inline { width: 100%; min-width: 120px; font-size: 12.6px; padding: 2px 6px; }

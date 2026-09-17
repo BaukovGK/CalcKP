@@ -56,6 +56,11 @@ authRouter.post('/login', limitByIp(loginByIp, 'Слишком много поп
     const user = await prisma.user.findUnique({ where: { email } })
     if (!user || !user.isActive || !(await bcrypt.compare(password, user.passwordHash))) {
       failedByEmail.hit(key)
+      // Причина — администратору: «нет такой почты», «учётка заблокирована» и
+      // «неверный пароль» требуют разных действий. Ответ клиенту при этом
+      // остаётся одинаковым: снаружи существование учётки не подтверждаем.
+      const reason = !user ? 'нет такой учётной записи' : !user.isActive ? 'учётная запись заблокирована' : 'неверный пароль'
+      await audit(user?.id ?? null, 'auth.login_failed', 'User', user?.id, { email: key, reason })
       res.status(401).json({ message: 'Неверный email или пароль' }); return
     }
     failedByEmail.reset(key)
@@ -70,11 +75,22 @@ authRouter.post('/login', limitByIp(loginByIp, 'Слишком много поп
       signAccess(payload),
       signRefresh(payload),
     ])
+    await audit(user.id, 'auth.login', 'User', user.id, { email: user.email })
     res.json({
       accessToken,
       refreshToken,
       // mustChangePassword — экран ведёт на смену пароля, API до неё закрыт.
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, mustChangePassword: user.mustChangePassword },
+      // Должность и телефон идут сразу: экран настроек показывает карточку
+      // не дожидаясь `/auth/me`.
+      user: {
+        id: user.id,
+        name: user.name,
+        position: user.position,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      },
     })
   } catch (e) { next(e) }
 })
@@ -195,8 +211,11 @@ authRouter.post('/password', requireAuthForPasswordChange, validate(changePasswo
  * Отдельный токен сервер не отзывает — для этого «Выйти на всех
  * устройствах» ниже. Открыт и до обязательной смены пароля.
  */
-authRouter.delete('/logout', requireAuthForPasswordChange, async (_req: AuthRequest, res: Response, next) => {
+authRouter.delete('/logout', requireAuthForPasswordChange, async (req: AuthRequest, res: Response, next) => {
   try {
+    // Токены удаляет клиент, а журналу важно, что сеанс закончили намеренно:
+    // рядом с записью о входе видно, сколько он длился.
+    await audit(req.userId, 'auth.logout', 'User', req.userId)
     res.status(204).send()
   } catch (e) { next(e) }
 })

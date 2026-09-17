@@ -6,6 +6,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
+import { auditWhere, parseAuditQuery } from '../utils/audit-query'
 import multer from 'multer'
 import { randomUUID } from 'node:crypto'
 import { stat, unlink } from 'node:fs/promises'
@@ -354,13 +355,43 @@ adminRouter.post('/backups/:name/restore', validate(restoreSchema), async (req, 
 })
 
 // GET /api/admin/audit
-adminRouter.get('/audit', async (_req, res: Response, next: NextFunction) => {
+adminRouter.get('/audit', async (req, res: Response, next: NextFunction) => {
   try {
-    const logs = await prisma.auditLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      include: { user: { select: { name: true, email: true } } },
-    })
-    res.json(logs)
+    const parsed = parseAuditQuery(req.query as Record<string, unknown>)
+    if (!parsed.ok) { res.status(400).json({ message: parsed.message }); return }
+    const { limit, offset } = parsed.query
+    const where = auditWhere(parsed.query)
+
+    // Общее число — рядом с записями: без него страничная выдача не знает,
+    // есть ли что показывать дальше.
+    const [items, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+        include: { user: { select: { id: true, name: true, email: true, position: true } } },
+      }),
+      prisma.auditLog.count({ where }),
+    ])
+    res.json({ items, total, limit, offset })
+  } catch (e) { next(e) }
+})
+
+/**
+ * GET /api/admin/audit/actions — какие события вообще встречаются в журнале.
+ *
+ * Список для отбора собирается из самого журнала, а не из словаря в коде: в
+ * молодой установке половины событий ещё не было, и предлагать их в фильтре
+ * незачем.
+ */
+adminRouter.get('/audit/actions', async (_req, res: Response, next: NextFunction) => {
+  try {
+    const rows = await prisma.auditLog.groupBy({ by: ['action'], _count: { action: true } })
+    res.json(
+      rows
+        .map((r) => ({ action: r.action, count: r._count.action }))
+        .sort((a, b) => a.action.localeCompare(b.action)),
+    )
   } catch (e) { next(e) }
 })
