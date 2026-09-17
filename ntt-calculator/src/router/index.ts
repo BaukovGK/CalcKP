@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { homeRedirect, passwordGate, surveyGate } from './guards'
+import { isStaleChunkError, shouldReload } from './stale-chunk'
 import { useAuthStore } from '@/stores/auth'
 import type { UserRole } from '@/stores/auth'
 
@@ -165,6 +166,19 @@ router.beforeEach(async (to, from) => {
   if (home) return home
 
   return true
+})
+
+/**
+ * Вкладка открыта до выкладки — экраны догружаются бандлами, которых на сервере
+ * уже нет: имена сменились при сборке. Переход отклонялся молча, и кнопка
+ * выглядела сломанной. Перезагружаем страницу по тому же адресу: придёт свежий
+ * `index.html`, за ним новые бандлы, и пользователь окажется там, куда шёл.
+ */
+router.onError((err, to) => {
+  if (!isStaleChunkError(err)) return
+  const memory = typeof sessionStorage === 'undefined' ? null : sessionStorage
+  if (!shouldReload(to.fullPath, Date.now(), memory)) return
+  window.location.assign(to.fullPath)
 })
 
 export default router

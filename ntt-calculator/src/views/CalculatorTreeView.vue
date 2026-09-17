@@ -37,7 +37,7 @@
           <span v-if="saveLabel" v-hint="SAVE_HINT" class="tb-save" :class="`tb-save--${autosave.status.value}`">{{ saveLabel }}</span>
           <button class="btn" :disabled="autosave.status.value === 'saving'" @click="onSave">Сохранить</button>
           <button v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
-          <button v-hint="'Заявка на закупку: покупные позиции расчёта с количествами, для отдела закупок'" class="btn" @click="onExport">Экспорт ▾</button>
+          <button v-hint="'Заявка на закупку: покупные позиции расчёта с количествами, для отдела закупок. Открывается отдельным экраном, оттуда выгружается в xlsx'" class="btn" @click="onExport">Экспорт</button>
           <button v-hint="KP_HINT" class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
         </template>
         <button v-else v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
