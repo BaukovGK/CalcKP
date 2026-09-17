@@ -50,6 +50,15 @@
             @open="router.push(`/projects/${$event}`)"
             @delete="askDeleteProject($event, p.title)"
           />
+
+          <!-- «Новый проект» на виду и когда проекты уже есть — плиткой в
+               конце сетки, как «Добавить оборудование» на экране проекта.
+               В шапке кнопка теряется среди служебных, а в пустом состоянии
+               исчезает после первого же проекта. При поиске плитки нет:
+               там сетка показывает найденное, а не предлагает завести новое. -->
+          <button v-if="canCreate && !search.trim()" class="dash-add" @click="newOpen = true">
+            ＋ Новый проект
+          </button>
         </div>
       </div>
     </div>
@@ -186,6 +195,12 @@ onMounted(() => projects.fetchAll())
 .dash-filters { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg1); flex-shrink: 0; }
 .dash-search  { flex: 1; min-width: 0; }
 .dash-grid    { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; padding: 12px; align-content: start; }
+/* Плитка «Новый проект» — тот же вид, что «Добавить оборудование» в проекте:
+   пунктир акцентным цветом, высота карточки проекта. */
+.dash-add     { border: 1px dashed var(--accent); border-radius: 6px; background: transparent;
+  color: var(--accent); font: inherit; font-size: 13.2px; font-weight: 600;
+  padding: 11px 13px; min-height: 96px; cursor: pointer; transition: background .15s; }
+.dash-add:hover { background: var(--bg3); }
 .dash-state   { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
 .dash-state-txt { font-size: 14.4px; color: var(--tx3); }
 .dash-err     { color: var(--danger); }
