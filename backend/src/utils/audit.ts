@@ -28,6 +28,15 @@ export type AuditAction =
   /** Выход на этом устройстве. */
   | 'auth.logout'
   | 'estimate.create'
+  /**
+   * Правка опросного листа — какие ответы изменились.
+   *
+   * Лист сохраняется часто (экран пишет его через полторы секунды после
+   * правки), поэтому запись одна на сеанс правок: повторы в течение окна
+   * дописываются к ней (`auditRepeating`). Сохранения дерева и цен сюда не
+   * попадают — сравниваются только ответы листа (`utils/survey-diff.ts`).
+   */
+  | 'estimate.survey'
   /** Расчёт удалён — необратимо; в meta — название, тип, проект и итог. */
   | 'estimate.delete'
   | 'estimate.status_change'
@@ -78,18 +87,66 @@ export type AuditAction =
   /** Мс — масса формованных слоёв на стыке, f(Dу, PN). */
   | 'template.joint_layer.upsert'
   /**
-   * Каталог узлов (редактор шаблонов, этап 2): новый узел, публикация версии,
-   * откат к прежней, архив, отмена черновика. Сохранения черновика не пишутся.
+   * Каталог узлов (редактор шаблонов, этап 2): новый узел, сохранение и
+   * публикация черновика, откат к прежней версии, архив, отмена.
    */
   | 'template.node.create'
+  /** Черновик узла сохранён — кнопкой, поэтому событие своё. */
+  | 'template.node.draft'
   | 'template.node.publish'
   | 'template.node.activate'
   | 'template.node.archive'
   | 'template.node.discard'
-  /** Шаблон изделия: публикация версии, откат (к версии или встроенному), отмена черновика. */
+  /** Шаблон изделия: черновик, публикация версии, откат, отмена черновика. */
+  | 'template.product.draft'
   | 'template.product.publish'
   | 'template.product.activate'
   | 'template.product.discard'
+
+/**
+ * Частое событие — одной записью на сеанс.
+ *
+ * Правка опросного листа доходит до сервера несколько раз подряд: экран
+ * сохраняет лист сам. Отдельная запись на каждое сохранение превратила бы
+ * журнал в ленту «сохранено, сохранено, сохранено», где не видно остального.
+ * Поэтому повтор того же события тем же сотрудником по тому же объекту в
+ * течение окна дописывается к прежней записи: `merge` решает, что станет с её
+ * подробностями, а время сдвигается на последнюю правку.
+ *
+ * Не бросает — как и `audit`: сбой журнала не отменяет уже сделанное.
+ */
+export async function auditRepeating(
+  userId: string | null | undefined,
+  action: AuditAction,
+  entityType: string,
+  entityId: string,
+  meta: Record<string, unknown>,
+  merge: (previous: Record<string, unknown>) => Record<string, unknown>,
+  windowMs = 10 * 60 * 1000,
+): Promise<void> {
+  try {
+    const since = new Date(Date.now() - windowMs)
+    const previous = await prisma.auditLog.findFirst({
+      where: { action, entityId, userId: userId ?? null, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (!previous) {
+      await audit(userId, action, entityType, entityId, meta as Prisma.InputJsonValue)
+      return
+    }
+    const before = (previous.meta ?? {}) as Record<string, unknown>
+    await prisma.auditLog.update({
+      where: { id: previous.id },
+      data: { meta: merge(before) as Prisma.InputJsonValue, createdAt: new Date() },
+    })
+  } catch (e) {
+    logger.error('Не удалось дописать событие аудита', {
+      action,
+      entityId,
+      error: e instanceof Error ? e.message : String(e),
+    })
+  }
+}
 
 export async function audit(
   userId: string | null | undefined,

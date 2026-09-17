@@ -190,6 +190,9 @@ pricesRouter.post(
         file: file.originalname,
         sheet: sheetName,
         created: plan.created.length,
+        // Не только «сколько добавлено», но и что именно: вопрос «откуда в
+        // прайсе эта позиция» без имён не закрыть.
+        createdNames: plan.created.slice(0, 10).map((p) => p.name),
         updated: plan.changed.length,
         touched: plan.touched,
         unchanged: plan.unchanged,

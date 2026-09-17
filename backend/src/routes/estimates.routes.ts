@@ -4,7 +4,7 @@ import { prisma } from '../utils/prisma'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
-import { audit } from '../utils/audit'
+import { audit, auditRepeating } from '../utils/audit'
 import { canAccessEstimate, canReadEstimate, seesAllEstimates } from '../utils/access'
 import { verifyKpTotal } from '../utils/estimate-economics'
 import { ESTIMATE_CHANGED, isStaleTreeWrite, isSurveyRevRegression, isVersionConflict, SURVEY_CHANGED } from '../utils/survey-write'
@@ -19,6 +19,7 @@ import {
   treeTemplateVersion,
   tirageOf,
 } from '../utils/estimate-tree'
+import { changeText, surveyChanges, SURVEY_CHANGES_MAX } from '../utils/survey-diff'
 import { buildKpDocument, documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
@@ -856,6 +857,33 @@ estimatesRouter.patch('/:id/survey', requireRole('ADMIN', 'MANAGER', 'ENGINEER')
       })
       return
     }
+
+    // В журнал — только правки ОТВЕТОВ листа: сохранение дерева и цен доходит
+    // сюда тем же маршрутом, но событием ОЛ не является. Повторные правки
+    // одного сеанса дописываются к одной записи, иначе журнал превратился бы в
+    // ленту «сохранено» (`utils/survey-diff.ts`, `auditRepeating`).
+    const changes = surveyChanges(estimate.surveyData, merged)
+    if (changes.length > 0) {
+      const texts = changes.map(changeText)
+      await auditRepeating(
+        auth.userId,
+        'estimate.survey',
+        'Estimate',
+        id,
+        { title: estimate.title, changed: texts.slice(0, SURVEY_CHANGES_MAX), edits: 1 },
+        (previous) => {
+          const before = Array.isArray(previous.changed) ? (previous.changed as string[]) : []
+          const all = [...new Set([...before, ...texts])]
+          return {
+            title: estimate.title,
+            changed: all.slice(0, SURVEY_CHANGES_MAX),
+            more: Math.max(0, all.length - SURVEY_CHANGES_MAX),
+            edits: (typeof previous.edits === 'number' ? previous.edits : 1) + 1,
+          }
+        },
+      )
+    }
+
     res.json(updated)
   } catch (e) { next(e) }
 })

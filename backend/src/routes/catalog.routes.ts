@@ -5,7 +5,7 @@ import type { Response, NextFunction } from 'express'
 import { prisma } from '../utils/prisma'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
-import { audit } from '../utils/audit'
+import { audit, auditRepeating } from '../utils/audit'
 import {
   isReservedCode,
   nextVersion,
@@ -114,6 +114,20 @@ catalogRouter.put('/catalog/:code/draft', async (req, res: Response, next: NextF
     const found = await prisma.nodeDef.findUnique({ where: { code } })
     if (!found) { res.status(404).json({ message: `Узла ${code} нет` }); return }
     const node = await prisma.nodeDef.update({ where: { code }, data: { draft: p.data as Prisma.InputJsonValue } })
+    // Черновик сохраняют кнопкой, и именно в нём узел приобретает вид, который
+    // потом публикуют: правку видно в журнале, не дожидаясь публикации. Повторы
+    // одного сеанса дописываются к одной записи.
+    await auditRepeating(
+      (req as AuthRequest).userId,
+      'template.node.draft',
+      'NodeDef',
+      code,
+      { name: p.data.name, saves: 1 },
+      (previous) => ({
+        name: p.data.name,
+        saves: (typeof previous.saves === 'number' ? previous.saves : 1) + 1,
+      }),
+    )
     res.json({ code, draft: node.draft, updatedAt: node.updatedAt })
   } catch (e) { next(e) }
 })
@@ -266,6 +280,17 @@ catalogRouter.put('/products/:device/draft', async (req, res: Response, next: Ne
       update: { draft },
       create: { deviceType: device, draft },
     })
+    await auditRepeating(
+      (req as AuthRequest).userId,
+      'template.product.draft',
+      'ProductTemplate',
+      device,
+      { device, saves: 1 },
+      (previous) => ({
+        device,
+        saves: (typeof previous.saves === 'number' ? previous.saves : 1) + 1,
+      }),
+    )
     res.json({ deviceType: device, draft: t.draft, updatedAt: t.updatedAt })
   } catch (e) { next(e) }
 })

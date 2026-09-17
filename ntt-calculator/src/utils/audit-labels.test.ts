@@ -39,6 +39,24 @@ describe('названия событий', () => {
     }
   })
 
+  it('правка опросного листа читается как событие, а не как «сохранено»', () => {
+    expect(auditLabel('estimate.survey')).toBe('Правка опросного листа')
+    // Подробности несут сами изменения: «DN корпуса: 2000 → 3000».
+    expect(auditDetails({ changed: ['DN корпуса: 2000 → 3000'], edits: 7 })).toEqual([
+      { label: 'изменения', value: 'DN корпуса: 2000 → 3000' },
+      { label: 'правок', value: '7' },
+    ])
+  })
+
+  it('черновики шаблонов и добавленные позиции прайса — со своими подписями', () => {
+    expect(auditLabel('template.node.draft')).toBe('Сохранён черновик узла')
+    expect(auditLabel('template.product.draft')).toBe('Сохранён черновик шаблона')
+    expect(auditDetails({ created: 3, createdNames: ['Люк', 'Насос'] })).toEqual([
+      { label: 'добавлено', value: '3' },
+      { label: 'добавлены', value: 'Люк, Насос' },
+    ])
+  })
+
   it('заметные события отмечаются: удаления, восстановление, подбор пароля', () => {
     expect(isAlarming('auth.login_failed')).toBe(true)
     expect(isAlarming('estimate.delete')).toBe(true)
@@ -64,7 +82,7 @@ describe('подробности события', () => {
 
   it('списки — через запятую, признаки — словами', () => {
     expect(auditDetails({ changed: ['title', 'customer'], isActive: false })).toEqual([
-      { label: 'поля', value: 'title, customer' },
+      { label: 'изменения', value: 'title, customer' },
       { label: 'активна', value: 'нет' },
     ])
   })
