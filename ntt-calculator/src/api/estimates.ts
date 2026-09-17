@@ -209,8 +209,11 @@ export const estimatesApi = {
    * Строится из снапшота, а не из текущего дерева: расчёт после выпуска КП
    * продолжает правиться, а документ обязан воспроизводить согласованную
    * редакцию. Без `version` берётся последняя.
+   *
+   * Форматов три: .docx и .pdf — отправить заказчику, .xlsx — тот, в котором
+   * коммерческий отдел ведёт КП дальше. Содержание у всех трёх одно.
    */
-  kpExport(id: string, format: 'docx' | 'pdf', version?: number): Promise<Blob> {
+  kpExport(id: string, format: 'docx' | 'pdf' | 'xlsx', version?: number): Promise<Blob> {
     return api
       .get(`/estimates/${id}/kp/export`, {
         params: { format, ...(version != null ? { version } : {}) },

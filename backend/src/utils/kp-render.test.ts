@@ -1,15 +1,18 @@
 /**
  * Печатная форма КП собирается и открывается: docx — zip с документом, PDF —
- * настоящий PDF с кириллицей.
+ * настоящий PDF с кириллицей, xlsx — книга, которую можно прочитать обратно.
  *
- * Вёрстку эти тесты не проверяют (для этого её надо смотреть глазами), но
- * ловят то, что ломается молча: несобираемый документ, пустой буфер, потерю
- * шрифта с кириллицей.
+ * Вёрстку docx и PDF эти тесты не проверяют (для этого её надо смотреть
+ * глазами), но ловят то, что ломается молча: несобираемый документ, пустой
+ * буфер, потерю шрифта с кириллицей. У xlsx проверяется и раскладка: книга
+ * читается обратно, и видно, что в каких ячейках лежит.
  */
+import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import { buildKpDocument, type KpDocumentInput } from './kp-document'
 import { renderKpDocx } from './kp-docx'
 import { renderKpPdf } from './kp-pdf'
+import { renderKpXlsx } from './kp-xlsx'
 
 /** Опросный лист КНС — как его сохраняет экран ОЛ. */
 const survey = {
@@ -98,4 +101,140 @@ describe('печать КП', () => {
     expect(body.subarray(0, 5).toString('latin1')).toBe('%PDF-')
     expect(body.subarray(-6).toString('latin1')).toContain('EOF')
   })
+
+  it('xlsx собирается и читается обратно книгой', async () => {
+    const ws = await sheetOf(doc)
+
+    expect(ws.name).toBe('КП')
+    // Документ живёт в B…G: колонка A — служебный отступ образца.
+    expect(ws.getColumn(1).width).toBeLessThan(4)
+    expect(ws.getColumn(3).width).toBeGreaterThan(50) // наименование — самая широкая
+  })
+
+  it('шапка таблицы — подписи колонок образца', async () => {
+    const ws = await sheetOf(doc)
+    const head = headRow(ws)
+
+    expect(row(ws, head)).toEqual([
+      '№',
+      'Наименование номенклатуры',
+      'Кол-во',
+      'Ед. изм.',
+      'Цена, руб.',
+      'Сумма, руб.',
+    ])
+  })
+
+  it('строка позиции: номер текстом, количество, цена и сумма числами', async () => {
+    const ws = await sheetOf(doc)
+    const at = headRow(ws) + 1
+    const cells = ws.getRow(at)
+
+    expect(cells.getCell(2).value).toBe('1.1')
+    // Номер — текст: числом Excel показал бы «1,1».
+    expect(cells.getCell(2).numFmt).toBe('@')
+    expect(String(cells.getCell(3).value)).toContain('В комплекте:')
+    expect(cells.getCell(3).alignment?.wrapText).toBe(true)
+    expect(cells.getCell(4).value).toBe(2)
+    expect(cells.getCell(5).value).toBe('компл.')
+    expect(cells.getCell(6).value).toBe(1_200_000)
+    expect(cells.getCell(7).value).toBe(2_400_000)
+    expect(cells.getCell(7).numFmt).toBe('# ##0.00')
+  })
+
+  it('итог — формулой СУММ по колонке сумм, и она сходится со снапшотом', async () => {
+    const ws = await sheetOf(doc)
+    const at = rowWith(ws, 'Общая сумма:')
+    const cells = ws.getRow(at)
+
+    const total = cells.getCell(7).value as { formula: string; result: number }
+    expect(total.formula).toMatch(/^SUM\(G\d+:G\d+\)$/)
+    // Значение в ячейке — точная сумма снапшота, а не произведение округлённой
+    // цены на количество.
+    expect(total.result).toBe(doc.totalRub)
+  })
+
+  it('длинное описание растягивается на объединённые строки, а не режется', async () => {
+    const ws = await sheetOf(doc)
+    const at = headRow(ws) + 1
+    const used = rowWith(ws, 'Общая сумма:') - at
+
+    // Описание КНС — под две тысячи знаков, в 409 пт высоты строки оно не
+    // влезает: позиция занимает несколько строк листа, как в образце.
+    expect(used).toBeGreaterThan(1)
+    // Текст при этом целый и лежит в одной ячейке — границы посередине нет.
+    expect(String(ws.getCell(`C${at}`).value)).toBe(doc.positions[0]!.description)
+
+    for (let c = 2; c <= 7; c++) {
+      const cell = ws.getRow(at + 1).getCell(c)
+      expect(cell.isMerged).toBe(true)
+      expect(cell.master.row).toBe(at)
+    }
+
+    // Ни одна строка не выходит за предел высоты, а вместе они вмещают текст.
+    let sum = 0
+    for (let i = 0; i < used; i++) {
+      const h = ws.getRow(at + i).height
+      expect(h).toBeLessThanOrEqual(409)
+      sum += h
+    }
+    expect(sum).toBeGreaterThan(409)
+  })
+
+  it('условия печатаются девятью пунктами', async () => {
+    const ws = await sheetOf(doc)
+    const numbered: string[] = []
+    ws.eachRow((r) => {
+      const v = r.getCell(2).value
+      if (typeof v === 'string' && /^[1-9]\. /.test(v)) numbered.push(v)
+    })
+
+    expect(numbered).toHaveLength(9)
+    expect(numbered[0]).toContain('НДС 22 %')
+    expect(numbered[2]).toContain('ГОСТ Р 54560-2015')
+  })
+
+  it('лист готов к печати: A4, подгонка по ширине, без сетки', async () => {
+    const ws = await sheetOf(doc)
+
+    expect(ws.pageSetup.orientation).toBe('portrait')
+    expect(ws.pageSetup.fitToWidth).toBe(1)
+    expect(ws.pageSetup.fitToHeight).toBe(0)
+    // Служебных колонок правее G на печать не выходит.
+    expect(ws.pageSetup.printArea).toMatch(/^A1:G\d+$/)
+    expect(ws.views[0]?.showGridLines).toBe(false)
+  })
 })
+
+/** Книгу читаем обратно тем же ExcelJS: так виден результат, а не намерение. */
+async function sheetOf(doc: Parameters<typeof renderKpXlsx>[0]): Promise<ExcelJS.Worksheet> {
+  const body = await renderKpXlsx(doc)
+  expect(body.subarray(0, 2).toString('latin1')).toBe('PK')
+
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(body)
+  const ws = wb.worksheets[0]
+  if (!ws) throw new Error('в книге нет листов')
+  return ws
+}
+
+/** Номер строки с шапкой таблицы. */
+function headRow(ws: ExcelJS.Worksheet): number {
+  return rowWith(ws, '№')
+}
+
+/** Номер первой строки, у которой в колонке B ровно такой текст. */
+function rowWith(ws: ExcelJS.Worksheet, text: string): number {
+  let at = 0
+  ws.eachRow((r, i) => {
+    if (at === 0 && r.getCell(2).value === text) at = i
+  })
+  if (at === 0) throw new Error(`строка «${text}» не найдена`)
+  return at
+}
+
+/** Колонки B…G строки значениями. */
+function row(ws: ExcelJS.Worksheet, at: number): unknown[] {
+  const r = ws.getRow(at)
+  return [2, 3, 4, 5, 6, 7].map((c) => r.getCell(c).value)
+}

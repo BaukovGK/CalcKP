@@ -412,9 +412,9 @@
     >
       <p class="ver-sub">
         Версия фиксирует дерево, итог, версию прайса и шаблона на момент снимка.
-        Снимается при создании единицы, при выпуске КП и вручную. Скачать docx
-        и pdf можно у печатных редакций — выпуска КП и ручной фиксации;
-        исходное состояние единицы не печатается.
+        Снимается при создании единицы, при выпуске КП и вручную. Скачать
+        docx, pdf и xlsx можно у печатных редакций — выпуска КП и ручной
+        фиксации; исходное состояние единицы не печатается.
       </p>
       <div v-if="versionsLoading" class="ver-state">Загрузка…</div>
       <div v-else-if="!versions.length" class="ver-state">Версий пока нет</div>
@@ -449,6 +449,12 @@
                 :disabled="kpDownload === `${v.version}:pdf`"
                 @click="downloadKp(v.version, 'pdf')"
               >pdf</button>
+              <button
+                class="btn btn-xs"
+                v-hint="'Скачать КП книгой Excel — в этом формате коммерческий отдел ведёт предложения и правит их дальше. Содержание то же, что в docx и pdf'"
+                :disabled="kpDownload === `${v.version}:xlsx`"
+                @click="downloadKp(v.version, 'xlsx')"
+              >xlsx</button>
             </td>
           </tr>
         </tbody>
@@ -1171,7 +1177,7 @@ onBeforeRouteLeave(async () => {
  *
  * Доступно и наблюдателю: чтение КП шире правки расчёта.
  */
-async function downloadKp(version: number, format: 'docx' | 'pdf') {
+async function downloadKp(version: number, format: 'docx' | 'pdf' | 'xlsx') {
   if (!st.estimate) return
   kpDownload.value = `${version}:${format}`
   try {
@@ -1195,7 +1201,7 @@ async function downloadKp(version: number, format: 'docx' | 'pdf') {
  * Выпуск КП — точка фиксации процесса (ТЗ §4.3 v1.5): гейт по красным строкам
  * и снапшот делает бэк. Кнопка открывает окно выпуска: менеджер видит, что
  * уйдёт заказчику (номер, описание изделия, состав, условия), и правит это
- * перед выпуском. Печатная форма (docx/pdf) скачивается из окна «Версии»:
+ * перед выпуском. Печатная форма (docx, pdf, xlsx) скачивается из окна «Версии»:
  * она строится из снапшота, а не из текущего дерева.
  */
 async function onKp() {

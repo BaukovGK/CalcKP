@@ -23,6 +23,7 @@ import { changeText, surveyChanges, SURVEY_CHANGES_MAX } from '../utils/survey-d
 import { buildKpDocument, documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
+import { renderKpXlsx } from '../utils/kp-xlsx'
 import { buildProductDraft } from '../utils/kp-kit'
 import { shellWallMm } from '../utils/kp-lookup'
 import { productDescription } from '../utils/kp-product'
@@ -579,7 +580,7 @@ estimatesRouter.get(
 )
 
 /**
- * GET /api/estimates/:id/kp/export?format=docx|pdf — печатная форма КП.
+ * GET /api/estimates/:id/kp/export?format=docx|pdf|xlsx — печатная форма КП.
  *
  * Документ строится ИЗ СНАПШОТА, а не из текущего состояния расчёта: после
  * выпуска КП расчёт не замораживается и продолжает правиться (Механика §10),
@@ -593,11 +594,12 @@ estimatesRouter.get(
  * 422 KP_NOT_PRINTABLE, если `?version=N` указывает на слепок создания
  * единицы: проверку строк без цены он не проходил.
  *
- * ⚠️ Вёрстка временная: образец заказчика («КПВ6393», получен 09.09.2026)
- * подтвердил НДС «в том числе», но узловая разбивка с ценами, условия и
- * реквизиты ещё не перенесены. Два неочевидных решения — цены не построчно и
- * НДС «в том числе», а не сверху — объяснены в `utils/kp-document.ts`.
- * Замена вёрстки затрагивает только `kp-docx.ts` и `kp-pdf.ts`.
+ * Вёрстка — по рабочему КП коммерческого отдела (`doc/Эталон_КП_разбор.md`).
+ * Форматов три, содержание у них одно: .docx и .pdf для отправки заказчику,
+ * .xlsx — тот формат, в котором отдел ведёт КП и правит его дальше. Модель
+ * документа общая (`utils/kp-document.ts`), там же объяснены два неочевидных
+ * решения — цена на изделии, а не построчно, и НДС «в том числе», а не сверху.
+ * Замена вёрстки затрагивает только `kp-docx.ts`, `kp-pdf.ts` и `kp-xlsx.ts`.
  */
 estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunction) => {
   try {
@@ -605,8 +607,8 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
     const id = String(req.params.id)
     const format = String(req.query.format ?? 'docx')
 
-    if (!['docx', 'pdf'].includes(format)) {
-      res.status(400).json({ message: 'format должен быть docx или pdf' })
+    if (!['docx', 'pdf', 'xlsx'].includes(format)) {
+      res.status(400).json({ message: 'format должен быть docx, pdf или xlsx' })
       return
     }
     const versionRaw = req.query.version
@@ -682,7 +684,12 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       },
     })
 
-    const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)
+    const body =
+      format === 'pdf'
+        ? await renderKpPdf(doc)
+        : format === 'xlsx'
+          ? await renderKpXlsx(doc)
+          : await renderKpDocx(doc)
     const filename = documentFileName(doc, format)
 
     await audit(auth.userId, 'estimate.kp.export', 'Estimate', id, {
@@ -696,7 +703,9 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       'Content-Type',
       format === 'pdf'
         ? 'application/pdf'
-        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        : format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     )
     // filename* с UTF-8: номер КП содержит кириллицу («КП-…»).
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)

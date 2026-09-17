@@ -74,7 +74,7 @@ export const projectsApi = {
    * не войдёт, и сервер откажет, назвав её. `estimateIds` ограничивает состав —
    * так выпускается КП на часть проекта.
    */
-  kpExport(id: string, format: 'docx' | 'pdf', estimateIds?: string[]): Promise<Blob> {
+  kpExport(id: string, format: 'docx' | 'pdf' | 'xlsx', estimateIds?: string[]): Promise<Blob> {
     return api
       .get(`/projects/${id}/kp/export`, {
         params: {

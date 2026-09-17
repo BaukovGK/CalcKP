@@ -212,6 +212,9 @@
         <button class="btn" :disabled="kpBusy !== null || kpPicked.size === 0" @click="downloadProjectKp('docx')">
           {{ kpBusy === 'docx' ? 'Готовим…' : 'Скачать .docx' }}
         </button>
+        <button class="btn" :disabled="kpBusy !== null || kpPicked.size === 0" @click="downloadProjectKp('xlsx')">
+          {{ kpBusy === 'xlsx' ? 'Готовим…' : 'Скачать .xlsx' }}
+        </button>
         <button class="btn btn-am" :disabled="kpBusy !== null || kpPicked.size === 0" @click="downloadProjectKp('pdf')">
           {{ kpBusy === 'pdf' ? 'Готовим…' : 'Скачать .pdf' }}
         </button>
@@ -357,7 +360,7 @@ async function confirmDeleteEstimate() {
 // в него не войдёт. Показываем это ДО отправки: иначе сервер откажет 422, и
 // инженер узнает о непроработанной единице из ошибки.
 const kpOpen = ref(false)
-const kpBusy = ref<'docx' | 'pdf' | null>(null)
+const kpBusy = ref<'docx' | 'pdf' | 'xlsx' | null>(null)
 const kpError = ref('')
 const kpPicked = ref<Set<string>>(new Set())
 
@@ -405,7 +408,7 @@ async function messageFromBlobError(e: unknown): Promise<string> {
   return msg ?? (e instanceof Error ? e.message : 'Не удалось выгрузить КП')
 }
 
-async function downloadProjectKp(format: 'docx' | 'pdf') {
+async function downloadProjectKp(format: 'docx' | 'pdf' | 'xlsx') {
   if (kpPicked.value.size === 0) return
   kpBusy.value = format
   kpError.value = ''

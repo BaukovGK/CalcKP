@@ -9,6 +9,7 @@ import { seesAllProjects } from '../utils/access'
 import { buildProjectKpDocument, documentFileName } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
+import { renderKpXlsx } from '../utils/kp-xlsx'
 import { shellWallMm } from '../utils/kp-lookup'
 import { parseKpHeader } from '../utils/kp-payload'
 import { PRINTABLE_REASONS } from '../utils/snapshot-reason'
@@ -189,7 +190,7 @@ projectsRouter.post('/:id/estimates', requireRole('ADMIN', 'MANAGER', 'ENGINEER'
 })
 
 /**
- * GET /api/projects/:id/kp/export?format=docx|pdf&estimates=id,id — КП на проект.
+ * GET /api/projects/:id/kp/export?format=docx|pdf|xlsx&estimates=id,id — КП на проект.
  *
  * Документ собирается из снапшотов единиц, а не из их текущего состояния:
  * расчёт после выпуска КП не замораживается и продолжает правиться
@@ -205,8 +206,8 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
     const id = String(req.params.id)
     const format = String(req.query.format ?? 'docx')
 
-    if (!['docx', 'pdf'].includes(format)) {
-      res.status(400).json({ message: 'format должен быть docx или pdf' })
+    if (!['docx', 'pdf', 'xlsx'].includes(format)) {
+      res.status(400).json({ message: 'format должен быть docx, pdf или xlsx' })
       return
     }
 
@@ -291,7 +292,12 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
       executor: estimates[0]?.author ?? {},
     })
 
-    const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)
+    const body =
+      format === 'pdf'
+        ? await renderKpPdf(doc)
+        : format === 'xlsx'
+          ? await renderKpXlsx(doc)
+          : await renderKpDocx(doc)
     const filename = documentFileName(doc, format)
 
     await audit(auth.userId, 'project.kp.export', 'Project', id, {
@@ -304,7 +310,9 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
       'Content-Type',
       format === 'pdf'
         ? 'application/pdf'
-        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        : format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     )
     // filename* — RFC 5987: имя кириллическое, латинский fallback обязателен.
     res.setHeader(
