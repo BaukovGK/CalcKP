@@ -102,7 +102,7 @@ authRouter.get('/me', requireAuthForPasswordChange, async (req: AuthRequest, res
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, name: true, email: true, role: true, mustChangePassword: true },
+      select: { id: true, name: true, position: true, phone: true, email: true, role: true, mustChangePassword: true },
     })
     if (!user) { res.status(401).json({ message: 'Пользователь не найден' }); return }
     res.json(user)

@@ -35,17 +35,39 @@ adminRouter.use('/', requireRole('ADMIN'))
 adminRouter.get('/users', async (_req, res: Response, next: NextFunction) => {
   try {
     const users = await prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
+      select: USER_SELECT,
       orderBy: { createdAt: 'desc' },
     })
     res.json(users)
   } catch (e) { next(e) }
 })
 
+/**
+ * Поля учётной записи в ответах — одним списком: три маршрута отдавали свои
+ * копии, и новое поле приходилось добавлять в каждую.
+ *
+ * `position` и `phone` печатает блок исполнителя КП: документ берёт их из
+ * карточки автора расчёта, а не просит ввести заново.
+ */
+const USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  position: true,
+  phone: true,
+  role: true,
+  isActive: true,
+  mustChangePassword: true,
+  createdAt: true,
+} as const
+
 const createUserSchema = z.object({
   // Логин — латиницей (`utils/login.ts`): то же правило держит экран входа.
   email:    z.string().email().regex(LATIN_LOGIN, LATIN_LOGIN_MESSAGE),
-  name:     z.string().min(1),
+  // ФИО целиком: в документах из него выводятся инициалы (`utils/person.ts`).
+  name:     z.string().trim().min(1).max(200),
+  position: z.string().trim().max(200).nullish(),
+  phone:    z.string().trim().max(100).nullish(),
   role:     z.enum(ROLES),
   password: z.string().min(MIN_PASSWORD_LENGTH),
 })
@@ -53,7 +75,7 @@ const createUserSchema = z.object({
 // POST /api/admin/users
 adminRouter.post('/users', validate(createUserSchema), async (req, res: Response, next: NextFunction) => {
   try {
-    const { email, name, role, password } = req.body
+    const { email, name, position, phone, role, password } = req.body
     // Повтор email — 409 с понятным текстом, а не 500 от уникального индекса
     // (План_устранения 2.5). Гонку двух одновременных созданий ловит errorHandler.
     if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
@@ -64,8 +86,16 @@ adminRouter.post('/users', validate(createUserSchema), async (req, res: Response
     // Пароль задал администратор — пользователь сменит его при первом входе
     // (План_устранения 2.1).
     const user = await prisma.user.create({
-      data: { email, name, role, passwordHash, mustChangePassword: true },
-      select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
+      data: {
+        email,
+        name,
+        position: position || null,
+        phone: phone || null,
+        role,
+        passwordHash,
+        mustChangePassword: true,
+      },
+      select: USER_SELECT,
     })
     await audit((req as AuthRequest).userId, 'user.create', 'User', user.id, {
       email: user.email,
@@ -76,7 +106,11 @@ adminRouter.post('/users', validate(createUserSchema), async (req, res: Response
 })
 
 const patchUserSchema = z.object({
-  name:     z.string().min(1).optional(),
+  name:     z.string().trim().min(1).max(200).optional(),
+  // Должность и телефон очищаются пустой строкой: заполнить их можно и
+  // позже — учётные записи заводились до появления этих полей.
+  position: z.string().trim().max(200).nullish(),
+  phone:    z.string().trim().max(100).nullish(),
   role:     z.enum(ROLES).optional(),
   isActive: z.boolean().optional(),
 })
@@ -127,13 +161,20 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
       }
     }
 
+    // Пустая строка в должности и телефоне — это «стереть», а не «записать
+    // пустоту»: в базе такие поля хранятся как null.
+    const data = {
+      ...patch,
+      ...(patch.position !== undefined ? { position: patch.position || null } : {}),
+      ...(patch.phone !== undefined ? { phone: patch.phone || null } : {}),
+    }
     // Блокировка отзывает токены: иначе после разблокировки старые сессии
     // ожили бы снова (План_устранения 2.3).
     const revoke = patch.isActive === false && current.isActive
     const user = await prisma.user.update({
       where: { id },
-      data:  revoke ? { ...patch, tokenVersion: { increment: 1 } } : patch,
-      select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
+      data:  revoke ? { ...data, tokenVersion: { increment: 1 } } : data,
+      select: USER_SELECT,
     })
     await audit(auth.userId, 'user.update', 'User', id, patch)
     res.json(user)

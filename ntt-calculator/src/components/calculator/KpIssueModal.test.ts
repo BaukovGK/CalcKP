@@ -52,8 +52,9 @@ const DRAFT = {
   signature: {
     signerTitle: 'Коммерческий директор',
     signerName: null,
-    executorName: 'Пётр Петров',
-    executorPhone: null,
+    executorName: 'Петров П.П.',
+    executorPosition: 'Инженер-конструктор',
+    executorPhone: '+7 (499) 000-00-00 доб. 101',
     executorEmail: 'petrov@example.test',
   },
 }
@@ -74,7 +75,7 @@ describe('окно выпуска КП', () => {
     const w = await open()
 
     expect(kpDraft).toHaveBeenCalledWith('e1')
-    const head = w.findAll('.kpi-sec').at(0)!.findAll('input')
+    const head = w.findAll('.kpi-sec')[0]!.findAll('input')
     expect((head[0]!.element as HTMLInputElement).value).toBe('КП-0007')
     // Заказчик и объект — только показать: правятся они в карточке проекта.
     expect((head[1]!.element as HTMLInputElement).value).toBe('ООО «Заказчик»')
@@ -103,7 +104,12 @@ describe('окно выпуска КП', () => {
       number: string
       position: { kit: Array<{ name: string }>; description?: string; unit: string }
       terms: { validUntil: string; excluded: string[]; prepaymentPct: number }
-      signature: { signerTitle: string; executorName: string }
+      signature: {
+        signerTitle: string
+        executorName: string
+        executorPosition: string
+        executorPhone: string
+      }
     }
     expect(sent.number).toBe('КП-0007')
     expect(sent.position.kit.map((i) => i.name)).toEqual([
@@ -116,7 +122,10 @@ describe('окно выпуска КП', () => {
     expect(sent.terms.excluded).toHaveLength(2)
     expect(sent.terms.prepaymentPct).toBe(70)
     expect(sent.signature.signerTitle).toBe('Коммерческий директор')
-    expect(sent.signature.executorName).toBe('Пётр Петров')
+    // Исполнитель, его должность и телефон приходят из учётной записи автора.
+    expect(sent.signature.executorName).toBe('Петров П.П.')
+    expect(sent.signature.executorPosition).toBe('Инженер-конструктор')
+    expect(sent.signature.executorPhone).toBe('+7 (499) 000-00-00 доб. 101')
   })
 
   it('пустые строки состава в документ не уходят', async () => {

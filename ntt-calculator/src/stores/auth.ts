@@ -8,6 +8,9 @@ export type UserRole = 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'BUYER' 
 export interface AuthUser {
   id: string
   name: string
+  /** Должность — из учётной записи; в КП печатается у исполнителя. */
+  position?: string | null
+  phone?: string | null
   email: string
   role: UserRole
   /**

@@ -94,6 +94,8 @@ export interface KpSignature {
   signerTitle: string
   signerName: string | null
   executorName: string | null
+  /** Должность исполнителя — из его учётной записи. */
+  executorPosition: string | null
   executorPhone: string | null
   executorEmail: string | null
 }

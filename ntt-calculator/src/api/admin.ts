@@ -4,7 +4,12 @@ import type { UserRole } from '@/stores/auth'
 export interface AdminUser {
   id:        string
   email:     string
+  /** ФИО целиком: «Иванов Сергей Владимирович» — в КП из него берут инициалы. */
   name:      string
+  /** Должность сотрудника; печатается в блоке исполнителя КП. */
+  position?: string | null
+  /** Рабочий телефон с добавочным — туда же. */
+  phone?:    string | null
   role:      UserRole
   isActive:  boolean
   /** Пароль задан не им — сменит при входе (План_устранения 2.1). */
@@ -15,6 +20,8 @@ export interface AdminUser {
 export interface CreateUserDto {
   email:    string
   name:     string
+  position?: string | null
+  phone?:    string | null
   role:     UserRole
   password: string
 }
@@ -57,7 +64,10 @@ export const adminApi = {
     return api.post<AdminUser>('/admin/users', dto).then((r) => r.data)
   },
 
-  patchUser(id: string, dto: { role?: UserRole; isActive?: boolean; name?: string }): Promise<AdminUser> {
+  patchUser(
+    id: string,
+    dto: { role?: UserRole; isActive?: boolean; name?: string; position?: string | null; phone?: string | null },
+  ): Promise<AdminUser> {
     return api.patch<AdminUser>(`/admin/users/${id}`, dto).then((r) => r.data)
   },
 

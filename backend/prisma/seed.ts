@@ -114,7 +114,7 @@ interface EngineeringSeed {
 // ─── Пользователи ────────────────────────────────────────────────────────────
 
 type SeedRole = 'ADMIN' | 'MANAGER' | 'ENGINEER' | 'TECHNOLOG' | 'VIEWER'
-type SeedUser = { email: string; name: string; role: SeedRole; password: string }
+type SeedUser = { email: string; name: string; position?: string; role: SeedRole; password: string }
 
 /** Минимальная длина пароля — как в приложении (src/utils/password.ts). */
 const MIN_PASSWORD_LENGTH = 8
@@ -173,9 +173,10 @@ const KNOWN_DEFAULT_PASSWORDS: Readonly<Record<string, string>> = {
  * Флаг оставлен для локальной разработки и `verify.ps1`, которым нужны роли.
  */
 const DEMO_USERS: SeedUser[] = [
-  { email: 'manager@ntt.local', name: 'Менеджер', role: 'MANAGER', password: 'manager123' },
-  { email: 'engineer@ntt.local', name: 'Инженер', role: 'ENGINEER', password: 'engineer123' },
-  { email: 'technolog@ntt.local', name: 'Технолог', role: 'TECHNOLOG', password: 'technolog123' },
+  // Должность — не украшение карточки: её печатает блок исполнителя КП.
+  { email: 'manager@ntt.local', name: 'Менеджер', position: 'Менеджер коммерческого отдела', role: 'MANAGER', password: 'manager123' },
+  { email: 'engineer@ntt.local', name: 'Инженер', position: 'Инженер-конструктор', role: 'ENGINEER', password: 'engineer123' },
+  { email: 'technolog@ntt.local', name: 'Технолог', position: 'Технолог', role: 'TECHNOLOG', password: 'technolog123' },
   // Наблюдатель: просмотр расчётов без правки (вкладка «Расчёт» в Битрикс24).
   { email: 'viewer@ntt.local', name: 'Наблюдатель', role: 'VIEWER', password: 'viewer123' },
 ]
@@ -206,7 +207,7 @@ async function seedUsers() {
     await prisma.user.upsert({
       where: { email: u.email },
       update: {},
-      create: { email: u.email, name: u.name, role: u.role, passwordHash, mustChangePassword },
+      create: { email: u.email, name: u.name, position: u.position ?? null, role: u.role, passwordHash, mustChangePassword },
     })
     created++
     console.log(`  создана учётная запись ${u.email} [${u.role}]`)

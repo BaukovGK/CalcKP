@@ -15,6 +15,8 @@
  * @module utils/kp-terms
  */
 
+import { shortName, signatureName } from './person'
+
 /** Реквизиты поставщика — подвал документа. */
 export interface KpCompany {
   name: string
@@ -53,6 +55,8 @@ export interface KpSignature {
   signerTitle: string
   signerName: string | null
   executorName: string | null
+  /** Должность исполнителя из его учётной записи. */
+  executorPosition: string | null
   executorPhone: string | null
   executorEmail: string | null
 }
@@ -116,16 +120,30 @@ export function defaultTerms(
   }
 }
 
-/** Подпись по умолчанию: должность постоянна, фамилия — из окружения. */
+/**
+ * Подпись по умолчанию.
+ *
+ * Подписант — из окружения: коммерческий директор один на все предложения, а
+ * учётной записи у него может и не быть. Исполнитель — из учётной записи
+ * автора расчёта: ФИО сокращается до «Иванов С.В.», должность и телефон
+ * берутся оттуда же. Телефона в карточке нет — подставляется общий из
+ * окружения, чтобы заказчику было куда звонить.
+ */
 export function defaultSignature(
-  executor: { name?: string | null; email?: string | null } = {},
+  executor: {
+    name?: string | null
+    position?: string | null
+    phone?: string | null
+    email?: string | null
+  } = {},
   env: NodeJS.ProcessEnv = process.env,
 ): KpSignature {
   return {
     signerTitle: env.KP_SIGNER_TITLE?.trim() || 'Коммерческий директор',
-    signerName: env.KP_SIGNER_NAME?.trim() || null,
-    executorName: executor.name?.trim() || null,
-    executorPhone: env.KP_EXECUTOR_PHONE?.trim() || null,
+    signerName: signatureName(env.KP_SIGNER_NAME ?? null),
+    executorName: shortName(executor.name ?? null),
+    executorPosition: executor.position?.trim() || null,
+    executorPhone: executor.phone?.trim() || env.KP_EXECUTOR_PHONE?.trim() || null,
     executorEmail: executor.email?.trim() || null,
   }
 }

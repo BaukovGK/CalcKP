@@ -218,7 +218,7 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
       orderBy: { createdAt: 'asc' },
       select: {
         id: true, title: true, deviceType: true,
-        author: { select: { name: true, email: true } },
+        author: { select: { name: true, position: true, phone: true, email: true } },
         snapshots: { where: { reason: { in: [...PRINTABLE_REASONS] } }, orderBy: { version: 'desc' }, take: 1 },
       },
     })
@@ -276,12 +276,9 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
       projectId: project.id,
       project: { title: project.title, customer: project.customer, address: project.address },
       units,
-      // Исполнитель проектного КП — автор первой единицы: телефон и почту
-      // менеджера документ не знает, а автор расчёта в карточке есть.
-      executor: {
-        name: estimates[0]?.author?.name ?? null,
-        email: estimates[0]?.author?.email ?? null,
-      },
+      // Исполнитель проектного КП — автор первой единицы: его учётная запись
+      // несёт и должность, и рабочий телефон.
+      executor: estimates[0]?.author ?? {},
     })
 
     const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)

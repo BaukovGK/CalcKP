@@ -406,6 +406,34 @@ describe('buildKpDocument', () => {
     expect(items[8]).toContain('Электромонтажные работы')
   })
 
+  it('исполнитель — из учётной записи автора: фамилия с инициалами, должность, телефон', () => {
+    const doc = buildKpDocument(
+      input({
+        executor: {
+          name: 'Князев Владимир Алексеевич',
+          position: 'Инженер-конструктор',
+          phone: '+7 (499) 940-14-04 доб. 3041',
+          email: 'engineer@example.test',
+        },
+      }),
+    )
+
+    expect(doc.signature.executorName).toBe('Князев В.А.')
+    expect(doc.signature.executorPosition).toBe('Инженер-конструктор')
+    expect(doc.signature.executorPhone).toBe('+7 (499) 940-14-04 доб. 3041')
+    expect(doc.signature.executorEmail).toBe('engineer@example.test')
+    // Подписант — не автор расчёта: должность постоянна, фамилия из настроек.
+    expect(doc.signature.signerTitle).toBe('Коммерческий директор')
+  })
+
+  it('незаполненная карточка сотрудника не рисует пустых строк', () => {
+    const doc = buildKpDocument(input({ executor: { name: 'Администратор' } }))
+
+    expect(doc.signature.executorName).toBe('Администратор')
+    expect(doc.signature.executorPosition).toBeNull()
+    expect(doc.signature.executorEmail).toBeNull()
+  })
+
   it('переживает расчёт без проекта и с пустым снапшотом', () => {
     const doc = buildKpDocument(
       input({

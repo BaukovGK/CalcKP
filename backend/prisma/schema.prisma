@@ -36,7 +36,14 @@ enum Status {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
+  /// ФИО сотрудника полностью: «Иванов Сергей Владимирович». В документах
+  /// печатается как есть, инициалы из него выводит `utils/person.ts`.
   name         String
+  /// Должность: «Коммерческий директор», «Ведущий инженер». Идёт в блок
+  /// исполнителя КП и подставляется подписанту. null — не заполнена.
+  position     String?
+  /// Рабочий телефон с добавочным — блок исполнителя КП.
+  phone        String?
   role         Role     @default(VIEWER)
   passwordHash String
   isActive     Boolean  @default(true)

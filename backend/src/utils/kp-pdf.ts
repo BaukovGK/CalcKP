@@ -201,14 +201,15 @@ export function renderKpPdf(doc: KpDocument): Promise<Buffer> {
     },
   ]
 
-  if (signature.executorName || signature.executorPhone || signature.executorEmail) {
+  const executorLines = [
+    signature.executorName,
+    signature.executorPosition,
+    signature.executorPhone,
+    signature.executorEmail,
+  ].filter((v): v is string => Boolean(v))
+  if (executorLines.length > 0) {
     content.push({
-      stack: [
-        'Исполнитель:',
-        ...[signature.executorName, signature.executorPhone, signature.executorEmail].filter(
-          (v): v is string => Boolean(v),
-        ),
-      ],
+      stack: ['Исполнитель:', ...executorLines],
       fontSize: 8,
       color: '#333333',
       margin: [0, 24, 0, 0],

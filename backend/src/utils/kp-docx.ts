@@ -223,9 +223,14 @@ export async function renderKpDocx(doc: KpDocument): Promise<Buffer> {
   children.push(signatureBlock(doc))
 
   const { signature, company } = doc
-  if (signature.executorName || signature.executorPhone || signature.executorEmail) {
+  if (signature.executorName || signature.executorPosition || signature.executorPhone || signature.executorEmail) {
     children.push(para('Исполнитель:', { size: SIZE.small, spacingBefore: 240, spacingAfter: 20 }))
-    for (const line of [signature.executorName, signature.executorPhone, signature.executorEmail]) {
+    for (const line of [
+      signature.executorName,
+      signature.executorPosition,
+      signature.executorPhone,
+      signature.executorEmail,
+    ]) {
       if (line) children.push(para(line, { size: SIZE.small, spacingAfter: 20 }))
     }
   }

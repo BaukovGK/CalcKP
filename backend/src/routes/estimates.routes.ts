@@ -533,7 +533,7 @@ estimatesRouter.get(
         where: { id },
         include: {
           project: { select: { title: true, customer: true, address: true } },
-          author: { select: { name: true, email: true } },
+          author: { select: { name: true, position: true, phone: true, email: true } },
         },
       })
       if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
@@ -571,7 +571,7 @@ estimatesRouter.get(
           totalRub,
         },
         terms: defaultTerms(issuedAt, { deliveryTo: object }),
-        signature: defaultSignature({ name: estimate.author?.name, email: estimate.author?.email }),
+        signature: defaultSignature(estimate.author ?? {}),
       })
     } catch (e) { next(e) }
   },
@@ -622,7 +622,7 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       where: { id },
       include: {
         project: { select: { title: true, customer: true, address: true } },
-        author: { select: { name: true, email: true } },
+        author: { select: { name: true, position: true, phone: true, email: true } },
       },
     })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
@@ -671,7 +671,7 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       kp: header.position ?? null,
       terms: header.terms ?? null,
       signature: header.signature ?? null,
-      executor: { name: estimate.author?.name, email: estimate.author?.email },
+      executor: estimate.author ?? {},
       snapshot: {
         version: snapshot.version,
         priceListVersion: snapshot.priceListVersion,

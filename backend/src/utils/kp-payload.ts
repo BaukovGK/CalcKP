@@ -60,6 +60,7 @@ export const signatureSchema = z
     signerTitle: z.string().trim().max(200),
     signerName: z.string().trim().max(200).nullish(),
     executorName: z.string().trim().max(200).nullish(),
+    executorPosition: z.string().trim().max(200).nullish(),
     executorPhone: z.string().trim().max(100).nullish(),
     executorEmail: z.string().trim().max(200).nullish(),
   })

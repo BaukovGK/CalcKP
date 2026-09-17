@@ -154,15 +154,19 @@
             <span v-hint="H.signerName">Подписант</span>
             <input v-model="signerName" placeholder="И.О. Фамилия" />
           </label>
-          <label class="fld fld--4">
+          <label class="fld fld--3">
             <span v-hint="H.executor">Исполнитель</span>
             <input v-model="executorName" />
           </label>
-          <label class="fld fld--4">
+          <label class="fld fld--3">
+            <span v-hint="H.executorPosition">Должность</span>
+            <input v-model="executorPosition" />
+          </label>
+          <label class="fld fld--3">
             <span v-hint="H.phone">Телефон</span>
             <input v-model="executorPhone" placeholder="+7 (499) 000-00-00 доб. 000" />
           </label>
-          <label class="fld fld--4">
+          <label class="fld fld--3">
             <span v-hint="H.email">Почта</span>
             <input v-model="executorEmail" />
           </label>
@@ -226,7 +230,8 @@ const H = {
   excluded: 'Что не входит в стоимость: каждая строка станет отдельным пунктом условий',
   signerTitle: 'Должность подписанта — печатается слева над подписью',
   signerName: 'Инициалы и фамилия подписанта. Пусто — останется место для подписи от руки',
-  executor: 'Исполнитель — к кому заказчику обращаться. По умолчанию автор расчёта',
+  executor: 'Исполнитель — к кому заказчику обращаться. По умолчанию автор расчёта, фамилией с инициалами',
+  executorPosition: 'Должность исполнителя из его учётной записи. Заполняется в админке — здесь можно поправить для одного КП',
   phone: 'Прямой телефон исполнителя, с добавочным',
   email: 'Рабочая почта исполнителя',
 }
@@ -249,6 +254,7 @@ const shipmentFrom = ref('')
 const excluded = ref('')
 const signerName = ref('')
 const executorName = ref('')
+const executorPosition = ref('')
 const executorPhone = ref('')
 const executorEmail = ref('')
 
@@ -312,6 +318,7 @@ async function load() {
     signature.signerTitle = d.signature.signerTitle
     signerName.value = d.signature.signerName ?? ''
     executorName.value = d.signature.executorName ?? ''
+    executorPosition.value = d.signature.executorPosition ?? ''
     executorPhone.value = d.signature.executorPhone ?? ''
     executorEmail.value = d.signature.executorEmail ?? ''
   } catch (e) {
@@ -358,6 +365,7 @@ function submit() {
       signerTitle: signature.signerTitle,
       signerName: clean(signerName.value),
       executorName: clean(executorName.value),
+      executorPosition: clean(executorPosition.value),
       executorPhone: clean(executorPhone.value),
       executorEmail: clean(executorEmail.value),
     },

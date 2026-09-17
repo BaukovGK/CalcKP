@@ -43,14 +43,38 @@
         <table v-else class="adm-table">
           <thead>
             <tr>
-              <th>Имя</th><th>Email</th><th>Роль</th><th>Активен</th><th>Зарегистрирован</th><th></th>
+              <th v-hint="ACCOUNT_HINTS.name">ФИО</th>
+              <th v-hint="ACCOUNT_HINTS.position">Должность</th>
+              <th v-hint="ACCOUNT_HINTS.phone">Телефон</th>
+              <th>Email</th><th>Роль</th><th>Активен</th><th>Зарегистрирован</th><th></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td>
-                {{ u.name }}
+                <input
+                  class="fi adm-inline"
+                  :value="u.name"
+                  placeholder="Иванов Сергей Владимирович"
+                  @change="patchName(u, $event)"
+                />
                 <span v-if="u.mustChangePassword" v-hint="ADMIN_PASSWORD_HINTS.mustChange" class="adm-badge">сменит пароль при входе</span>
+              </td>
+              <td>
+                <input
+                  class="fi adm-inline"
+                  :value="u.position ?? ''"
+                  placeholder="Ведущий инженер"
+                  @change="patchUser(u.id, { position: ($event.target as HTMLInputElement).value.trim() })"
+                />
+              </td>
+              <td>
+                <input
+                  class="fi adm-inline"
+                  :value="u.phone ?? ''"
+                  placeholder="+7 (499) 000-00-00 доб. 000"
+                  @change="patchUser(u.id, { phone: ($event.target as HTMLInputElement).value.trim() })"
+                />
               </td>
               <td class="adm-email">{{ u.email }}</td>
               <td>
@@ -202,8 +226,16 @@
     <!-- Новый пользователь -->
     <BaseModal :show="newUserOpen" title="Новый пользователь" @close="closeNewUser">
       <div class="ff">
-        <label class="fl">Имя <span style="color:var(--danger)">*</span></label>
-        <input class="fi" v-model="newForm.name" placeholder="Иван Иванов" />
+        <label v-hint="ACCOUNT_HINTS.name" class="fl">ФИО <span style="color:var(--danger)">*</span></label>
+        <input class="fi" v-model="newForm.name" placeholder="Иванов Сергей Владимирович" />
+      </div>
+      <div class="ff">
+        <label v-hint="ACCOUNT_HINTS.position" class="fl">Должность</label>
+        <input class="fi" v-model="newForm.position" placeholder="Ведущий инженер" />
+      </div>
+      <div class="ff">
+        <label v-hint="ACCOUNT_HINTS.phone" class="fl">Телефон</label>
+        <input class="fi" v-model="newForm.phone" placeholder="+7 (499) 000-00-00 доб. 000" />
       </div>
       <div class="ff">
         <label class="fl">Email <span style="color:var(--danger)">*</span></label>
@@ -332,11 +364,38 @@ async function copyReset() {
 const newUserOpen  = ref(false)
 const creating     = ref(false)
 const newFormError = ref('')
-const newForm = reactive({ name: '', email: '', role: 'ENGINEER' as AdminUser['role'], password: '' })
+const newForm = reactive({
+  name: '',
+  position: '',
+  phone: '',
+  email: '',
+  role: 'ENGINEER' as AdminUser['role'],
+  password: '',
+})
+
+/**
+ * Сноски полей учётной записи.
+ *
+ * ФИО и должность — не украшение карточки: их печатает блок исполнителя в КП
+ * (`backend/utils/kp-terms.ts`), а инициалы выводятся из ФИО автоматически.
+ */
+const ACCOUNT_HINTS = {
+  name: 'Фамилия, имя и отчество полностью — в этом порядке. В КП из них получается «Иванов С.В.», поэтому «Иван Иванов» даст неверные инициалы',
+  position: 'Должность сотрудника: печатается в блоке исполнителя КП под его фамилией. Пусто — строки должности в документе не будет',
+  phone: 'Рабочий телефон с добавочным — по нему заказчик звонит исполнителю КП. Пусто — печатается общий телефон отдела',
+} as const
+
+/** ФИО пустым не бывает: сервер такую правку отклонит, а строка таблицы осиротеет. */
+function patchName(u: AdminUser, e: Event) {
+  const name = (e.target as HTMLInputElement).value.trim()
+  if (!name) { (e.target as HTMLInputElement).value = u.name; return }
+  if (name !== u.name) void patchUser(u.id, { name })
+}
 
 function closeNewUser() {
   newUserOpen.value = false
   newForm.name = ''; newForm.email = ''; newForm.password = ''; newForm.role = 'ENGINEER'
+  newForm.position = ''; newForm.phone = ''
   newFormError.value = ''
 }
 
@@ -355,6 +414,8 @@ async function createUser() {
   try {
     const user = await adminApi.createUser({
       name:     newForm.name.trim(),
+      position: newForm.position.trim() || null,
+      phone:    newForm.phone.trim() || null,
       email:    newForm.email.trim(),
       role:     newForm.role,
       password: newForm.password,
@@ -509,6 +570,9 @@ onMounted(loadUsers)
 .adm-table tr:hover td { background: var(--bg3); }
 
 .adm-email  { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--tx3); }
+/* ФИО, должность и телефон правятся прямо в таблице: заводятся они редко, а
+   дополнять их приходится у всех учётных записей сразу. */
+.adm-inline { width: 100%; min-width: 120px; font-size: 12.6px; padding: 2px 6px; }
 .adm-date   { font-size: 10.8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; }
 .adm-entity { font-family: Archivo, system-ui, sans-serif; font-size: 10.8px; color: var(--tx3); }
 .adm-action { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--accent); }
