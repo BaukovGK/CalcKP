@@ -22,7 +22,9 @@
       <div class="topbar">
         <div class="tb-title">Проекты</div>
         <div class="tb-spacer"></div>
-        <button v-if="canCreate" class="btn" @click="newOpen = true">＋ Новый проект</button>
+        <!-- Главное действие экрана — акцентной кнопкой, как «Добавить
+             единицу» в проекте: серой она теряется среди служебных. -->
+        <button v-if="canCreate" class="btn btn-am" @click="newOpen = true">＋ Новый проект</button>
       </div>
 
       <div class="dash-filters">
@@ -40,7 +42,7 @@
         </div>
         <div v-else-if="filtered.length === 0" class="dash-state">
           <div class="dash-state-txt">{{ projects.list.length === 0 ? 'Проектов пока нет. Создайте первый!' : 'Ничего не найдено.' }}</div>
-          <button v-if="projects.list.length === 0 && canCreate" class="btn" @click="newOpen = true">＋ Создать проект</button>
+          <button v-if="projects.list.length === 0 && canCreate" class="btn btn-am" @click="newOpen = true">＋ Создать проект</button>
         </div>
         <div v-else class="dash-grid">
           <ProjectCard
