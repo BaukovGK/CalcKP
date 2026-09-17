@@ -63,9 +63,9 @@ const fnHint = (f: FormulaFn) =>
 </script>
 
 <style scoped>
-.pal { border: 1px solid var(--line); background: var(--panel2); font-size: 12.6px; max-height: 360px; overflow-y: auto; }
+.pal { border: 1px solid var(--line); background: var(--panel2); font-size: 12.5px; max-height: 360px; overflow-y: auto; }
 .pal-h { padding: 5px 8px; color: var(--muted); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel2); cursor: pointer; z-index: 1; }
-.pal-g summary { padding: 4px 8px; cursor: pointer; color: var(--faint); font-size: 11.4px; text-transform: uppercase; letter-spacing: .05em; }
+.pal-g summary { padding: 4px 8px; cursor: pointer; color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
 .pal-i { display: flex; gap: 8px; width: 100%; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--line);
   padding: 3px 8px; color: var(--text); cursor: pointer; font: inherit; }
 .pal-i:hover { background: var(--acc-bg); }

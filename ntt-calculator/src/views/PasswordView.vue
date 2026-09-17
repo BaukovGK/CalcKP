@@ -82,5 +82,5 @@ async function onLogout() {
 </script>
 
 <style scoped>
-.pw-why { margin: 0 0 14px; font-size: 13.2px; line-height: 1.5; color: var(--muted); }
+.pw-why { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
 </style>

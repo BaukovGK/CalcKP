@@ -40,12 +40,12 @@ const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
    ячейку на три колонки не влезает: подпись переносится на вторую строку
    («Шкаф / управления»), и ряд разъезжается. */
 .tg--stacked { flex-direction: column; align-items: flex-start; gap: 3px; }
-.tg-l { font-size: 13.8px; color: var(--muted); }
+.tg-l { font-size: 13.5px; color: var(--muted); }
 .tg-seg { display: flex; }
 .tg-b {
-  padding: 4px 14px; font-size: 14.4px; font-family: inherit;
+  padding: 4px 14px; font-size: 14.5px; font-family: inherit;
   border: 1px solid var(--line2); background: transparent; color: var(--muted);
 }
 .tg-b + .tg-b { margin-left: -1px; }
-.tg-b.on { background: var(--acc); border-color: var(--acc); color: #fff; position: relative; z-index: 1; }
+.tg-b.on { background: var(--acc); border-color: var(--acc); color: var(--on-acc); position: relative; z-index: 1; }
 </style>

@@ -67,13 +67,13 @@
 
     <!-- Подтверждение удаления проекта -->
     <BaseModal :show="!!deleteProjectId" title="Удалить проект?" @close="deleteProjectId = null">
-      <div style="font-size:14.4px;color:var(--tx2)">
+      <div style="font-size:14.5px;color:var(--tx2)">
         Удалить <strong>{{ deleteProjectTitle }}</strong> со всеми единицами оборудования? Действие необратимо.
       </div>
       <div v-if="deleteError" class="auth-err" style="margin-top:8px">{{ deleteError }}</div>
       <template #footer>
         <button class="btn btn-g" @click="deleteProjectId = null">Отмена</button>
-        <button class="btn" style="background:var(--danger);color:#fff" :disabled="deleting" @click="confirmDeleteProject">
+        <button class="btn btn-danger" :disabled="deleting" @click="confirmDeleteProject">
           {{ deleting ? 'Удаление…' : 'Удалить' }}
         </button>
       </template>
@@ -200,10 +200,7 @@ onMounted(() => projects.fetchAll())
 /* Плитка «Новый проект» — тот же вид, что «Добавить оборудование» в проекте:
    пунктир акцентным цветом, высота карточки проекта. */
 .dash-add     { border: 1px dashed var(--accent); border-radius: 6px; background: transparent;
-  color: var(--accent); font: inherit; font-size: 13.2px; font-weight: 600;
+  color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 600;
   padding: 11px 13px; min-height: 96px; cursor: pointer; transition: background .15s; }
 .dash-add:hover { background: var(--bg3); }
-.dash-state   { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
-.dash-err     { color: var(--danger); }
 </style>

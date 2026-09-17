@@ -3,7 +3,7 @@
     <aside class="sidebar">
       <div class="sidebar-top">
         <button class="back-link" @click="router.push('/')">← Проекты</button>
-        <div class="logo" style="margin-top:4px">Администрирование</div>
+        <div class="logo">Администрирование</div>
       </div>
       <div class="sidebar-scroll">
         <div class="nav-section">Разделы</div>
@@ -768,82 +768,69 @@ onMounted(loadUsers)
 </script>
 
 <style scoped>
-.adm-table { width: 100%; border-collapse: collapse; font-size: 13.2px; }
-.adm-table th {
-  text-align: left; padding: 5px 12px; font-size: 10.8px; font-weight: 600;
-  color: var(--tx3); background: var(--bg1); border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 1;
-}
-.adm-table td { padding: 6px 12px; border-bottom: 1px solid var(--border); color: var(--tx2); vertical-align: middle; }
-.adm-table tr:hover td { background: var(--bg3); }
 
-.adm-email  { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--tx3); }
+.adm-email  { font-family: Archivo, system-ui, sans-serif; font-size: 12.5px; color: var(--tx3); }
 
 /* Журнал действий */
 .aud-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px;
   border-bottom: 1px solid var(--bd); }
 .aud-search  { flex: 1; min-width: 220px; }
-.aud-period  { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--tx3); }
+.aud-period  { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--tx3); }
 .aud-period input { width: 140px; }
-.aud-total   { margin-left: auto; font-size: 12px; color: var(--tx3); white-space: nowrap; }
+.aud-total   { margin-left: auto; font-size: 12.5px; color: var(--tx3); white-space: nowrap; }
 .aud-table td { vertical-align: top; }
 .aud-row--alarm td:first-child { box-shadow: inset 2px 0 0 var(--danger); }
-.aud-pos     { display: block; font-size: 11.4px; color: var(--tx3); }
-.aud-group   { font-size: 12px; color: var(--tx3); white-space: nowrap; }
-.aud-entity  { margin-left: 6px; font-size: 11.4px; color: var(--tx3); border-bottom: 1px dotted var(--bd2); }
+.aud-pos     { display: block; font-size: 12px; color: var(--tx3); }
+.aud-group   { font-size: 12.5px; color: var(--tx3); white-space: nowrap; }
+.aud-entity  { margin-left: 6px; font-size: 12px; color: var(--tx3); border-bottom: 1px dotted var(--bd2); }
 .aud-meta    { display: flex; flex-wrap: wrap; gap: 4px; }
-.aud-chip    { font-size: 11.4px; color: var(--tx2); background: var(--bg3); border: 1px solid var(--bd);
+.aud-chip    { font-size: 12px; color: var(--tx2); background: var(--bg3); border: 1px solid var(--bd);
   border-radius: 3px; padding: 1px 5px; max-width: 320px; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
 .aud-more    { display: flex; justify-content: center; padding: 12px; }
 .aud-chosen  { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 12px;
   border-bottom: 1px solid var(--bd); background: var(--bg2); }
-.aud-chosen-lbl  { font-size: 11.4px; color: var(--tx3); }
-.aud-chosen-chip { font: inherit; font-size: 11.4px; color: var(--am); background: transparent;
+.aud-chosen-lbl  { font-size: 12px; color: var(--tx3); }
+.aud-chosen-chip { font: inherit; font-size: 12px; color: var(--am); background: transparent;
   border: 1px solid var(--am); border-radius: 3px; padding: 1px 6px; cursor: pointer; }
 .aud-chosen-chip:hover { background: var(--bg3); }
 .aud-link    { font: inherit; font-size: inherit; color: var(--tx1); background: transparent; border: none;
   padding: 0; cursor: pointer; text-align: left; border-bottom: 1px dotted var(--bd2); }
 .aud-link:hover { color: var(--am); border-bottom-color: var(--am); }
-.aud-only    { margin-left: 6px; font-size: 11.4px; color: var(--tx3); }
+.aud-only    { margin-left: 6px; font-size: 12px; color: var(--tx3); }
 /* ФИО, должность и телефон правятся прямо в таблице: заводятся они редко, а
    дополнять их приходится у всех учётных записей сразу. */
-.adm-inline { width: 100%; min-width: 120px; font-size: 12.6px; padding: 2px 6px; }
-.adm-date   { font-size: 10.8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; }
-.adm-entity { font-family: Archivo, system-ui, sans-serif; font-size: 10.8px; color: var(--tx3); }
-.adm-action { font-family: Archivo, system-ui, sans-serif; font-size: 12px; color: var(--accent); }
+.adm-inline { width: 100%; min-width: 120px; font-size: 12.5px; padding: 2px 6px; }
+.adm-date   { font-size: 11.5px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; }
+.adm-entity { font-family: Archivo, system-ui, sans-serif; font-size: 11.5px; color: var(--tx3); }
+.adm-action { font-family: Archivo, system-ui, sans-serif; font-size: 12.5px; color: var(--accent); }
 
-.adm-role-sel { padding: 2px 5px; height: 24px; font-size: 12px; width: 140px; }
+.adm-role-sel { padding: 2px 5px; height: 24px; font-size: 12.5px; width: 140px; }
 
 /* Пароль задан не самим пользователем — сменит при входе (2.1) */
-.adm-badge { margin-left: 6px; font-size: 10.8px; padding: 1px 6px; border-radius: 10px; white-space: nowrap;
+.adm-badge { margin-left: 6px; font-size: 11.5px; padding: 1px 6px; border-radius: 10px; white-space: nowrap;
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
-.adm-reset { padding: 2px 8px; height: 24px; font-size: 12px; white-space: nowrap; }
-.adm-p { margin: 0 0 10px; font-size: 13.2px; line-height: 1.5; color: var(--tx2); }
+.adm-reset { padding: 2px 8px; height: 24px; font-size: 12.5px; white-space: nowrap; }
+.adm-p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: var(--tx2); }
 .adm-muted { color: var(--tx3); }
 .adm-temp { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .adm-temp-pw { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 18px; letter-spacing: .06em;
   padding: 6px 10px; border: 1px solid var(--border); background: var(--bg3); color: var(--tx1); user-select: all; }
 
 .adm-toggle {
-  font-size: 10.8px; font-weight: 700; padding: 2px 8px; border-radius: 10px; border: none; cursor: pointer; transition: all .15s;
+  font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 10px; border: none; cursor: pointer; transition: all .15s;
 }
-.adm-toggle--on  { background: color-mix(in srgb, #10b981 20%, transparent); color: #10b981; }
+.adm-toggle--on  { background: var(--green-bg); color: var(--green); }
 .adm-toggle--off { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
 
 
-.dash-state    { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
-.dash-err      { color: var(--danger); }
 
 /* Вкладка «База данных» */
-.db-note { font-size: 13.2px; color: var(--tx3); line-height: 1.5; margin: 0 0 10px; max-width: 78ch; }
-.db-err  { font-size: 13.8px; color: var(--danger); margin: 0 0 10px; white-space: pre-line; }
-.db-ok   { font-size: 13.8px; color: var(--tx2); margin: 0 0 10px; }
-.db-warn { font-size: 14.4px; color: var(--danger); line-height: 1.5; margin: 0 0 8px; }
+.db-note { font-size: 13.5px; color: var(--tx3); line-height: 1.5; margin: 0 0 10px; max-width: 78ch; }
+.db-err  { font-size: 13.5px; color: var(--danger); margin: 0 0 10px; white-space: pre-line; }
+.db-ok   { font-size: 13.5px; color: var(--tx2); margin: 0 0 10px; }
+.db-warn { font-size: 14.5px; color: var(--danger); line-height: 1.5; margin: 0 0 8px; }
 .adm-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .db-acts { white-space: nowrap; text-align: right; }
-.db-acts .btn-xs { padding: 2px 7px; font-size: 12.6px; line-height: 1.5; }
-.db-acts .btn-xs + .btn-xs { margin-left: 4px; }
 .btn.is-busy { opacity: .5; pointer-events: none; }
 </style>

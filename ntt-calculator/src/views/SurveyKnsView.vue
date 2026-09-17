@@ -1,13 +1,13 @@
 <template>
   <div class="ol">
     <!-- ── Топбар ── -->
-    <header class="ol-top">
-      <div class="ol-top-l">
-        <RouterLink class="ol-lnk" :to="backTarget">{{ backLabel }}</RouterLink>
-        <span class="ol-name">Опросный лист — насосная станция</span>
-        <span class="ol-zayavka">заявка {{ form.zayavka }} · черновик валиден в любом порядке</span>
+    <header class="topbar">
+      <div class="tb-l">
+        <RouterLink class="tb-lnk" :to="backTarget">{{ backLabel }}</RouterLink>
+        <span class="tb-title">Опросный лист — насосная станция</span>
+        <span class="tb-sub">заявка {{ form.zayavka }} · черновик валиден в любом порядке</span>
       </div>
-      <div class="ol-top-r">
+      <div class="tb-r">
         <!-- Статус — настоящий: раньше здесь стояли часы открытия страницы с
              подписью «сохранено», хотя не сохранялось ничего. -->
         <span v-hint.plain="sync.error.value" class="ol-draft" :class="`ol-draft--${sync.status.value}`">
@@ -16,9 +16,7 @@
         <RouterLink v-if="estimateId" class="ol-lnk" :to="{ name: 'calculator', params: { id: estimateId } }">
           → Расчёт
         </RouterLink>
-        <button v-hint="'Переключить тему'" class="ol-btn" aria-label="Переключить тему" @click="toggle">
-          {{ theme === 'dark' ? '☾' : '☀' }} тема
-        </button>
+        <ThemeToggle compact />
       </div>
     </header>
 
@@ -477,6 +475,7 @@
 </template>
 
 <script setup lang="ts">
+import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -490,7 +489,6 @@ import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { legacySnManual, snManualLabel, snManualOptions } from '@/composables/usePipeOverride'
 import { usePumpSelection } from '@/composables/usePumpSelection'
-import { useTheme } from '@/composables/useTheme'
 import { useSurveySync } from '@/composables/useSurveySync'
 import { useCalcTreeStore } from '@/stores/calcTree'
 import { pipeLengthM } from '@/engines/formulas'
@@ -543,7 +541,6 @@ const props = defineProps<{
 defineEmits<{ 'update:deviceType': [DeviceType] }>()
 
 const router = useRouter()
-const { theme, toggle } = useTheme()
 
 const form = ref<KnsSurveyForm>({ ...makeDefaultKnsSurvey(), ...props.initial })
 /** Сноски полей листа: что поле значит и что меняет в расчёте (hints/survey.ts). */
@@ -923,13 +920,7 @@ async function createEstimate() {
 .ol { display: flex; flex-direction: column; height: 100vh; background: var(--bg); color: var(--text); }
 
 /* Топбар */
-.ol-top { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 14px; border-bottom: 2px solid var(--line); background: var(--panel); flex: none; }
-.ol-top-l { display: flex; align-items: baseline; gap: 10px; }
-.ol-name { font-size: 18px; font-weight: 700; }
-.ol-zayavka { font-size: 13.8px; color: var(--muted); }
-.ol-top-r { display: flex; align-items: center; gap: 10px; }
-.ol-draft { font-size: 13.2px; color: var(--faint); }
+.ol-draft { font-size: 13.5px; color: var(--faint); }
 /* Статус автосохранения: ошибка — акцентом, чтобы не прошла мимо; идущее
    сохранение — приглушённо, оно штатное. */
 .ol-draft--saving, .ol-draft--pending { color: var(--muted); }
@@ -944,13 +935,13 @@ async function createEstimate() {
   padding: 8px 0; overflow-y: auto; }
 .ol-step { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   padding: 7px 12px; background: transparent; border: none; border-left: 3px solid transparent;
-  color: var(--muted); font-size: 14.4px; }
+  color: var(--muted); font-size: 14.5px; }
 .ol-step:hover { color: var(--text); background: var(--panel2); }
 .ol-step.is-active { border-left-color: var(--acc); background: var(--panel2); color: var(--text); }
-.ol-step-m { font-size: 12px; min-width: 10px; }
+.ol-step-m { font-size: 12.5px; min-width: 10px; }
 .ol-step-m.ok { color: var(--green); }
 .ol-step-m.todo { color: var(--acc); }
-.ol-steps-hint { padding: 10px 12px; font-size: 11.4px; color: var(--faint); line-height: 1.5; }
+.ol-steps-hint { padding: 10px 12px; font-size: 12px; color: var(--faint); line-height: 1.5; }
 .ol-step-t { flex: 1; }
 
 /* Форма */
@@ -958,7 +949,7 @@ async function createEstimate() {
 .ol-tail { height: 40vh; }
 
 .ol-pick-btn {
-  font: inherit; font-size: 12px; margin-left: 6px; padding: 0;
+  font: inherit; font-size: 12.5px; margin-left: 6px; padding: 0;
   background: none; border: none; border-bottom: 1px dashed currentColor;
   color: var(--acc); cursor: pointer;
 }
@@ -968,29 +959,29 @@ async function createEstimate() {
 /* Live-панель */
 .ol-live { width: 300px; flex: none; border-left: 2px solid var(--line); background: var(--panel);
   padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.ol-live-h { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
-.ol-live-lbl { font-size: 12.6px; color: var(--muted); }
-.ol-live-npodz { font-size: 26.4px; font-weight: 700; }
-.ol-live-hint { font-size: 11.4px; color: var(--faint); line-height: 1.5; }
-.ol-live-u { font-size: 15.6px; font-weight: 400; color: var(--muted); }
-.ol-live-ovr { font-size: 12px; color: var(--blue); margin-top: -8px; }
+.ol-live-h { font-size: 12.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+.ol-live-lbl { font-size: 12.5px; color: var(--muted); }
+.ol-live-npodz { font-size: 26px; font-weight: 700; }
+.ol-live-hint { font-size: 12px; color: var(--faint); line-height: 1.5; }
+.ol-live-u { font-size: 15.5px; font-weight: 400; color: var(--muted); }
+.ol-live-ovr { font-size: 12.5px; color: var(--blue); margin-top: -8px; }
 .ol-live-vals { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid var(--line); padding-top: 8px; }
-.ol-live-row { display: flex; justify-content: space-between; font-size: 13.8px; }
+.ol-live-row { display: flex; justify-content: space-between; font-size: 13.5px; }
 .ol-live-row dt { color: var(--muted); }
-.ol-f { color: var(--faint); font-size: 10.8px; }
+.ol-f { color: var(--faint); font-size: 11.5px; }
 .ol-live-act { display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--line); padding-top: 8px; }
 .ol-live-prev { border: 1px solid var(--line); padding: 8px; background: var(--panel2); }
 .ol-prev-t { font-size: 15px; font-weight: 600; }
-.ol-prev-s { font-size: 13.2px; color: var(--muted); margin-top: 2px; }
+.ol-prev-s { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
 .ol-live-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
-.ol-hint { font-size: 13.2px; color: var(--amber); }
+.ol-hint { font-size: 13.5px; color: var(--amber); }
 
 .ol-btn { background: transparent; border: 1px solid var(--line2); color: var(--muted);
-  padding: 5px 11px; font-size: 13.8px; }
+  padding: 5px 11px; font-size: 13.5px; }
 .ol-btn:hover:not(:disabled) { color: var(--text); }
 .ol-btn--acc { border-color: var(--acc); color: var(--acc); }
 .ol-btn:disabled { opacity: .4; }
-.ol-create { background: var(--acc); border: 1px solid var(--acc); color: #fff;
+.ol-create { background: var(--acc); border: 1px solid var(--acc); color: var(--on-acc);
   padding: 8px 14px; font-size: 15px; font-weight: 600; }
 .ol-create:disabled { opacity: .4; }
 .ol-create--link { display: block; text-align: center; text-decoration: none; }
@@ -1000,11 +991,6 @@ async function createEstimate() {
 .ol-live-price strong { font-size: 18px; }
 
 /* Модал */
-.mo-h { font-size: 18px; font-weight: 700; }
-.mo-sub { font-size: 13.8px; color: var(--muted); margin: 4px 0 10px; }
-.mo-list { list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 14.4px; }
-.mo-on { color: var(--green); }
-.mo-off { color: var(--faint); }
 
 @media (max-width: 1100px) {
   .ol-steps { display: none; }

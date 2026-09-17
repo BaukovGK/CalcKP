@@ -73,7 +73,7 @@ watch(() => [view.seq, view.hint], () => {
   border: 1px solid var(--line2);
   box-shadow: 0 6px 22px rgba(0, 0, 0, .28);
   font-family: Archivo, system-ui, sans-serif;
-  font-size: 13px; line-height: 1.45;
+  font-size: 13.5px; line-height: 1.45;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   /* Без анимации: окно появляется сразу на своём месте. Плавное появление
@@ -94,5 +94,5 @@ watch(() => [view.seq, view.hint], () => {
 .hn-p + .hn-p { margin-top: 4px; }
 .hn-f { margin-top: 5px; display: flex; gap: 6px; color: var(--text); overflow-wrap: anywhere; }
 .hn-fm { color: var(--blue); font-style: italic; flex-shrink: 0; }
-.hn-s { margin-top: 6px; font-size: 11.6px; color: var(--faint); }
+.hn-s { margin-top: 6px; font-size: 12px; color: var(--faint); }
 </style>

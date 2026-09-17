@@ -200,8 +200,6 @@ watch(estimateId, (next, prev) => {
 </script>
 
 <style scoped>
-.sv-state { padding: 24px; font-size: 14.4px; color: var(--muted); }
-.sv-state--err { color: var(--acc); }
 
 .sv-wrap { display: flex; flex-direction: column; height: 100vh; }
 .sv-wrap > :last-child { flex: 1; min-height: 0; }
@@ -210,12 +208,12 @@ watch(estimateId, (next, prev) => {
 
 .sv-typebar { display: flex; align-items: center; gap: 8px; padding: 6px 14px;
   border-bottom: 1px solid var(--line); background: var(--panel2); flex: none; }
-.sv-typebar-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+.sv-typebar-lbl { font-size: 12.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
 .sv-type { display: flex; align-items: baseline; gap: 6px; padding: 4px 10px;
   background: transparent; border: 1px solid var(--line2); color: var(--muted); cursor: pointer; }
 .sv-type:hover { color: var(--text); }
 .sv-type.active { border-color: var(--acc); color: var(--text); background: var(--acc-bg); }
-.sv-type-code { font-size: 13.2px; font-weight: 700; }
-.sv-type-name { font-size: 12.6px; }
-.sv-typebar-note { margin-left: auto; font-size: 12.6px; color: var(--muted); }
+.sv-type-code { font-size: 13.5px; font-weight: 700; }
+.sv-type-name { font-size: 12.5px; }
+.sv-typebar-note { margin-left: auto; font-size: 12.5px; color: var(--muted); }
 </style>

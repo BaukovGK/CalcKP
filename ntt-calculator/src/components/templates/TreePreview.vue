@@ -105,10 +105,10 @@ const shift = computed(() =>
 </script>
 
 <style scoped>
-.tp { font-size: 13.2px; }
+.tp { font-size: 13.5px; }
 .tp-tot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; padding: 6px 8px; border: 1px solid var(--line); background: var(--panel2); }
 .tp-tot b { font-weight: 700; }
-.tp-diff { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 5px 8px; border: 1px solid var(--line); border-top: 0; font-size: 12.6px; }
+.tp-diff { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 5px 8px; border: 1px solid var(--line); border-top: 0; font-size: 12.5px; }
 .tp-diff-h { color: var(--muted); }
 .tp-add { color: var(--green); }
 .tp-del { color: var(--acc); }
@@ -119,11 +119,11 @@ const shift = computed(() =>
 .tp-s { border-bottom: 1px solid var(--line); }
 .tp-s summary { display: flex; justify-content: space-between; gap: 8px; padding: 5px 4px; cursor: pointer; font-weight: 600; }
 .tp-sum { color: var(--muted); font-weight: 400; }
-.tp-empty { padding: 2px 16px 6px; color: var(--faint); font-size: 12.6px; }
+.tp-empty { padding: 2px 16px 6px; color: var(--faint); font-size: 12.5px; }
 .tp-c { padding: 0 0 4px 8px; }
 .tp-c.off { opacity: .55; }
 .tp-ct { padding: 2px 0; color: var(--muted); }
-.tp-code { font-family: ui-monospace, Consolas, monospace; font-size: 11.4px; color: var(--faint); margin-left: 4px; }
+.tp-code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--faint); margin-left: 4px; }
 .tp-r { display: grid; grid-template-columns: minmax(0, 1fr) 70px 50px 86px 96px; gap: 6px; padding: 1px 0 1px 12px; }
 .tp-r.fot { color: var(--muted); }
 .tp-r.red .tp-n, .tp-r.red span:nth-child(4) { color: var(--acc); }

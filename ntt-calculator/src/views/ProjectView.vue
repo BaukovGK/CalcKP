@@ -3,11 +3,11 @@
     <aside class="sidebar">
       <div class="sidebar-top">
         <button class="back-link" @click="router.push('/')">← Проекты</button>
-        <div class="logo" style="margin-top:4px">{{ projects.current?.title ?? '…' }}</div>
+        <div class="logo">{{ projects.current?.title ?? '…' }}</div>
         <div v-if="projects.current?.customer" class="logo-sub">{{ projects.current.customer }}</div>
         <div v-if="projects.current?.address"  class="logo-sub">{{ projects.current.address }}</div>
       </div>
-      <div class="sidebar-scroll" style="flex:1">
+      <div class="sidebar-scroll">
         <div class="nav-section">Единицы оборудования</div>
         <template v-if="projects.current">
           <div
@@ -15,7 +15,7 @@
             class="pv-unit-link"
             @click="openUnit(e.id)"
           >
-            <span class="pv-unit-badge" :class="`pv-unit-badge--${e.deviceType.toLowerCase()}`">{{ e.deviceType }}</span>
+            <span class="dev-badge" :class="`dev-badge--${e.deviceType.toLowerCase()}`">{{ e.deviceType }}</span>
             <span class="pv-unit-name">{{ e.title }}</span>
           </div>
         </template>
@@ -94,7 +94,7 @@
               @click="openUnit(e.id)"
             >
               <div class="pv-uc-top">
-                <span class="pv-uc-type" :class="`pv-uc-type--${e.deviceType.toLowerCase()}`">{{ e.deviceType }}</span>
+                <span class="dev-badge" :class="`dev-badge--${e.deviceType.toLowerCase()}`">{{ e.deviceType }}</span>
                 <span class="pv-uc-status" :class="`pv-uc-status--${e.status.toLowerCase()}`">{{ STATUS_LABELS[e.status] }}</span>
                 <span class="pv-uc-date">{{ fmtDate(e.updatedAt) }}</span>
                 <button
@@ -160,13 +160,13 @@
 
     <!-- Подтверждение удаления единицы -->
     <BaseModal :show="!!deleteEstimateId" title="Удалить единицу?" @close="deleteEstimateId = null">
-      <div style="font-size:14.4px;color:var(--tx2)">
+      <div style="font-size:14.5px;color:var(--tx2)">
         Удалить <strong>{{ deleteEstimateTitle }}</strong>? Действие необратимо.
       </div>
       <div v-if="deleteError" class="auth-err" style="margin-top:8px">{{ deleteError }}</div>
       <template #footer>
         <button class="btn btn-g" @click="deleteEstimateId = null">Отмена</button>
-        <button class="btn" style="background:var(--danger);color:#fff" :disabled="deleting" @click="confirmDeleteEstimate">
+        <button class="btn btn-danger" :disabled="deleting" @click="confirmDeleteEstimate">
           {{ deleting ? 'Удаление…' : 'Удалить' }}
         </button>
       </template>
@@ -457,21 +457,15 @@ onMounted(() => projects.fetchOne(projectId))
 </script>
 
 <style scoped>
-.pv-ro { font-size: 12px; color: var(--tx3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; }
+.pv-ro { font-size: 12.5px; color: var(--tx3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; }
 
 .pv-unit-link {
   display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 4px;
   cursor: pointer; transition: background .12s;
 }
 .pv-unit-link:hover { background: var(--bg3); }
-.pv-unit-badge {
-  font-family: Archivo, system-ui, sans-serif; font-size: 9.6px; font-weight: 700;
-  padding: 1px 4px; border-radius: 2px; background: var(--accent); color: #fff; flex-shrink: 0;
-}
-.pv-unit-badge--emk { background: #8b5cf6; }
-.pv-unit-badge--kol { background: #10b981; }
-.pv-unit-name { font-size: 12px; color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pv-empty-nav { font-size: 12px; color: var(--tx3); padding: 4px 8px; font-style: italic; }
+.pv-unit-name { font-size: 12.5px; color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-empty-nav { font-size: 12.5px; color: var(--tx3); padding: 4px 8px; font-style: italic; }
 
 .pv-meta-card {
   margin: 12px; padding: 10px 14px; background: var(--bg2);
@@ -479,8 +473,8 @@ onMounted(() => projects.fetchOne(projectId))
   display: flex; flex-wrap: wrap; gap: 6px 20px;
 }
 .pv-meta-row   { display: flex; gap: 6px; align-items: baseline; }
-.pv-meta-lbl   { font-size: 9.6px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
-.pv-meta-val   { font-size: 13.2px; color: var(--tx1); }
+.pv-meta-lbl   { font-size: 11px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.pv-meta-val   { font-size: 13.5px; color: var(--tx1); }
 
 .pv-units-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -497,7 +491,7 @@ onMounted(() => projects.fetchOne(projectId))
    акцентом: это действие, а не единица оборудования. */
 .pv-unit-add {
   border: 1px dashed var(--accent); border-radius: 6px; background: transparent;
-  color: var(--accent); font: inherit; font-size: 13.2px; font-weight: 600;
+  color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 600;
   padding: 10px 12px; min-height: 84px; cursor: pointer;
   transition: background .15s;
 }
@@ -511,47 +505,38 @@ onMounted(() => projects.fetchOne(projectId))
 /* Единица без выпущенного КП — видна, но приглушена: это состояние, а не
    отсутствие. Скрывать её нельзя, иначе состав документа читается неверно. */
 .pv-kp-lbl.is-off { cursor: default; opacity: .55; }
-.pv-kp-title { font-size: 13.2px; color: var(--tx1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pv-kp-state { font-size: 11.4px; color: var(--tx3); white-space: nowrap; }
-.pv-kp-sum { font-size: 12px; color: var(--tx2); white-space: nowrap; min-width: 96px; text-align: right; }
-.pv-kp-note { font-size: 12px; color: var(--tx3); line-height: 1.5; margin: 10px 0 0; }
-.pv-kp-sub { font-size: 12.6px; color: var(--tx2); line-height: 1.5; margin: 0 0 10px; }
+.pv-kp-title { font-size: 13.5px; color: var(--tx1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-kp-state { font-size: 12px; color: var(--tx3); white-space: nowrap; }
+.pv-kp-sum { font-size: 12.5px; color: var(--tx2); white-space: nowrap; min-width: 96px; text-align: right; }
+.pv-kp-note { font-size: 12.5px; color: var(--tx3); line-height: 1.5; margin: 10px 0 0; }
+.pv-kp-sub { font-size: 12.5px; color: var(--tx2); line-height: 1.5; margin: 0 0 10px; }
 
 .pv-uc-top  { display: flex; align-items: center; gap: 6px; }
-.pv-uc-type {
-  font-family: Archivo, system-ui, sans-serif; font-size: 9.6px; font-weight: 700;
-  padding: 1px 5px; border-radius: 2px; background: var(--accent); color: #fff;
-}
-.pv-uc-type--emk { background: #8b5cf6; }
-.pv-uc-type--kol { background: #10b981; }
-.pv-uc-status { font-size: 10.8px; color: var(--tx3); }
-.pv-uc-status--approved { color: #10b981; }
-.pv-uc-status--review   { color: #f59e0b; }
-.pv-uc-date   { margin-left: auto; font-size: 10.8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
+.pv-uc-status { font-size: 11.5px; color: var(--tx3); }
+.pv-uc-status--approved { color: var(--green); }
+.pv-uc-status--review   { color: var(--amber); }
+.pv-uc-date   { margin-left: auto; font-size: 11.5px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 
-.pv-uc-title  { font-size: 14.4px; font-weight: 600; color: var(--tx1); }
+.pv-uc-title  { font-size: 14.5px; font-weight: 600; color: var(--tx1); }
 .pv-uc-params { display: flex; flex-wrap: wrap; gap: 4px; }
 .pv-uc-param  {
-  font-family: Archivo, system-ui, sans-serif; font-size: 10.8px; color: var(--tx3);
+  font-family: Archivo, system-ui, sans-serif; font-size: 11.5px; color: var(--tx3);
   background: var(--bg1); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px;
 }
 .pv-uc-total  {
-  font-family: Archivo, system-ui, sans-serif; font-size: 13.2px; font-weight: 700;
+  font-family: Archivo, system-ui, sans-serif; font-size: 13.5px; font-weight: 700;
   color: var(--accent); text-align: right; margin-left: auto;
 }
 /* Низ карточки: слева путь в расчёт, справа итог. */
 .pv-uc-foot { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
 .pv-uc-calc {
   background: none; border: none; padding: 0; cursor: pointer; font: inherit;
-  font-size: 11.4px; color: var(--tx3); border-bottom: 1px dashed currentColor;
+  font-size: 12px; color: var(--tx3); border-bottom: 1px dashed currentColor;
 }
 .pv-uc-calc:hover { color: var(--tx1); border-bottom-style: solid; }
-.dash-state     { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
-.dash-err       { color: var(--danger); }
 .pv-uc-del {
   margin-left: auto; background: transparent; border: none; color: var(--tx3);
-  font-size: 16.8px; line-height: 1; cursor: pointer; padding: 0 2px;
+  font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px;
   transition: color .12s;
 }
 .pv-uc-del:hover { color: var(--danger); }

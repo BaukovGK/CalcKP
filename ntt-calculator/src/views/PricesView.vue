@@ -3,9 +3,9 @@
     <aside class="sidebar">
       <div class="sidebar-top">
         <button class="back-link" @click="router.push('/')">← Проекты</button>
-        <div class="logo" style="margin-top:4px">Реестр цен</div>
+        <div class="logo">Реестр цен</div>
       </div>
-      <div class="sidebar-scroll" style="flex:1">
+      <div class="sidebar-scroll">
         <div class="nav-section pr-cats-h">
           <span>Категории</span>
           <button v-if="catFilter.size" class="pr-cats-all" @click="clearCategories">все</button>
@@ -697,23 +697,23 @@ onBeforeUnmount(() => {
 <style scoped>
 /* ── Боковая панель: категории ── */
 .pr-cats-h { display: flex; align-items: baseline; justify-content: space-between; padding-right: 8px; }
-.pr-cats-all { background: transparent; border: none; color: var(--acc); font-size: 11.4px; text-transform: none; letter-spacing: 0; padding: 0; }
+.pr-cats-all { background: transparent; border: none; color: var(--acc); font-size: 12px; text-transform: none; letter-spacing: 0; padding: 0; }
 .pr-cats-all:hover { text-decoration: underline; }
 .pr-cat {
-  display: flex; align-items: center; gap: 7px; padding: 4px 8px; font-size: 13.2px; color: var(--tx2);
+  display: flex; align-items: center; gap: 7px; padding: 4px 8px; font-size: 13.5px; color: var(--tx2);
   cursor: pointer; user-select: none;
 }
 .pr-cat:hover { background: var(--bg3); color: var(--tx1); }
 .pr-cat input { accent-color: var(--acc); margin: 0; flex-shrink: 0; }
 .pr-cat-n { flex: 1; min-width: 0; line-height: 1.25; }
-.pr-cat-c { font-size: 11.4px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pr-cat-c { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .pr-cat.on { color: var(--acc); font-weight: 600; }
 .pr-cat.on .pr-cat-c { color: var(--acc); }
 .pr-cat.empty { opacity: .45; }
 
 /* ── Шапка и панель фильтров ── */
-.pr-ver { font-size: 12px; color: var(--faint); margin-left: 6px; }
-.pr-count { font-size: 12px; color: var(--tx3); font-variant-numeric: tabular-nums; }
+.pr-ver { font-size: 12.5px; color: var(--faint); margin-left: 6px; }
+.pr-count { font-size: 12.5px; color: var(--tx3); font-variant-numeric: tabular-nums; }
 /* Предельная ширина рабочей колонки: таблица, панель фильтров и отчёт
  * импорта не растягиваются шире — строку прайса читают слева направо, от
  * наименования к цене, и глазу нельзя ехать через весь экран. */
@@ -722,29 +722,25 @@ onBeforeUnmount(() => {
 .pr-toolbar-in { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: var(--pr-max); }
 .pr-search-w { position: relative; flex: 1 1 320px; min-width: 220px; max-width: 560px; }
 .pr-search { width: 100%; padding-right: 26px; }
-.pr-search-x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: var(--faint); font-size: 13.2px; padding: 2px 5px; }
+.pr-search-x { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: var(--faint); font-size: 13.5px; padding: 2px 5px; }
 .pr-search-x:hover { color: var(--text); }
 .pr-tb-spacer { flex: 1; }
-.chip-f { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 12.6px; padding: 3px 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.chip-f:hover { color: var(--text); }
-.chip-red.on { border-color: var(--acc); color: var(--acc); background: var(--acc-bg); }
-.chip-amber.on { border-color: var(--amber); color: var(--amber); background: var(--amber-bg); }
 
 /* ── Отчёт импорта ── */
 .pr-imp { margin: 8px 12px; border: 1px solid var(--line2); background: var(--panel); padding: 8px 10px; max-width: var(--pr-max); }
-.pr-imp-h { display: flex; align-items: center; font-size: 13.8px; font-weight: 600; margin-bottom: 6px; }
-.pr-imp-x { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 14.4px; }
-.pr-imp-row { display: flex; gap: 16px; font-size: 13.2px; color: var(--muted); flex-wrap: wrap; }
+.pr-imp-h { display: flex; align-items: center; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+.pr-imp-x { margin-left: auto; background: transparent; border: none; color: var(--faint); font-size: 14.5px; }
+.pr-imp-row { display: flex; gap: 16px; font-size: 13.5px; color: var(--muted); flex-wrap: wrap; }
 .pr-imp-row .is-warn { color: var(--amber); }
 .pr-imp-d { margin-top: 6px; }
-.pr-imp-d summary { font-size: 12.6px; color: var(--faint); cursor: pointer; }
-.pr-imp-i { font-size: 12.6px; color: var(--muted); margin-top: 3px; }
-.pr-imp-note { font-size: 12px; color: var(--faint); margin-top: 6px; }
+.pr-imp-d summary { font-size: 12.5px; color: var(--faint); cursor: pointer; }
+.pr-imp-i { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.pr-imp-note { font-size: 12.5px; color: var(--faint); margin-top: 6px; }
 .pr-imp--preview { border-color: var(--amber); }
 .pr-imp-act { display: flex; gap: 6px; margin: 8px 0 2px; }
 .pr-imp-d summary.is-warn, .pr-imp-i.is-warn { color: var(--amber); }
 .pr-imp-scroll { max-height: 280px; overflow: auto; }
-.pr-imp-t { border-collapse: collapse; font-size: 12.6px; margin-top: 4px; width: 100%; }
+.pr-imp-t { border-collapse: collapse; font-size: 12.5px; margin-top: 4px; width: 100%; }
 .pr-imp-t td { padding: 2px 8px 2px 0; color: var(--muted); vertical-align: top; }
 .pr-imp-row-n { white-space: nowrap; color: var(--faint); width: 60px; }
 .pr-imp-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; width: 90px; }
@@ -753,23 +749,15 @@ onBeforeUnmount(() => {
 
 /* ── Таблица ── */
 .pr-area { padding: 0 12px 24px; }
-.pr-table { width: 100%; max-width: var(--pr-max); table-layout: fixed; border-collapse: collapse; font-size: 13.2px; }
 .pr-col-unit { width: 64px; }
 .pr-col-price { width: 132px; }
 .pr-col-supplier { width: 220px; }
 .pr-col-date { width: 96px; }
 .pr-col-actions { width: 76px; }
-.pr-table th {
-  text-align: left; padding: 6px 10px; font-size: 10.8px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--tx3); background: var(--bg1); border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 2; white-space: nowrap;
-}
 .pr-th-sort { cursor: pointer; user-select: none; }
 .pr-th-sort:hover { color: var(--text); }
-.pr-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); color: var(--tx2); vertical-align: middle; }
-.pr-table tbody tr:not(.pr-grp):hover td { background: var(--bg3); }
 .pr-grp td {
-  font-size: 10.8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
   padding: 12px 10px 4px; background: var(--bg); border-bottom: 1px solid var(--border);
 }
 .pr-grp-c { color: var(--faint); font-weight: 500; letter-spacing: 0; margin-left: 4px; }
@@ -778,33 +766,30 @@ onBeforeUnmount(() => {
 
 .pr-name { line-height: 1.35; overflow-wrap: anywhere; }
 .pr-issue { color: var(--amber); cursor: help; margin-left: 4px; }
-.pr-comment { font-size: 11.4px; color: var(--faint); margin-top: 1px; }
-.pr-unit { font-size: 11.4px; color: var(--tx3); white-space: nowrap; }
+.pr-comment { font-size: 12px; color: var(--faint); margin-top: 1px; }
+.pr-unit { font-size: 12px; color: var(--tx3); white-space: nowrap; }
 .pr-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pr-price-val { cursor: pointer; font-size: 13.2px; font-weight: 600; color: var(--accent); }
+.pr-price-val { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--accent); }
 .pr-price-val:hover { text-decoration: underline; }
-.pr-price--none { color: var(--acc); font-weight: 500; font-size: 12px; }
+.pr-price--none { color: var(--acc); font-weight: 500; font-size: 12.5px; }
 .pr-price--ro { cursor: default; }
 .pr-price--ro:hover { text-decoration: none; }
 .pr-supplier { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-sup-val { cursor: pointer; }
 .pr-sup-val:hover { text-decoration: underline; color: var(--tx1); }
-.pr-date { font-size: 11.4px; color: var(--tx3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pr-date { font-size: 12px; color: var(--tx3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pr-actions { white-space: nowrap; text-align: right; }
 
-.pr-inp { padding: 2px 5px; font-size: 13.2px; height: 24px; width: 100%; }
+.pr-inp { padding: 2px 5px; font-size: 13.5px; height: 24px; width: 100%; }
 .pr-num .pr-inp { text-align: right; }
-.pr-save-btn { padding: 2px 7px; font-size: 13.2px; height: 24px; min-width: 0; }
+.pr-save-btn { padding: 2px 7px; font-size: 13.5px; height: 24px; min-width: 0; }
 .pr-edit-btn {
-  background: transparent; border: none; color: var(--tx3); font-size: 15.6px;
+  background: transparent; border: none; color: var(--tx3); font-size: 15.5px;
   cursor: pointer; padding: 2px 4px; transition: color .12s;
 }
 .pr-edit-btn:hover { color: var(--accent); }
 
-.pr-more { display: flex; align-items: center; gap: 10px; padding: 12px 0; max-width: var(--pr-max); font-size: 12.6px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pr-more { display: flex; align-items: center; gap: 10px; padding: 12px 0; max-width: var(--pr-max); font-size: 12.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
 
-.dash-state    { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
-.dash-state-txt { font-size: 14.4px; color: var(--tx3); }
-.dash-err      { color: var(--danger); }
 </style>

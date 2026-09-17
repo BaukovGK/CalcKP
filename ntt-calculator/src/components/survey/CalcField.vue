@@ -65,7 +65,7 @@ function reset() {
    напорная сторона»), и без резерва их высоты расходились: поля ввода вставали
    на разной высоте, а строка «плыла». Резерв делает все поля равными по
    высоте, поэтому выравнивание работает и по верху, и по низу. */
-.cf-l { font-size: 13.2px; color: var(--muted); min-height: 2.5em; display: block; }
+.cf-l { font-size: 13.5px; color: var(--muted); min-height: 2.5em; display: block; }
 .cf-row { display: flex; align-items: center; gap: 4px; }
 .cf-i {
   flex: 1; min-width: 0; text-align: right;
@@ -75,6 +75,6 @@ function reset() {
 /* Override — синий: канал ручного ввода (Механика §5). */
 .cf-i.is-ovr { color: var(--blue); border-color: var(--blue); background: var(--blue-bg); }
 .cf-i::placeholder { color: var(--text); opacity: 1; }
-.cf-reset { background: transparent; border: none; color: var(--blue); font-size: 14.4px; padding: 0 2px; }
-.cf-f { font-size: 12px; color: var(--faint); }
+.cf-reset { background: transparent; border: none; color: var(--blue); font-size: 14.5px; padding: 0 2px; }
+.cf-f { font-size: 12.5px; color: var(--faint); }
 </style>

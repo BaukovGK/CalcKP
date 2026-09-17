@@ -3,7 +3,7 @@
     <aside class="sidebar">
       <div class="sidebar-top">
         <button class="back-link" @click="toCalculator">← Расчёт</button>
-        <div class="logo" style="margin-top:4px">Выпуск КП</div>
+        <div class="logo">Выпуск КП</div>
       </div>
 
       <div class="sidebar-scroll">
@@ -16,7 +16,7 @@
           @click="tab = t.id"
         >
           {{ t.label }}
-          <span v-if="t.id === 'kit' && !manualDescription" class="kpv-cnt">{{ kit.length }}</span>
+          <span v-if="t.id === 'kit' && !manualDescription" class="nav-cnt kpv-cnt">{{ kit.length }}</span>
         </button>
       </div>
 
@@ -30,13 +30,13 @@
       </div>
     </aside>
 
-    <main class="kpv">
-      <header class="kpv-top">
-        <div class="kpv-top-l">
-          <span class="kpv-name">{{ draft?.customer ?? 'Коммерческое предложение' }}</span>
-          <span v-if="draft?.object" class="kpv-obj">{{ draft.object }}</span>
+    <div class="main-col">
+      <header class="topbar">
+        <div class="tb-l">
+          <span class="tb-title">{{ draft?.customer ?? 'Коммерческое предложение' }}</span>
+          <span v-if="draft?.object" class="tb-sub">{{ draft.object }}</span>
         </div>
-        <div class="kpv-top-r">
+        <div class="tb-r">
           <button class="btn" :disabled="busy" @click="toCalculator">Отмена</button>
           <button class="btn btn-acc" :disabled="busy || loading || !draft" @click="issue">
             {{ busy ? 'Выпускаем…' : 'Выпустить КП' }}
@@ -47,7 +47,7 @@
       <div v-if="loading" class="kpv-state">Собираем черновик…</div>
       <div v-else-if="error" class="kpv-state kpv-state--err">{{ error }}</div>
 
-      <div v-else-if="draft" class="kpv-body">
+      <div v-else-if="draft" class="calc-area kpv-body">
         <!-- Отказ гейта — на месте, а не всплывающим уведомлением: инженеру
              нужно прочитать список строк и уйти чинить их в расчёт. -->
         <div v-if="block" class="kpv-block">
@@ -74,7 +74,7 @@
             заказчику: документ печатается из этой редакции и потом не пересобирается.
           </p>
 
-          <h3 class="kpv-h">Шапка</h3>
+          <h3 class="sec-h kpv-h">Шапка</h3>
           <div class="ol-grid">
             <label class="fld fld--4">
               <span v-hint="H.number">Исх. №</span>
@@ -90,7 +90,7 @@
             </label>
           </div>
 
-          <h3 class="kpv-h">Изделие</h3>
+          <h3 class="sec-h kpv-h">Изделие</h3>
           <div class="ol-grid">
             <label class="fld fld--3">
               <span v-hint="H.tag">Обозначение по проекту</span>
@@ -122,7 +122,7 @@
             </label>
           </div>
 
-          <h3 class="kpv-h">
+          <h3 class="sec-h kpv-h">
             Наименование номенклатуры
             <label class="kpv-tgl">
               <input v-model="manualDescription" type="checkbox" />
@@ -136,7 +136,7 @@
         <!-- ── Комплектация ── -->
         <section v-else-if="tab === 'kit'" class="kpv-pane kpv-pane--split">
           <div class="kpv-kit">
-            <h3 class="kpv-h">
+            <h3 class="sec-h kpv-h">
               В комплекте
               <label class="kpv-tgl">
                 <input v-model="kitAsTable" type="checkbox" />
@@ -197,14 +197,14 @@
           <!-- Предпросмотр рядом с таблицей: правка состава видна сразу, а не
                через переключение вкладок. -->
           <aside class="kpv-side">
-            <h3 class="kpv-h">Как увидит заказчик</h3>
+            <h3 class="sec-h kpv-h">Как увидит заказчик</h3>
             <pre class="kpv-prev kpv-prev--tall">{{ manualDescription ? description : preview }}</pre>
           </aside>
         </section>
 
         <!-- ── Условия ── -->
         <section v-else-if="tab === 'terms'" class="kpv-pane">
-          <h3 class="kpv-h">Условия</h3>
+          <h3 class="sec-h kpv-h">Условия</h3>
           <div class="ol-grid">
             <label class="fld fld--3">
               <span v-hint="H.vat">НДС, %</span>
@@ -247,7 +247,7 @@
 
         <!-- ── Подпись ── -->
         <section v-else class="kpv-pane">
-          <h3 class="kpv-h">Подпись и исполнитель</h3>
+          <h3 class="sec-h kpv-h">Подпись и исполнитель</h3>
           <div class="ol-grid">
             <label class="fld fld--6">
               <span v-hint="H.signerTitle">Должность подписанта</span>
@@ -276,7 +276,7 @@
           </div>
         </section>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -562,68 +562,48 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
 </script>
 
 <style scoped>
-.kpv { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; }
 
-.kpv-top { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 8px 14px; border-bottom: 1px solid var(--bd); flex-shrink: 0; }
-.kpv-top-l { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.kpv-name { font-size: 14.4px; font-weight: 600; }
-.kpv-obj { font-size: 12px; color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kpv-top-r { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
-.kpv-state { padding: 24px 16px; font-size: 13.2px; color: var(--tx2); }
-.kpv-state--err { color: var(--acc); }
 
-.kpv-body { flex: 1; overflow-y: auto; padding: 14px 16px 28px; }
 .kpv-pane { max-width: 1040px; }
 .kpv-pane--split { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; max-width: none; }
 .kpv-kit { min-width: 0; }
 .kpv-side { min-width: 0; }
 
-.kpv-sub { font-size: 12.6px; color: var(--tx2); margin-bottom: 14px; max-width: 720px; }
-.kpv-h { display: flex; align-items: center; gap: 10px; font-size: 13.8px; font-weight: 700;
-  margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-.kpv-pane > .kpv-h:first-of-type, .kpv-kit > .kpv-h:first-child, .kpv-side > .kpv-h:first-child { margin-top: 0; }
+.kpv-sub { font-size: 12.5px; color: var(--tx2); margin-bottom: 14px; max-width: 720px; }
 .kpv-tgl { display: flex; align-items: center; gap: 5px; margin-left: auto;
-  font-size: 12px; font-weight: 400; color: var(--tx2); }
-.kpv-add { margin-left: auto; font-size: 12px; }
-.kpv-note { font-size: 12.6px; color: var(--tx2); padding: 10px 12px; background: var(--bg3);
+  font-size: 12.5px; font-weight: 400; color: var(--tx2); }
+.kpv-add { margin-left: auto; font-size: 12.5px; }
+.kpv-note { font-size: 12.5px; color: var(--tx2); padding: 10px 12px; background: var(--bg3);
   border: 1px solid var(--bd); max-width: 560px; }
 
-.kpv-text { width: 100%; font: inherit; font-size: 12.6px; resize: vertical; }
+.kpv-text { width: 100%; font: inherit; font-size: 12.5px; resize: vertical; }
 /* Состав — во весь экран: строк два десятка, и прокручивать их в полосе нельзя. */
 .kpv-text--kit { height: calc(100vh - 210px); min-height: 240px; line-height: 1.5; }
-.kpv-hintline { margin: 4px 0 0; font-size: 11.4px; color: var(--tx3); }
+.kpv-hintline { margin: 4px 0 0; font-size: 12px; color: var(--tx3); }
 .kpv-prev { margin: 0; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--bd);
-  font: inherit; font-size: 12.2px; white-space: pre-wrap; max-height: 420px; overflow: auto; }
-.kpv-prev--tall { position: sticky; top: 0; max-height: calc(100vh - 160px); }
+  font: inherit; font-size: 12.5px; white-space: pre-wrap; max-height: 420px; overflow: auto; }
+.kpv-prev--tall { position: sticky; top: 0; max-height: calc(100vh - 170px); }
 
 /* Таблица состава — во всю ширину: узлы КНС длинные, обрезать их нельзя. */
-.kpv-tbl { width: 100%; border-collapse: collapse; font-size: 12.6px; }
-.kpv-tbl th { text-align: left; font-weight: 500; color: var(--tx2); padding: 3px 4px;
-  border-bottom: 1px solid var(--bd); }
-.kpv-tbl td { padding: 2px 4px; }
-.kpv-tbl tr:hover td { background: var(--bg2); }
 .kpv-tbl input { width: 100%; }
 .kpv-tbl input.kpv-num { width: 84px; text-align: right; }
 .kpv-tbl input.kpv-unit { width: 84px; }
 th.kpv-num, th.kpv-unit { width: 92px; }
 .kpv-empty { color: var(--tx2); padding: 10px 4px; }
 
-.kpv-cnt { float: right; font-size: 11.4px; color: var(--tx3); font-weight: 400; }
 .kpv-sum { margin-bottom: 8px; }
-.kpv-sum-l { font-size: 10.8px; letter-spacing: .06em; text-transform: uppercase; color: var(--tx3); }
+.kpv-sum-l { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--tx3); }
 .kpv-sum-v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.kpv-sum-n { font-size: 11.4px; color: var(--tx2); }
+.kpv-sum-n { font-size: 12px; color: var(--tx2); }
 
 .kpv-block { border: 1px solid var(--acc); background: var(--bg2); padding: 12px 14px;
   margin-bottom: 16px; max-width: 720px; }
-.kpv-block-h { font-size: 13.8px; font-weight: 700; color: var(--acc); margin-bottom: 4px; }
-.kpv-block-msg { font-size: 12.6px; margin: 0 0 8px; }
-.kpv-block-list { margin: 0 0 6px; padding-left: 18px; font-size: 12.2px; }
+.kpv-block-h { font-size: 13.5px; font-weight: 700; color: var(--acc); margin-bottom: 4px; }
+.kpv-block-msg { font-size: 12.5px; margin: 0 0 8px; }
+.kpv-block-list { margin: 0 0 6px; padding-left: 18px; font-size: 12.5px; }
 .kpv-block-u { color: var(--tx2); }
-.kpv-block-more { font-size: 12.2px; color: var(--tx2); margin: 0 0 8px; }
+.kpv-block-more { font-size: 12.5px; color: var(--tx2); margin: 0 0 8px; }
 .kpv-block-act { display: flex; gap: 8px; }
 
-.btn-acc { border-color: var(--acc); color: var(--acc); }
 </style>

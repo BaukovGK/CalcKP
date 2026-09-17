@@ -3,7 +3,7 @@
     <aside class="sidebar">
       <div class="sidebar-top">
         <button class="back-link" @click="router.push('/')">← Проекты</button>
-        <div class="logo" style="margin-top:4px">Настройки</div>
+        <div class="logo">Настройки</div>
         <div class="logo-sub">{{ auth.user?.name }}</div>
       </div>
       <div class="sidebar-scroll">
@@ -197,9 +197,8 @@ async function logoutAll() {
 .set-card { max-width: 720px; margin: 16px auto 0; padding: 16px 18px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
   display: flex; flex-direction: column; gap: 14px; }
-.set-note { font-size: 12.6px; color: var(--muted); line-height: 1.5; }
-.set-preview { font-size: 12.6px; color: var(--muted); }
-.set-role { font-size: 12.6px; color: var(--muted); }
+.set-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.set-preview { font-size: 12.5px; color: var(--muted); }
+.set-role { font-size: 12.5px; color: var(--muted); }
 .set-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.req { color: var(--acc); }
 </style>

@@ -47,6 +47,8 @@
   --amber-bg: rgba(217, 165, 68, .12);
   --green:    #5fb87a;
   --green-bg: rgba(95, 184, 122, .12);
+  /* Текст поверх заливки акцентом, синим или зелёным — в обеих темах белый. */
+  --on-acc:   #ffffff;
 
   font-family: Archivo, system-ui, sans-serif;
   font-size: 15.6px;
@@ -180,16 +182,21 @@ input, select { font-family: inherit; }
 /* ── SIDEBAR ── */
 .sidebar { width: 212px; background: var(--bg2); border-right: 1px solid var(--bd); display: flex; flex-direction: column; flex-shrink: 0; }
 .sidebar-top { padding: 12px 10px 10px; border-bottom: 1px solid var(--bd); }
-.logo     { font-family: Archivo, system-ui, sans-serif; font-size: 10.8px; font-weight: 600; color: var(--am); letter-spacing: 2px; }
-.logo-sub { font-size: 9.6px; color: var(--tx3); margin-top: 2px; font-family: Archivo, system-ui, sans-serif; }
+.logo     { font-family: Archivo, system-ui, sans-serif; font-size: 11.5px; font-weight: 600; color: var(--am); letter-spacing: 2px; }
+.logo-sub { font-size: 11px; color: var(--tx3); margin-top: 2px; font-family: Archivo, system-ui, sans-serif; }
+/* Название под кнопкой «назад» — с отбивкой; раньше её добавляли inline-стилем
+   на пяти экранах. */
+.back-link + .logo { margin-top: 4px; }
 .sidebar-scroll { flex: 1; overflow-y: auto; padding: 5px 4px 12px; }
 .sidebar-scroll::-webkit-scrollbar { width: 2px; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--bd2); }
 /* Навигация боковой панели. Раньше эти правила лежали scoped-копиями в трёх
    экранах, и четвёртый (настройки) получил ссылки без них: кнопки встали в
    строку и без отметки активного раздела. Оболочка общая — и стили общие. */
-.nav-section { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
-.nav-link { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 13.2px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
+.nav-section { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
+.nav-link { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 13.5px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; font-family: inherit; }
+/* Счётчик справа от пункта меню: «Комплектация 18», «Замечания 3». */
+.nav-cnt { float: right; font-size: 11.5px; color: var(--tx3); font-weight: 400; }
 .nav-link:hover { background: var(--bg3); color: var(--tx1); }
 .nav-link--active { background: var(--bg3); color: var(--accent); font-weight: 600; }
 
@@ -207,29 +214,57 @@ input, select { font-family: inherit; }
 .nav-add { display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 3px; cursor: pointer; color: var(--tx3); font-size: 12px; border: 1px dashed transparent; transition: all .1s; margin-top: 1px; }
 .nav-add:hover { color: var(--tl2); border-color: var(--tl); background: var(--tld); }
 
-/* ── TOPBAR ── */
-.topbar { height: 46px; background: var(--bg2); border-bottom: 1px solid var(--bd); display: flex; align-items: center; gap: 8px; padding: 0 14px; flex-shrink: 0; }
-.tb-title { font-family: Archivo, system-ui, sans-serif; font-size: 13.2px; font-weight: 600; color: var(--am); letter-spacing: 1px; }
-.tb-sub   { font-size: 9.6px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
+/* ── TOPBAR ──
+ * Одна шапка на все экраны. Экраны с боковой панелью кладут её в `.main-col`;
+ * рабочие экраны без панели (расчёт, опросный лист, заявка) — первой полосой.
+ * Заголовок — текстом, не акцентом: акцент здесь оставлен действиям и
+ * состояниям, а название экрана должно просто читаться. */
+.topbar { min-height: 46px; background: var(--bg2); border-bottom: 1px solid var(--bd); display: flex; align-items: center; gap: 10px; padding: 6px 14px; flex-shrink: 0; flex-wrap: wrap; }
+.tb-title { font-family: Archivo, system-ui, sans-serif; font-size: 15.5px; font-weight: 700; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-sub   { font-size: 12px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 .tb-spacer { flex: 1; }
-.tb-total-label { font-size: 9.6px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: 1px; }
-.tb-total { font-family: Archivo, system-ui, sans-serif; font-size: 16.8px; font-weight: 600; color: var(--am); }
+/* Левая и правая группы шапки: слева «назад», название и подписи, справа —
+   действия. Правая группа не переносится внутри себя. */
+.tb-l { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+.tb-r { display: flex; align-items: center; gap: 7px; flex: none; margin-left: auto; }
+.tb-total-label { font-size: 11px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+.tb-total { font-family: Archivo, system-ui, sans-serif; font-size: 17px; font-weight: 600; color: var(--am); }
+/* Ссылка «назад» и перекрёстные ссылки в шапке — один вид на все экраны.
+   Прежде их было четыре класса с одними числами. */
+.tb-lnk, .pr-lnk, .ol-back, .ol-lnk { font-size: 13.5px; color: var(--tx2); text-decoration: none; white-space: nowrap; background: transparent; border: none; padding: 0; cursor: pointer; font-family: inherit; }
+.tb-lnk:hover, .pr-lnk:hover, .ol-back:hover, .ol-lnk:hover { color: var(--tx); }
+/* Бейдж состояния в шапке: черновик, только просмотр. */
+.tb-badge { font-size: 12px; border: 1px solid var(--bd2); color: var(--tx2); padding: 1px 6px; white-space: nowrap; }
+.tb-badge--warn { color: var(--amber); border-color: var(--amber); }
 
-/* ── BUTTONS ── */
-.btn { padding: 4px 10px; border-radius: 3px; font-size: 12px; font-weight: 500; border: 1px solid var(--bd2); background: var(--bg3); color: var(--tx); transition: all .1s; white-space: nowrap; }
-.btn:hover { background: var(--bg4); }
-.btn-am { background: var(--am); color: #000; border-color: var(--am); font-weight: 600; }
-.btn-am:hover { background: var(--am2); }
+/* ── BUTTONS ──
+ * `.btn` — обычная; `.btn-am` — главное действие экрана, залитая акцентом;
+ * `.btn-acc` — важное, но не главное, контуром акцента (выпуск КП рядом с
+ * «Сохранить»); `.btn-g` — тихая, без рамки; `.btn-danger` — необратимое;
+ * `.btn-xs` — в строке таблицы. Один кегль на все. */
+.btn { padding: 4px 10px; border-radius: 3px; font-size: 13.5px; font-weight: 500; border: 1px solid var(--bd2); background: var(--bg3); color: var(--tx); transition: all .1s; white-space: nowrap; font-family: inherit; line-height: 1.4; }
+.btn:hover:not(:disabled) { background: var(--bg4); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn-am { background: var(--am); color: var(--on-acc); border-color: var(--am); font-weight: 600; }
+.btn-am:hover:not(:disabled) { background: var(--am2); filter: brightness(1.08); }
+.btn-acc { background: transparent; border-color: var(--acc); color: var(--acc); }
+.btn-acc:hover:not(:disabled) { background: var(--acc-bg); }
 .btn-g  { background: transparent; border-color: transparent; color: var(--tx2); }
-.btn-g:hover { background: var(--bg3); border-color: var(--bd); }
+.btn-g:hover:not(:disabled) { background: var(--bg3); border-color: var(--bd); color: var(--tx); }
+.btn-danger { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-xs, .btn-mini { padding: 2px 7px; font-size: 12.5px; line-height: 1.5; }
+.btn-xs + .btn-xs, .btn-mini + .btn-mini { margin-left: 4px; }
 .ib { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 3px; font-size: 14.4px; border: 1px solid transparent; background: transparent; color: var(--tx3); transition: all .1s; flex-shrink: 0; line-height: 1; }
 .ib:hover { background: var(--bg4); color: var(--tx); border-color: var(--bd); }
 .ib-d:hover { background: var(--rdd); color: var(--rd); border-color: rgba(238,104,104,.2); }
 .chev { font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 3px; color: var(--tx3); transition: all .1s; user-select: none; }
 .chev:hover { background: var(--bg5); color: var(--tx); }
 
-/* ── CALC SCROLL AREA ── */
-.calc-area { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 10px 12px 24px; }
+/* ── CALC SCROLL AREA ──
+ * По горизонтали — auto, а не hidden: широкая таблица (сотрудники в
+ * администрировании) должна прокручиваться, а не обрезаться. */
+.calc-area { flex: 1; overflow-y: auto; overflow-x: auto; padding: 12px 16px 28px; }
 .calc-area::-webkit-scrollbar { width: 4px; }
 .calc-area::-webkit-scrollbar-thumb { background: var(--bd2); border-radius: 2px; }
 
@@ -287,7 +322,7 @@ input, select { font-family: inherit; }
 .rows-tbl colgroup .c-nt  { width: 90px; }
 .rows-tbl colgroup .c-ac  { width: 50px; }
 
-thead th { background: var(--bg5); padding: 4px 6px; font-size: 9.6px; color: var(--tx3); letter-spacing: .8px; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--bd); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; font-weight: 500; }
+thead th { background: var(--bg5); padding: 4px 6px; font-size: 11px; color: var(--tx3); letter-spacing: .06em; text-transform: uppercase; text-align: left; border-bottom: 1px solid var(--bd); font-family: Archivo, system-ui, sans-serif; white-space: nowrap; font-weight: 500; }
 thead th.r { text-align: right; }
 .rows-tbl td { border-bottom: 1px solid rgba(30,40,64,.7); padding: 0; vertical-align: middle; }
 
@@ -393,11 +428,17 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 .mo { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 500; display: flex; align-items: center; justify-content: center; }
 .mo-box { background: var(--bg2); border: 1px solid var(--bd3); border-radius: 8px; width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 48px); display: flex; flex-direction: column; overflow: hidden; }
 .mo-hd  { padding: 12px 16px; border-bottom: 1px solid var(--bd); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.mo-tt  { font-size: 14.4px; font-weight: 500; }
+.mo-tt  { font-size: 15.5px; font-weight: 700; }
 .mo-bd  { padding: 16px; overflow-y: auto; flex: 1; }
 .mo-ft  { padding: 10px 16px; border-top: 1px solid var(--bd); display: flex; gap: 6px; justify-content: flex-end; flex-shrink: 0; }
-.fl { font-size: 9.6px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; letter-spacing: .5px; margin-bottom: 4px; display: block; text-transform: uppercase; }
-.fi { width: 100%; background: var(--bg3); border: 1px solid var(--bd); color: var(--tx); padding: 6px 9px; border-radius: 3px; font-size: 13.2px; outline: none; }
+.mo-ft:empty { display: none; }
+/* Подзаголовок и список в окне — те же, что у превью опросного листа. */
+.mo-sub { font-size: 13.5px; color: var(--muted); margin: 4px 0 10px; line-height: 1.45; }
+.mo-list { list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 14.5px; }
+.mo-on { color: var(--green); }
+.mo-off { color: var(--faint); }
+.fl { font-size: 11px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; letter-spacing: .06em; margin-bottom: 4px; display: block; text-transform: uppercase; }
+.fi { width: 100%; background: var(--bg3); border: 1px solid var(--bd); color: var(--tx); padding: 6px 9px; border-radius: 3px; font-size: 13.5px; outline: none; font-family: inherit; }
 .fi:focus { border-color: var(--am); }
 .ff { margin-bottom: 10px; }
 .cpr { display: flex; gap: 5px; flex-wrap: wrap; }
@@ -411,20 +452,117 @@ mark.hl   { background: transparent; color: var(--am2); font-weight: 600; }
 .auth-page  { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
 .auth-card  { width: 340px; background: var(--bg2); border: 1px solid var(--bd3); border-radius: 10px; padding: 28px; }
 .auth-logo  { font-family: Archivo, system-ui, sans-serif; font-size: 13.2px; font-weight: 600; color: var(--am); letter-spacing: 2px; margin-bottom: 3px; }
-.auth-sub   { font-size: 10.8px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; margin-bottom: 22px; }
-.auth-err   { background: var(--rdd); border: 1px solid rgba(238,104,104,.25); border-radius: 4px; padding: 8px 10px; font-size: 13.2px; color: var(--rd); margin-bottom: 12px; }
+.auth-sub   { font-size: 11.5px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; margin-bottom: 22px; }
+.auth-err   { background: var(--rdd); border: 1px solid var(--acc); border-radius: 4px; padding: 8px 10px; font-size: 13.5px; color: var(--rd); margin-bottom: 12px; }
 .auth-sep   { height: 1px; background: var(--bd); margin: 12px 0; }
-.auth-footer{ margin-top: 12px; text-align: center; font-size: 10.8px; color: var(--tx4); font-family: Archivo, system-ui, sans-serif; }
+.auth-footer{ margin-top: 12px; text-align: center; font-size: 11.5px; color: var(--tx4); font-family: Archivo, system-ui, sans-serif; }
 /* Пояснение под полем входа: не ошибка формы, а подсказка про раскладку. */
-.auth-note  { margin-top: 5px; font-size: 12px; color: var(--am); }
-.btn-full   { width: 100%; justify-content: center; padding: 8px 12px; font-size: 13.2px; }
+.auth-note  { margin-top: 5px; font-size: 12.5px; color: var(--am); }
+.btn-full   { width: 100%; justify-content: center; padding: 8px 12px; font-size: 13.5px; }
 
 /* ── SIDEBAR FOOTER ── */
 .sidebar-footer { padding: 8px; border-top: 3px solid var(--bd); flex-shrink: 0; }
 
-/* ── CALCULATOR: back-link ── */
-.back-link { background: transparent; border: none; color: var(--tx3); font-size: 10.8px; font-family: Archivo, system-ui, sans-serif; cursor: pointer; padding: 0 0 4px; letter-spacing: .03em; transition: color .12s; }
-.back-link:hover { color: var(--am); }
+/* ── Ссылка «назад» в боковой панели ── */
+.back-link { background: transparent; border: none; color: var(--tx3); font-size: 12px; font-family: inherit; cursor: pointer; padding: 0 0 4px; letter-spacing: .02em; transition: color .12s; }
+.back-link:hover { color: var(--tx); }
+
+/* ── СОСТОЯНИЯ: загрузка, пусто, ошибка ──
+ * Один блок на все экраны. Прежде было четыре одинаковые scoped-копии
+ * (`.dash-state`) и три разных (`.state`, `.tpl-state`, `.kpv-state`,
+ * `.sv-state`): где-то по центру и полупрозрачно, где-то слева и мельче.
+ * Старые имена оставлены синонимами — разметка экранов и тесты их знают. */
+.state, .dash-state, .tpl-state, .kpv-state, .sv-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; min-height: 40vh; padding: 28px 16px; text-align: center;
+  font-size: 14.5px; color: var(--tx2);
+}
+.state--inline { min-height: 0; padding: 20px 16px; }
+.dash-state-txt { font-size: inherit; color: inherit; }
+.state-err, .state--err, .dash-err, .tpl-state--err, .kpv-state--err, .sv-state--err { color: var(--acc); }
+
+/* ── ТАБЛИЦЫ ДАННЫХ ──
+ * Реестр цен, сотрудники и журнал, справочники технолога, состав КП, история
+ * версий — одна таблица. Кегль строки 13.5, шапка капсом 11, прилипает к
+ * верху области прокрутки, строки разделены линией, наведение подсвечивает. */
+.data-tbl, .pr-table, .adm-table, .tpl-tbl, .kpv-tbl, .ver-tbl {
+  width: 100%; border-collapse: collapse; font-size: 13.5px;
+}
+.data-tbl th, .pr-table th, .adm-table th, .tpl-tbl th, .kpv-tbl th, .ver-tbl th {
+  position: sticky; top: 0; z-index: 2; text-align: left;
+  font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--tx3); background: var(--bg2); padding: 6px 10px; border-bottom: 1px solid var(--bd);
+  white-space: nowrap;
+}
+.data-tbl td, .pr-table td, .adm-table td, .tpl-tbl td, .kpv-tbl td, .ver-tbl td {
+  padding: 5px 10px; border-bottom: 1px solid var(--bd); vertical-align: middle; color: var(--tx2);
+}
+.data-tbl tbody tr:hover td, .pr-table tbody tr:hover td, .adm-table tbody tr:hover td,
+.tpl-tbl tbody tr:hover td, .kpv-tbl tbody tr:hover td, .ver-tbl tbody tr:hover td { background: var(--bg3); }
+.data-tbl .num, .pr-table .num, .adm-table .num, .tpl-tbl .num, .kpv-tbl .num, .ver-tbl .num,
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Компактное поле в строке таблицы: тот же вид, что у `.fi`, но ниже. */
+.fi-xs, .fi.fi-xs { padding: 2px 6px; font-size: 13px; height: 26px; }
+/* Поле-ячейка справочника технолога: белое (в тёмной — cellbg), под числа. */
+.ti { width: 100%; min-width: 52px; background: var(--cellbg); border: 1px solid var(--line2); color: var(--text); padding: 3px 6px; font-size: 13.5px; font-family: inherit; }
+.ti.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ti:focus { border-color: var(--acc); outline: none; }
+
+/* ── ЧИПЫ ──
+ * `.chip-f` — фильтр-переключатель над таблицей (расчёт, реестр цен);
+ * `.chip` — метка категории в строке (расчёт, заявка). */
+.chip-f { background: transparent; border: 1px solid var(--line2); color: var(--muted); font-size: 12.5px; padding: 3px 8px; white-space: nowrap; font-variant-numeric: tabular-nums; cursor: pointer; font-family: inherit; }
+.chip-f:hover { color: var(--text); }
+.chip-f.on { color: var(--text); border-color: var(--text); }
+.chip-red.on { color: var(--acc); border-color: var(--acc); background: var(--acc-bg); }
+.chip-amber.on { color: var(--amber); border-color: var(--amber); background: var(--amber-bg); }
+.chip-blue.on { color: var(--blue); border-color: var(--blue); background: var(--blue-bg); }
+.chip { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 1px 5px; border: 1px solid var(--line2); color: var(--muted); }
+
+/* ── БЕЙДЖ ИЗДЕЛИЯ И СТАТУСА ──
+ * КНС — акцент, ЕМК — синий, КОЛ — зелёный; прежде три копии с
+ * захардкоженными цветами, которые не знали про светлую тему. */
+.dev-badge { display: inline-flex; align-items: center; padding: 1px 5px; font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--on-acc); background: var(--acc); flex-shrink: 0; white-space: nowrap; }
+.dev-badge--emk { background: var(--blue); }
+.dev-badge--kol { background: var(--green); }
+.st-approved { color: var(--green); }
+.st-review   { color: var(--amber); }
+.st-rejected { color: var(--acc); }
+
+/* ── ЗАГОЛОВОК РАЗДЕЛА ВНУТРИ ЭКРАНА ──
+ * «Шапка», «В комплекте», блок импорта, карточка настроек: 15/700 с линией. */
+.sec-h { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.sec-h:first-child { margin-top: 0; }
+.sec-note { font-size: 12.5px; color: var(--tx2); line-height: 1.5; max-width: 72ch; }
+/* Панель фильтров над содержимым: одна полоса на реестр цен, журнал, проекты. */
+.filters-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 8px 16px; border-bottom: 1px solid var(--bd); background: var(--bg2); flex-shrink: 0; }
+/* Предупреждающая полоса под шапкой: прайс устарел, строки без цены. */
+.warn-bar { padding: 7px 14px; border-bottom: 1px solid var(--amber); background: var(--amber-bg); font-size: 13.5px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.warn-bar-t { color: var(--amber); font-weight: 600; }
+.warn-bar-d { color: var(--muted); flex: 1 1 320px; }
+
+/* ── АДАПТИВ ──
+ * Ниже 900px боковая панель ложится полосой сверху: пункты меню в строку с
+ * горизонтальной прокруткой, подвал — справа. Формы схлопываются в одну
+ * колонку на 760 (survey-form.css), левые колонки расчёта и листа прячутся
+ * на 1100 (их экраны). */
+@media (max-width: 900px) {
+  .app-layout { flex-direction: column; height: 100vh; }
+  .sidebar { width: auto; flex-direction: row; align-items: center; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--bd); }
+  .sidebar-top { border-bottom: none; padding: 8px 10px; display: flex; align-items: baseline; gap: 8px; }
+  .sidebar-top .logo-sub { display: none; }
+  .back-link + .logo { margin-top: 0; }
+  .sidebar-scroll { display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 4px 8px; flex: 1 1 auto; }
+  .nav-section { display: none; }
+  .nav-link { width: auto; white-space: nowrap; padding: 4px 8px; }
+  .nav-cnt { float: none; margin-left: 4px; }
+  .sidebar-footer { border-top: none; margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 4px 8px; }
+  .sidebar-footer > * { width: auto; }
+  .topbar { padding: 6px 12px; }
+  .tb-r { margin-left: 0; flex-wrap: wrap; }
+  .calc-area { padding: 10px 12px 24px; }
+}
 
 /* ── Числовое поле, которое не разобралось как число ──
    Правило одно на всё приложение (utils/numeric-input.ts): текст в числовые

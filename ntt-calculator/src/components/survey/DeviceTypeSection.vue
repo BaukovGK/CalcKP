@@ -74,7 +74,7 @@ const TYPE_HINTS: Record<DeviceType, string> = {
 .dt-btn.locked { cursor: default; }
 .dt-btn.locked:not(.active) { opacity: .45; }
 
-.dt-code { font-size: 15.6px; font-weight: 700; }
-.dt-name { font-size: 14.4px; }
-.dt-note { font-size: 13.8px; color: var(--muted); margin: 0; max-width: 62ch; }
+.dt-code { font-size: 15.5px; font-weight: 700; }
+.dt-name { font-size: 14.5px; }
+.dt-note { font-size: 13.5px; color: var(--muted); margin: 0; max-width: 62ch; }
 </style>
