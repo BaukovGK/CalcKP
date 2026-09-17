@@ -96,6 +96,14 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN', 'TECHNOLOG'] },
     },
     {
+      // Настройки учётной записи: личные данные сотрудника и пароль. Доступны
+      // всем ролям — карточку заполняет сам сотрудник, а не администратор.
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: AdminView,

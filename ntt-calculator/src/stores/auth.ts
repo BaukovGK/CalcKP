@@ -107,6 +107,22 @@ export const useAuthStore = defineStore('auth', () => {
    * наверх, а сессия остаётся: молча «выйти» здесь, не выйдя на других
    * устройствах, значило бы обмануть.
    */
+  /**
+   * Свои личные данные: ФИО, должность, телефон.
+   *
+   * Роль и почта отсюда не меняются — это дело администратора. Обновлённый
+   * профиль сохраняется в сессии: должность видна в подвале боковой панели и
+   * уходит в блок исполнителя КП.
+   */
+  async function updateProfile(patch: {
+    name: string
+    position?: string | null
+    phone?: string | null
+  }): Promise<void> {
+    const { data } = await api.patch<AuthUser>('/auth/me', patch)
+    _persist({ ...(user.value ?? data), ...data }, accessToken.value)
+  }
+
   async function logoutAll(): Promise<void> {
     await api.post('/auth/logout-all')
     clearSession()
@@ -145,5 +161,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, accessToken, isLoggedIn, role, mustChangePassword, login, loginDemo, logout, logoutAll, changePassword, refresh, checkAuth }
+  return { user, accessToken, isLoggedIn, role, mustChangePassword, login, loginDemo, logout, logoutAll, changePassword, updateProfile, refresh, checkAuth }
 })

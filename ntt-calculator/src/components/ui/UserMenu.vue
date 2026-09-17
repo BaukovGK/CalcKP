@@ -2,12 +2,12 @@
   <div class="um" :class="{ 'um--inline': inline }">
     <button
       v-if="!isDemo"
-      v-hint="ACCOUNT_HINTS.changePassword"
+      v-hint="ACCOUNT_HINTS.settings"
       class="btn btn-g"
       :class="{ 'btn-full': !inline }"
-      @click="passwordOpen = true"
+      @click="router.push('/settings')"
     >
-      Сменить пароль
+      Настройки
     </button>
     <button v-hint="ACCOUNT_HINTS.logout" class="btn btn-g" :class="{ 'btn-full': !inline }" @click="logout">Выйти</button>
     <button
@@ -18,25 +18,29 @@
       :disabled="leavingAll"
       @click="logoutAll"
     >Выйти везде</button>
-    <ChangePasswordModal :show="passwordOpen" @close="passwordOpen = false" />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import ChangePasswordModal from '@/components/ui/ChangePasswordModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectsStore } from '@/stores/projects'
 import { ACCOUNT_HINTS } from '@/hints/account'
 import { toast } from '@/composables/useToast'
 
 /**
- * Блок пользователя: смена своего пароля и выход — на каждом основном экране.
+ * Блок пользователя: настройки учётной записи и выход — на каждом основном
+ * экране.
  *
  * Прежде «Выйти» было только на экране проектов, а технолога и снабженца
  * роутер оттуда переводит на «Шаблоны» и «Прайс»: выйти им было неоткуда.
  * Смены пароля в интерфейсе не было вовсе — только запросом к API.
+ *
+ * Кнопка ведёт на экран настроек (`views/SettingsView.vue`): там и личные
+ * данные — ФИО, должность, телефон, которые печатает КП, — и смена пароля.
+ * Одной кнопкой «Сменить пароль» карточку сотрудника было не заполнить.
  *
  * @prop inline — в строку, для топбара; по умолчанию — столбиком, для
  *   подвала боковой панели.
@@ -46,7 +50,6 @@ defineProps<{ inline?: boolean }>()
 const auth = useAuthStore()
 const projects = useProjectsStore()
 const router = useRouter()
-const passwordOpen = ref(false)
 const leavingAll = ref(false)
 
 /** Демо-вход работает без сервера — пароля у него нет. */

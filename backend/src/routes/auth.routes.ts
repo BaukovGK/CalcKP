@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '../utils/prisma'
 import { signAccess, signRefresh, tokenVersionOf, verifyRefresh } from '../utils/jwt'
 import { validate } from '../middleware/validate'
-import { requireAuthForPasswordChange, type AuthRequest } from '../middleware/auth'
+import { requireAuth, requireAuthForPasswordChange, type AuthRequest } from '../middleware/auth'
 import { audit } from '../utils/audit'
 import { MIN_PASSWORD_LENGTH } from '../utils/password'
 import { createLimiter, limitByIp, retryText } from '../utils/rate-limit'
@@ -105,6 +105,38 @@ authRouter.get('/me', requireAuthForPasswordChange, async (req: AuthRequest, res
       select: { id: true, name: true, position: true, phone: true, email: true, role: true, mustChangePassword: true },
     })
     if (!user) { res.status(401).json({ message: 'Пользователь не найден' }); return }
+    res.json(user)
+  } catch (e) { next(e) }
+})
+
+/**
+ * PATCH /api/auth/me — свои личные данные.
+ *
+ * ФИО, должность и телефон сотрудник правит сам: администратор заводит
+ * учётную запись, а заполнять карточку через него — лишний посредник. Эти
+ * поля печатает блок исполнителя в КП (`utils/kp-terms.ts`), поэтому пустая
+ * карточка видна в документе заказчику.
+ *
+ * Роль, почта и признак «сменить пароль» отсюда не меняются: это дело
+ * администратора (`routes/admin.routes.ts`), иначе любой поднял бы себе права.
+ */
+const profileSchema = z.object({
+  name:     z.string().trim().min(1).max(200),
+  position: z.string().trim().max(200).nullish(),
+  phone:    z.string().trim().max(100).nullish(),
+})
+
+authRouter.patch('/me', requireAuth, validate(profileSchema), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { name, position, phone } = req.body as z.infer<typeof profileSchema>
+    const user = await prisma.user.update({
+      where: { id: req.userId },
+      // Пустая строка в должности и телефоне — это «стереть», а не «записать
+      // пустоту»: в базе такие поля хранятся как null.
+      data: { name, position: position || null, phone: phone || null },
+      select: { id: true, name: true, position: true, phone: true, email: true, role: true, mustChangePassword: true },
+    })
+    await audit(req.userId, 'user.profile', 'User', user.id, { name, position: position || null })
     res.json(user)
   } catch (e) { next(e) }
 })
