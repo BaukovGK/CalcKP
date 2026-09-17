@@ -356,6 +356,29 @@
       </template>
     </BaseModal>
 
+    <!-- ── Отказ в выпуске КП: почему и что чинить ──
+         Гейты выпуска (строки без цены, отрицательные суммы, ставки не из
+         прайса, несошедшийся итог) прежде сообщали о себе тостом на несколько
+         секунд. Тост легко пропустить, и выглядело это как «кнопка не
+         работает»: КП не выпускалось, новой версии не появлялось, а причина
+         уже исчезла с экрана. -->
+    <BaseModal :show="!!kpBlock" title="КП не выпущено" @close="kpBlock = null">
+      <p class="kpb-msg">{{ kpBlock?.message }}</p>
+      <ul v-if="kpBlock?.rows.length" class="kpb-list">
+        <li v-for="(r, i) in kpBlock.rows" :key="i" class="kpb-row">
+          <span class="kpb-name">{{ r.name }}</span>
+          <span v-if="r.unit" class="kpb-unit">{{ r.unit }}</span>
+        </li>
+      </ul>
+      <p v-if="kpBlock && kpBlock.more > 0" class="kpb-more">…и ещё {{ kpBlock.more }}</p>
+      <template #footer>
+        <button class="btn" @click="kpBlock = null">Закрыть</button>
+        <button v-if="kpBlock?.showRows" class="btn btn-acc" @click="showBlockedRows">
+          Показать строки в расчёте
+        </button>
+      </template>
+    </BaseModal>
+
     <!-- ── Окно выпуска КП: что уйдёт заказчику ── -->
     <KpIssueModal
       v-if="st.estimate"
@@ -389,7 +412,9 @@
     >
       <p class="ver-sub">
         Версия фиксирует дерево, итог, версию прайса и шаблона на момент снимка.
-        Снимается при создании единицы, при выпуске КП и вручную.
+        Снимается при создании единицы, при выпуске КП и вручную. Скачать docx
+        и pdf можно у печатных редакций — выпуска КП и ручной фиксации;
+        исходное состояние единицы не печатается.
       </p>
       <div v-if="versionsLoading" class="ver-state">Загрузка…</div>
       <div v-else-if="!versions.length" class="ver-state">Версий пока нет</div>
@@ -406,7 +431,11 @@
             <td class="num">{{ v.totalRub ? fmtInt(v.totalRub) : '—' }}</td>
             <!-- Слепок создания — исходное состояние: проверку строк без цены
                  он не проходил, поэтому КП по нему не печатается. -->
-            <td v-if="v.reason === 'CREATE'" v-hint="'Исходное состояние — КП печатается из выпуска КП'" class="ver-dl ver-dl--none">—</td>
+            <td
+              v-if="v.reason === 'CREATE'"
+              v-hint="'Слепок при создании единицы: проверку строк без цены он не проходил, и КП по нему занизило бы итог. Печатные редакции появляются после «Сформировать КП»'"
+              class="ver-dl ver-dl--none"
+            >не печатается</td>
             <td v-else class="ver-dl">
               <button
                 class="btn btn-xs"
@@ -460,6 +489,7 @@ import { defaultParams, materializeNode, type CatalogNode, type NodeParamDef, ty
 import { surveyScope, type DeviceEnv } from '@/engines/template-def'
 import { recalcFotSatellites } from '@/engines/fot'
 import { estimatesApi, type EstimateSnapshotInfo, type KpIssuePayload, type SnapshotReason } from '@/api/estimates'
+import { blockOf, missingPriceBlock, serverBlock, type KpBlock } from '@/utils/kp-gate'
 
 const route = useRoute()
 const router = useRouter()
@@ -477,6 +507,21 @@ const readOnly = computed(() => auth.role === 'VIEWER')
 const kpBusy = ref(false)
 /** Окно выпуска КП: шапка, описание изделия, состав и условия. */
 const kpOpen = ref(false)
+
+/** Почему КП не выпущено: текст отказа и строки, которые его вызвали. */
+const kpBlock = ref<KpBlock | null>(null)
+
+/** Строки без цены — их же сервер перечисляет в отказе (ROWS_WITHOUT_PRICE). */
+const missingPriceRows = computed(() =>
+  st.rows.filter((r) => st.missingPriceIds.has(r.id)).map((r) => ({ name: r.name, unit: r.unit })),
+)
+
+/** Из окна отказа — сразу к строкам: фильтр «без цены» и закрытые окна. */
+function showBlockedRows() {
+  filters.missing = true
+  kpBlock.value = null
+  kpOpen.value = false
+}
 /** Выпуск КП ждёт ответа: пересчитать цены по действующему прайсу или нет. */
 const kpAsk = ref(false)
 const repricing = ref(false)
@@ -1188,7 +1233,13 @@ async function openKp() {
   // Ставки не из прайса — итог посчитан по константам программы, а не по
   // ценам завода: КП не выпускается (решение Р5). Сервер держит тот же гейт.
   if (st.rateFallbacks.length) {
-    toast(rateFallback.value.blocked, 'error')
+    kpBlock.value = blockOf(rateFallback.value.blocked)
+    return
+  }
+  // Строки без цены видны ещё до обращения к серверу: незачем открывать окно
+  // выпуска, чтобы сервер отказал тем же самым.
+  if (missingPriceRows.value.length > 0) {
+    kpBlock.value = missingPriceBlock(missingPriceRows.value)
     return
   }
   kpBusy.value = true
@@ -1213,13 +1264,23 @@ async function issueKp(payload: KpIssuePayload) {
       'success',
     )
   } catch (err) {
-    const r = (err as { response?: { data?: { code?: string; count?: number; message?: string } } }).response
-    if (r?.data?.code === 'ROWS_WITHOUT_PRICE') {
-      toast(r.data.message ?? 'Есть строки без цены', 'error')
-      filters.missing = true // сразу показываем, что чинить
+    const data = (
+      err as {
+        response?: {
+          data?: { code?: string; message?: string; rows?: Array<{ name: string; unit?: string }> }
+        }
+      }
+    ).response?.data
+    // Любой гейт сервера — окном с причиной: у ROWS_WITHOUT_PRICE и
+    // NEGATIVE_ROWS сервер перечисляет и сами строки. Не гейт (сеть, 500) —
+    // остаётся тостом: чинить в расчёте нечего.
+    const block = serverBlock(data)
+    if (block) {
+      kpBlock.value = block
       kpOpen.value = false
+      if (data?.code === 'ROWS_WITHOUT_PRICE') filters.missing = true
     } else {
-      toast(r?.data?.message ?? 'Не удалось сформировать КП', 'error')
+      toast(data?.message ?? 'Не удалось сформировать КП', 'error')
     }
   } finally {
     kpBusy.value = false
@@ -1261,6 +1322,16 @@ onMounted(() => {
 .btn:hover:not(:disabled) { color: var(--text); }
 .btn:disabled { opacity: .4; }
 .btn-acc { border-color: var(--acc); color: var(--acc); }
+
+/* Окно «КП не выпущено» */
+.kpb-msg  { font-size: 13.2px; color: var(--text); line-height: 1.45; }
+.kpb-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 260px; overflow: auto;
+  border: 1px solid var(--line2); }
+.kpb-row  { display: flex; gap: 8px; align-items: baseline; padding: 4px 8px; font-size: 12.6px; }
+.kpb-row:nth-child(odd) { background: var(--panel); }
+.kpb-name { flex: 1; min-width: 0; }
+.kpb-unit { color: var(--muted); font-size: 11.4px; white-space: nowrap; }
+.kpb-more { margin-top: 6px; font-size: 12px; color: var(--muted); }
 
 .fl { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
   border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
