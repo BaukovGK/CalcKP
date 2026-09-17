@@ -1,48 +1,73 @@
-# ntt-calculator
+# ntt-calculator — фронтенд
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + Pinia + Vue Router + Vite. Одностраничное приложение «НТТ Калькулятор»:
+опросный лист изделия → материализованный расчёт → тюнинг строк → выпуск КП.
+Что это за продукт целиком и как поднять его вместе с бэкендом — в
+[README репозитория](../README.md); нормативное описание экранов и хранилищ —
+`doc/ТЗ.md` §5.
 
-## Recommended IDE Setup
+Здесь лежит **весь расчётный движок**: `src/engines/` считает состав изделия,
+количества, ФОТ и экономику. Бэкенд эти цифры не пересчитывает, а проверяет —
+итог КП сверяется второй реализацией на сервере по общим контрольным примерам.
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+## Требования
 
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+Node `^20.19.0 || >=22.12.0`. API ожидается по адресу из `VITE_API_URL`
+(по умолчанию `/api`; в разработке — `http://localhost:3000/api`).
 
 ```sh
+Copy-Item .env.example .env
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+## Команды
 
-```sh
-npm run dev
+| Команда | Что делает |
+|---|---|
+| `npm run dev` | Сервер разработки Vite с горячей заменой |
+| `npm run build` | Проверка типов и сборка в `dist/` |
+| `npm run type-check` | Только `vue-tsc` |
+| `npm test` | Прогон тестов (vitest, один раз) |
+| `npm run test:watch` | То же в режиме наблюдения |
+| `npm run check:lint` | Линт **без правки файлов** — этот вариант гоняет CI |
+| `npm run lint` | Линт с `--fix`: правит файлы, в CI не годится |
+| `npm run format` | Форматирование `src/` |
+
+Тесты лежат рядом с модулями файлами `*.test.ts`. Упавшая проверка «сборка
+совпадает с последней редакцией» означает, что правка изменила состав или
+формулы встроенных узлов, — что с этим делать, написано в README репозитория,
+раздел «Тесты».
+
+## Где что
+
+```
+src/
+├── engines/      Движок: состав изделия, формулы, ФОТ, экономика, материализация
+├── views/        Экраны (маршруты — router/index.ts, охрана — router/guards.ts)
+├── components/   calculator · survey · templates · dashboard · ui
+├── stores/       Pinia: auth · projects · calcTree
+├── api/          Клиент и обёртки маршрутов бэкенда
+├── utils/        Разбор ответов, подписи журнала, гейт КП, ввод чисел
+├── hints/        Тексты всплывающих сносок v-hint (directives/hint.ts)
+└── assets/       main.css — токены тем и оболочка; survey-form.css — вёрстка форм
 ```
 
-### Type-Check, Compile and Minify for Production
+Подробнее — `doc/ARCHITECTURE.md`, `doc/DATA_FLOW.md`, `doc/TYPES_REFERENCE.md`
+и `doc/ROADMAP.md` в этом же пакете.
 
-```sh
-npm run build
-```
+## Соглашения
 
-### Lint with [ESLint](https://eslint.org/)
+- **Сноски вместо `title`.** Пояснение к полю, строке или величине — директива
+  `v-hint`, а не системная подсказка браузера: у неё своя задержка, перенос и
+  вид. У нового поля сноска обязательна.
+- **Ссылки на код в документах — по имени**, без номеров строк: их проверяет
+  `tools/check-doc-refs.mjs` в CI.
+- Стили оболочки (сайдбар, навигация) — общие в `assets/main.css`, копий по
+  экранам быть не должно.
 
-```sh
-npm run lint
-```
+## Среда разработки
+
+[VS Code](https://code.visualstudio.com/) + расширение
+[Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar),
+Vetur отключить. Типы `.vue` понимает `vue-tsc`, поэтому проверка типов идёт им,
+а не `tsc`.
