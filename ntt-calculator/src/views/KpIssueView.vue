@@ -134,72 +134,43 @@
         </section>
 
         <!-- ── Комплектация ── -->
-        <section v-else-if="tab === 'kit'" class="kpv-pane kpv-pane--split">
-          <div class="kpv-kit">
-            <h3 class="sec-h kpv-h">
-              В комплекте
-              <label class="kpv-tgl">
-                <input v-model="kitAsTable" type="checkbox" />
-                <span v-hint="H.kitTable">таблицей</span>
-              </label>
-              <button v-if="kitAsTable" class="btn btn-g kpv-add" @click="addItem">+ строка</button>
-            </h3>
+        <section v-else-if="tab === 'kit'" class="kpv-pane">
+          <h3 class="sec-h kpv-h">
+            В комплекте
+            <span v-if="kit.length" class="kpv-h-cnt">{{ kit.length }}</span>
+          </h3>
 
-            <p v-if="manualDescription" class="kpv-note">
-              Наименование правится текстом — состав в документ не пойдёт. Снимите
-              «править текстом» на вкладке «Изделие», чтобы вернуть список.
-            </p>
+          <p v-if="manualDescription" class="kpv-note">
+            Наименование правится текстом — состав в документ не пойдёт. Снимите
+            «править текстом» на вкладке «Изделие», чтобы вернуть список.
+          </p>
 
-            <!-- Состав текстом: наименование узла целиком видно и правится
-                 как обычный текст — строки копируются из прошлого КП. -->
-            <template v-else-if="!kitAsTable">
-              <textarea
-                v-model="kitText"
-                v-hint="H.kitText"
-                class="kpv-text kpv-text--kit"
-                spellcheck="false"
-              ></textarea>
-              <p class="kpv-hintline">Строка на позицию: «Наименование - Кол-во Ед.»</p>
-            </template>
+          <template v-else>
+            <!-- Заголовок изделия — контекст списка, правится на вкладке «Изделие». -->
+            <p class="kpv-head-prev">{{ headline }}</p>
 
-            <table v-else class="kpv-tbl">
-              <thead>
-                <tr>
-                  <th v-hint="H.kitName">Наименование узла</th>
-                  <th class="kpv-num" v-hint="H.kitQty">Кол-во</th>
-                  <th class="kpv-unit" v-hint="H.kitUnit">Ед.</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(item, i) in kit" :key="i">
-                  <td><input v-model="item.name" /></td>
-                  <td><input v-model.number="item.qty" class="kpv-num" type="number" min="0" step="1" /></td>
-                  <td><input v-model="item.unit" class="kpv-unit" /></td>
-                  <td>
-                    <button
-                      class="btn btn-g"
-                      v-hint="H.kitDrop"
-                      aria-label="Убрать строку"
-                      @click="kit.splice(i, 1)"
-                    >✕</button>
-                  </td>
-                </tr>
-                <tr v-if="!kit.length">
-                  <td colspan="4" class="kpv-empty">
-                    Состав пуст — заказчик увидит только описание изделия
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Предпросмотр рядом с таблицей: правка состава видна сразу, а не
-               через переключение вкладок. -->
-          <aside class="kpv-side">
-            <h3 class="sec-h kpv-h">Как увидит заказчик</h3>
-            <pre class="kpv-prev kpv-prev--tall">{{ manualDescription ? description : preview }}</pre>
-          </aside>
+            <!-- Позиция — блок: наименование во всю ширину и многострочно (у
+                 КНС оно в сотню знаков), количество и единица — рядом. -->
+            <ol class="kit-list">
+              <li v-for="(item, i) in kit" :key="i" class="kit-row">
+                <span class="kit-n">{{ i + 1 }}</span>
+                <textarea
+                  :ref="(el) => grow(el as HTMLTextAreaElement | null)"
+                  v-model="item.name"
+                  v-hint="H.kitName"
+                  class="kit-name"
+                  rows="1"
+                  spellcheck="false"
+                  @input="grow($event.target as HTMLTextAreaElement)"
+                ></textarea>
+                <input v-model.number="item.qty" v-hint="H.kitQty" class="kit-qty" type="number" min="0" step="1" />
+                <input v-model="item.unit" v-hint="H.kitUnit" class="kit-unit" />
+                <button class="btn btn-g kit-drop" v-hint="H.kitDrop" aria-label="Убрать строку" @click="kit.splice(i, 1)">✕</button>
+              </li>
+            </ol>
+            <p v-if="!kit.length" class="kpv-note">Состав пуст — заказчик увидит только описание изделия.</p>
+            <button class="btn kit-add" @click="addItem">+ строка</button>
+          </template>
         </section>
 
         <!-- ── Условия ── -->
@@ -305,7 +276,6 @@ import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import { estimatesApi, type KpDraft, type KpIssuePayload, type KpKitItem } from '@/api/estimates'
 import { serverBlock, type KpBlock } from '@/utils/kp-gate'
-import { kitToText, textToKit } from '@/utils/kp-kit-text'
 import { toast } from '@/composables/useToast'
 import '@/assets/survey-form.css'
 
@@ -339,8 +309,6 @@ const H = {
   kitName: 'Узел так, как его прочтёт заказчик: корпус, шахта, лестница, гильза, насос, шкаф',
   kitQty: 'Количество узлов на весь заказ',
   kitUnit: 'шт. или компл.',
-  kitText: 'Состав строками: «Наименование - Кол-во Ед.». Маркер списка и точку с запятой можно не убирать — они разбираются; строка без количества считается одной штукой',
-  kitTable: 'Те же позиции по полям — когда нужно поправить только количество или единицу. Длинные наименования в поле не помещаются целиком',
   kitDrop: 'Убрать узел из состава. На цену это не влияет — она посчитана в расчёте; из документа пропадёт только строка',
   vat: 'Ставка НДС для пункта условий и справочной строки. Налог уже в цене, сверху не начисляется',
   valid: 'До какой даты предложение действительно. По умолчанию — две недели от выпуска',
@@ -374,14 +342,21 @@ const manualDescription = ref(false)
 const description = ref('')
 const kit = ref<KpKitItem[]>([])
 /**
- * Состав правится текстом, а таблицей — по желанию.
- *
- * Наименование узла в поле таблицы не помещается: «Стеклокомпозитный корпус
- * «НТТ» GRP, D=3 000 мм, Hполная=11 900 мм, …» обрезается на середине. Текстом
- * видно всё, что уйдёт заказчику.
+ * Поле наименования растёт под текст: у КНС наименование узла — сотня знаков,
+ * в одной строке оно обрезалось, а состав из двух десятков таких строк в
+ * одном текстовом поле сливался в стену. Каждая позиция — свой блок.
  */
-const kitAsTable = ref(false)
-const kitText = ref('')
+function grow(el: HTMLTextAreaElement | null) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
+/** Заголовок изделия без списка состава — контекст над позициями. */
+const headline = computed(() => {
+  const full = draft.value?.position.description ?? ''
+  return full.split('\nВ комплекте:')[0] ?? full
+})
 const validUntil = ref('')
 const deliveryTo = ref('')
 const shipmentFrom = ref('')
@@ -440,7 +415,6 @@ async function load() {
     description.value = d.position.description
     manualDescription.value = false
     kit.value = d.position.kit.map((i) => ({ ...i }))
-    kitText.value = kitToText(kit.value)
     terms.vatRatePct = d.terms.vatRatePct
     terms.prepaymentPct = d.terms.prepaymentPct
     terms.paymentDays = d.terms.paymentDays
@@ -468,13 +442,6 @@ function addItem() {
   kit.value.push({ name: '', qty: 1, unit: 'шт.' })
 }
 
-// Текст — источник состава, пока он открыт: правка строки сразу видна и в
-// предпросмотре справа, и в том, что уйдёт в выпуск.
-watch(kitText, (text) => { if (!kitAsTable.value) kit.value = textToKit(text) })
-
-// Переключение режима пересобирает текст из состава: в таблице могли поправить
-// количество, и текст обязан это показать.
-watch(kitAsTable, (asTable) => { if (!asTable) kitText.value = kitToText(kit.value) })
 
 const clean = (v: string) => (v.trim() === '' ? null : v.trim())
 
@@ -566,31 +533,37 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
 
 
 .kpv-pane { max-width: 1040px; }
-.kpv-pane--split { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; max-width: none; }
-.kpv-kit { min-width: 0; }
-.kpv-side { min-width: 0; }
 
 .kpv-sub { font-size: 12.5px; color: var(--tx2); margin-bottom: 14px; max-width: 720px; }
 .kpv-tgl { display: flex; align-items: center; gap: 5px; margin-left: auto;
   font-size: 12.5px; font-weight: 400; color: var(--tx2); }
-.kpv-add { margin-left: auto; font-size: 12.5px; }
+.kpv-h-cnt { font-size: 12px; font-weight: 400; color: var(--tx3); }
+.kpv-head-prev { font-size: 12.5px; color: var(--tx2); line-height: 1.45; white-space: pre-wrap;
+  padding: 8px 10px; margin-bottom: 12px; background: var(--bg3); border-left: 3px solid var(--line2); max-width: 900px; }
+
+/* Позиции состава: номер · наименование (растёт под текст) · кол-во · ед. · убрать. */
+.kit-list { list-style: none; display: flex; flex-direction: column; gap: 6px; max-width: 900px; }
+.kit-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 76px 84px 30px; gap: 6px; align-items: start; }
+.kit-n { font-size: 12px; color: var(--tx3); padding-top: 7px; text-align: right; font-variant-numeric: tabular-nums; }
+.kit-name, .kit-qty, .kit-unit { font: inherit; font-size: 13.5px; color: var(--text); background: var(--cellbg);
+  border: 1px solid var(--line2); padding: 5px 8px; }
+.kit-name { width: 100%; resize: none; overflow: hidden; line-height: 1.4; min-height: 30px; display: block; }
+.kit-qty { text-align: right; }
+.kit-drop { padding: 4px 6px; }
+.kit-add { margin-top: 10px; }
+@media (max-width: 760px) {
+  .kit-row { grid-template-columns: 26px minmax(0, 1fr) 30px; }
+  .kit-qty, .kit-unit { grid-column: 2; width: 120px; }
+}
 .kpv-note { font-size: 12.5px; color: var(--tx2); padding: 10px 12px; background: var(--bg3);
   border: 1px solid var(--bd); max-width: 560px; }
 
 .kpv-text { width: 100%; font: inherit; font-size: 12.5px; resize: vertical; }
 /* Состав — во весь экран: строк два десятка, и прокручивать их в полосе нельзя. */
-.kpv-text--kit { height: calc(100vh - 210px); min-height: 240px; line-height: 1.5; }
-.kpv-hintline { margin: 4px 0 0; font-size: 12px; color: var(--tx3); }
 .kpv-prev { margin: 0; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--bd);
   font: inherit; font-size: 12.5px; white-space: pre-wrap; max-height: 420px; overflow: auto; }
-.kpv-prev--tall { position: sticky; top: 0; max-height: calc(100vh - 170px); }
 
 /* Таблица состава — во всю ширину: узлы КНС длинные, обрезать их нельзя. */
-.kpv-tbl input { width: 100%; }
-.kpv-tbl input.kpv-num { width: 84px; text-align: right; }
-.kpv-tbl input.kpv-unit { width: 84px; }
-th.kpv-num, th.kpv-unit { width: 92px; }
-.kpv-empty { color: var(--tx2); padding: 10px 4px; }
 
 .kpv-sum { margin-bottom: 8px; }
 .kpv-sum-l { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--tx3); }

@@ -99,10 +99,6 @@ const goTo = async (w: Wrapper, label: string) => {
   await menu(w).find((b) => b.text().startsWith(label))!.trigger('click')
 }
 const issueBtn = (w: Wrapper) => w.findAll('button').find((b) => b.text().includes('Выпустить КП'))!
-/** Раздел «Комплектация» открывается текстом; таблица — по переключателю. */
-const asTable = async (w: Wrapper) => {
-  await w.find('.kpv-kit .kpv-tgl input[type="checkbox"]').setValue(true)
-}
 /** Что ушло в выпуск: тело единственного вызова. */
 const sent = () => kp.mock.calls[0]?.[1] as Record<string, never>
 
@@ -120,7 +116,7 @@ describe('экран выпуска КП', () => {
     // Состав виден счётчиком в меню, не открывая раздел.
     expect(menu(w)[1]!.find('.kpv-cnt').text()).toBe('2')
     // Разделы показываются по одному: в этом и был смысл ухода из окна.
-    expect(w.find('.kpv-tbl').exists()).toBe(false)
+    expect(w.find('.kit-list').exists()).toBe(false)
   })
 
   it('подставляет номер, условия и подпись из черновика', async () => {
@@ -137,52 +133,39 @@ describe('экран выпуска КП', () => {
     expect(date.value).toBe('2026-10-01')
   })
 
-  it('состав открывается текстом: строка на позицию, целиком', async () => {
+  it('состав — список позиций: наименование многострочным полем, количество и единица рядом', async () => {
     const w = await open()
     await goTo(w, 'Комплектация')
 
-    const area = w.find('textarea.kpv-text--kit')
-    expect((area.element as HTMLTextAreaElement).value.split('\n')).toEqual([
-      'Стеклокомпозитный корпус - 1 шт.',
-      'Лестница из нержавеющей стали - 1 шт.',
-    ])
-    expect(w.find('.kpv-tbl').exists()).toBe(false)
+    const rows = w.findAll('.kit-row')
+    expect(rows).toHaveLength(2)
+    // Наименование — textarea, а не однострочное поле: у КНС оно в сотню знаков.
+    expect((rows[0]!.find('textarea.kit-name').element as HTMLTextAreaElement).value).toBe('Стеклокомпозитный корпус')
+    expect((rows[0]!.find('input.kit-qty').element as HTMLInputElement).value).toBe('1')
+    expect((rows[0]!.find('input.kit-unit').element as HTMLInputElement).value).toBe('шт.')
+    // Заголовок изделия над списком — контекст, без самого списка.
+    expect(w.find('.kpv-head-prev').text()).toContain('Стеклокомпозитная канализационная насосная станция')
+    expect(w.find('.kpv-head-prev').text()).not.toContain('В комплекте')
   })
 
-  it('правка текста сразу видна в предпросмотре и уходит в выпуск', async () => {
+  it('правка позиции уходит в выпуск, лишняя позиция убирается', async () => {
     const w = await open()
     await goTo(w, 'Комплектация')
 
-    await w.find('textarea.kpv-text--kit').setValue(
-      ['Стеклокомпозитный корпус - 1 шт.', 'Лестница из нержавеющей стали - 2 шт.', 'Шкаф управления - 1 компл.'].join('\n'),
-    )
-    const prev = w.find('.kpv-prev').text()
-    expect(prev).toContain('- Лестница из нержавеющей стали - 2 шт.;')
-    expect(prev).toContain('- Шкаф управления - 1 компл.;')
+    await w.findAll('.kit-row')[1]!.find('input.kit-qty').setValue('2')
+    await w.findAll('.kit-row')[1]!.find('textarea.kit-name').setValue('Лестница из нержавеющей стали с ограждением')
+    await w.findAll('button').find((b) => b.text() === '+ строка')!.trigger('click')
+    await w.findAll('.kit-row')[2]!.find('textarea.kit-name').setValue('Шкаф управления')
+    await w.findAll('.kit-row')[2]!.find('input.kit-unit').setValue('компл.')
+    await w.findAll('.kit-row')[0]!.find('.kit-drop').trigger('click')
 
     await issueBtn(w).trigger('click')
     await flushPromises()
     const payload = sent() as unknown as { position: { kit: Array<{ name: string; qty: number; unit: string }> } }
     expect(payload.position.kit).toEqual([
-      { name: 'Стеклокомпозитный корпус', qty: 1, unit: 'шт.' },
-      { name: 'Лестница из нержавеющей стали', qty: 2, unit: 'шт.' },
+      { name: 'Лестница из нержавеющей стали с ограждением', qty: 2, unit: 'шт.' },
       { name: 'Шкаф управления', qty: 1, unit: 'компл.' },
     ])
-  })
-
-  it('таблицей — по переключателю, правка в ней пересобирает предпросмотр', async () => {
-    const w = await open()
-    await goTo(w, 'Комплектация')
-    await asTable(w)
-
-    const rows = w.findAll('.kpv-tbl tbody tr')
-    expect(rows).toHaveLength(2)
-
-    await rows[1]!.findAll('input')[1]!.setValue('3')
-    const prev = w.find('.kpv-prev').text()
-    expect(prev).toContain('- Лестница из нержавеющей стали - 3 шт.;')
-    // Заголовок изделия остался на месте — правится только список.
-    expect(prev).toContain('Стеклокомпозитная канализационная насосная станция')
   })
 
   it('в выпуск уходят номер, состав, условия и подпись', async () => {
@@ -226,7 +209,6 @@ describe('экран выпуска КП', () => {
   it('пустые строки состава в документ не уходят', async () => {
     const w = await open()
     await goTo(w, 'Комплектация')
-    await asTable(w)
     await w.findAll('button').find((b) => b.text() === '+ строка')!.trigger('click')
     await issueBtn(w).trigger('click')
     await flushPromises()
@@ -248,7 +230,7 @@ describe('экран выпуска КП', () => {
 
     // Список состава спрятан: править его и текст одновременно нельзя.
     await goTo(w, 'Комплектация')
-    expect(w.find('.kpv-tbl').exists()).toBe(false)
+    expect(w.find('.kit-list').exists()).toBe(false)
     expect(w.find('.kpv-note').text()).toContain('состав в документ не пойдёт')
   })
 
