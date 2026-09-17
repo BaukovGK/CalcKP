@@ -92,6 +92,24 @@ services:
       # из X-Forwarded-For. 1 — nginx этого compose; поставили ещё прокси
       # (TLS, балансировщик) — 2.
       TRUST_PROXY: ${TRUST_PROXY:-1}
+      # Шапка и подвал КП: подписант, исполнитель, приставка номера, срок и
+      # склад отгрузки, реквизиты. Пусто — печатаются умолчания НТТ из
+      # backend/src/utils/kp-terms.ts; у другой площадки они свои. Перечислены
+      # поимённо: у сервиса явный список environment, и без строки здесь
+      # запись в .env до контейнера не доходит.
+      KP_SIGNER_TITLE: ${KP_SIGNER_TITLE:-}
+      KP_SIGNER_NAME: ${KP_SIGNER_NAME:-}
+      KP_EXECUTOR_PHONE: ${KP_EXECUTOR_PHONE:-}
+      KP_NUMBER_PREFIX: ${KP_NUMBER_PREFIX:-}
+      KP_LEAD_TIME_DAYS: ${KP_LEAD_TIME_DAYS:-}
+      KP_WAREHOUSE: ${KP_WAREHOUSE:-}
+      KP_COMPANY_NAME: ${KP_COMPANY_NAME:-}
+      KP_COMPANY_OGRN: ${KP_COMPANY_OGRN:-}
+      KP_COMPANY_INN: ${KP_COMPANY_INN:-}
+      KP_COMPANY_PHONE: ${KP_COMPANY_PHONE:-}
+      KP_COMPANY_ADDRESS: ${KP_COMPANY_ADDRESS:-}
+      KP_COMPANY_EMAIL: ${KP_COMPANY_EMAIL:-}
+      KP_COMPANY_SITE: ${KP_COMPANY_SITE:-}
     volumes:
       # Дампы лежат на хосте, а не в томе: их надо уметь забрать с машины,
       # а том исчезнет вместе с `docker compose down -v`.
