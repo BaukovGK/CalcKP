@@ -53,21 +53,23 @@ const saveBtn = (w: ReturnType<typeof mountView>) =>
 describe('настройки: личные данные', () => {
   it('подставляет карточку из сессии', () => {
     const w = mountView()
-    const [name, position, phone, email, role] = fields(w)
+    const [name, position, phone, email] = fields(w)
 
     expect((name!.element as HTMLInputElement).value).toBe('Иванов Сергей Владимирович')
     expect((position!.element as HTMLInputElement).value).toBe('Инженер-конструктор')
     expect((phone!.element as HTMLInputElement).value).toBe('')
     expect((email!.element as HTMLInputElement).value).toBe('eng@ntt.local')
-    expect((role!.element as HTMLInputElement).value).toBe('Инженер')
   })
 
-  it('почту и роль меняет администратор — здесь они только показаны', () => {
-    const w = mountView()
-    const [, , , email, role] = fields(w)
+  it('почту меняет администратор — она только показана', () => {
+    expect(fields(mountView())[3]!.attributes('disabled')).toBeDefined()
+  })
 
-    expect(email!.attributes('disabled')).toBeDefined()
-    expect(role!.attributes('disabled')).toBeDefined()
+  it('роль полем не показывается — сменить её себе нельзя', () => {
+    const w = mountView()
+
+    expect(w.findAll('.fld input')).toHaveLength(4)
+    expect(w.find('.set-role').text()).toBe('Роль в программе: Инженер')
   })
 
   it('показывает, как имя будет напечатано в документе', async () => {
@@ -123,7 +125,7 @@ describe('настройки: личные данные', () => {
   it('у каждой подписи поля есть сноска', () => {
     const captions = mountView().findAll('.fld > span')
 
-    expect(captions).toHaveLength(5)
+    expect(captions).toHaveLength(4)
     expect(captions.filter((c) => c.attributes('data-hint') === undefined)).toHaveLength(0)
   })
 })

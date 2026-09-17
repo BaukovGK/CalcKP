@@ -54,15 +54,14 @@
               <span v-hint="SETTINGS_HINTS.email">Почта (логин)</span>
               <input :value="auth.user?.email ?? ''" disabled />
             </label>
-            <label class="fld fld--6">
-              <span v-hint="SETTINGS_HINTS.role">Роль</span>
-              <input :value="roleLabel" disabled />
-            </label>
           </div>
 
           <p class="set-preview">
             В документе: <b>{{ previewName }}</b><template v-if="form.position.trim()">, {{ form.position.trim() }}</template>
           </p>
+          <!-- Роль полем не показываем: сменить её себе нельзя, а в ряду с
+               правимыми полями она выглядела как забытая неактивной. -->
+          <p v-hint="SETTINGS_HINTS.role" class="set-role">Роль в программе: {{ roleLabel }}</p>
           <div v-if="error" class="auth-err">{{ error }}</div>
         </div>
       </div>
@@ -200,6 +199,7 @@ async function logoutAll() {
   display: flex; flex-direction: column; gap: 14px; }
 .set-note { font-size: 12.6px; color: var(--muted); line-height: 1.5; }
 .set-preview { font-size: 12.6px; color: var(--muted); }
+.set-role { font-size: 12.6px; color: var(--muted); }
 .set-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .req { color: var(--acc); }
 </style>
