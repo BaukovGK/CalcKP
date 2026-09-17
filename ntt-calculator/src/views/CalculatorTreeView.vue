@@ -356,6 +356,16 @@
       </template>
     </BaseModal>
 
+    <!-- ── Окно выпуска КП: что уйдёт заказчику ── -->
+    <KpIssueModal
+      v-if="st.estimate"
+      :show="kpOpen"
+      :estimate-id="st.estimate.id"
+      :busy="kpBusy"
+      @close="kpOpen = false"
+      @submit="issueKp"
+    />
+
     <!-- ── Выпуск КП по прайсу старше действующего ── -->
     <BaseModal :show="kpAsk" title="Прайс обновился" :close-on-backdrop="true" @close="kpAsk = false">
       <p class="kpa-t">
@@ -431,6 +441,7 @@ import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useTreeAutosave } from '@/composables/useTreeAutosave'
 import CalcTableRow from '@/components/calculator/CalcTableRow.vue'
+import KpIssueModal from '@/components/calculator/KpIssueModal.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { useCalcTreeStore } from '@/stores/calcTree'
@@ -448,7 +459,7 @@ import type { CalcComponent, CalcRowNode, LostEdit, MaterializeContext } from '@
 import { defaultParams, materializeNode, type CatalogNode, type NodeParamDef, type NodeParamValues } from '@/engines/node-def'
 import { surveyScope, type DeviceEnv } from '@/engines/template-def'
 import { recalcFotSatellites } from '@/engines/fot'
-import { estimatesApi, type EstimateSnapshotInfo, type SnapshotReason } from '@/api/estimates'
+import { estimatesApi, type EstimateSnapshotInfo, type KpIssuePayload, type SnapshotReason } from '@/api/estimates'
 
 const route = useRoute()
 const router = useRouter()
@@ -464,6 +475,8 @@ const { theme, toggle } = useTheme()
 const readOnly = computed(() => auth.role === 'VIEWER')
 
 const kpBusy = ref(false)
+/** Окно выпуска КП: шапка, описание изделия, состав и условия. */
+const kpOpen = ref(false)
 /** Выпуск КП ждёт ответа: пересчитать цены по действующему прайсу или нет. */
 const kpAsk = ref(false)
 const repricing = ref(false)
@@ -1135,7 +1148,9 @@ async function downloadKp(version: number, format: 'docx' | 'pdf') {
 
 /**
  * Выпуск КП — точка фиксации процесса (ТЗ §4.3 v1.5): гейт по красным строкам
- * и снапшот делает бэк. Печатная форма (docx/pdf) скачивается из окна «Версии»:
+ * и снапшот делает бэк. Кнопка открывает окно выпуска: менеджер видит, что
+ * уйдёт заказчику (номер, описание изделия, состав, условия), и правит это
+ * перед выпуском. Печатная форма (docx/pdf) скачивается из окна «Версии»:
  * она строится из снапшота, а не из текущего дерева.
  */
 async function onKp() {
@@ -1146,22 +1161,29 @@ async function onKp() {
     kpAsk.value = true
     return
   }
-  await issueKp()
+  await openKp()
 }
 
 async function kpRepriceAndIssue() {
   kpAsk.value = false
   const summary = st.repriceToCurrent()
   if (summary?.changed) filters.repriced = true
-  await issueKp()
+  await openKp()
 }
 
 async function kpIssueAsIs() {
   kpAsk.value = false
-  await issueKp()
+  await openKp()
 }
 
-async function issueKp() {
+/**
+ * Открыть окно выпуска.
+ *
+ * Расчёт сохраняется ДО открытия: черновик КП сервер собирает из сохранённого
+ * состояния, и с несохранённой правкой менеджер увидел бы прошлую цену и
+ * прошлый состав.
+ */
+async function openKp() {
   if (!st.estimate) return
   // Ставки не из прайса — итог посчитан по константам программы, а не по
   // ценам завода: КП не выпускается (решение Р5). Сервер держит тот же гейт.
@@ -1172,13 +1194,30 @@ async function issueKp() {
   kpBusy.value = true
   try {
     await st.save()
-    const data = await estimatesApi.kp(st.estimate.id)
-    toast(`КП сформировано · снапшот v${data.snapshot.version} (прайс v${data.snapshot.priceListVersion})`, 'success')
+    kpOpen.value = true
+  } catch (err) {
+    toast(err instanceof Error ? err.message : 'Не удалось сохранить расчёт', 'error')
+  } finally {
+    kpBusy.value = false
+  }
+}
+
+async function issueKp(payload: KpIssuePayload) {
+  if (!st.estimate) return
+  kpBusy.value = true
+  try {
+    const data = await estimatesApi.kp(st.estimate.id, payload)
+    kpOpen.value = false
+    toast(
+      `КП ${data.kp.number} выпущено · снапшот v${data.snapshot.version} (прайс v${data.snapshot.priceListVersion})`,
+      'success',
+    )
   } catch (err) {
     const r = (err as { response?: { data?: { code?: string; count?: number; message?: string } } }).response
     if (r?.data?.code === 'ROWS_WITHOUT_PRICE') {
       toast(r.data.message ?? 'Есть строки без цены', 'error')
       filters.missing = true // сразу показываем, что чинить
+      kpOpen.value = false
     } else {
       toast(r?.data?.message ?? 'Не удалось сформировать КП', 'error')
     }

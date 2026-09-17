@@ -64,6 +64,84 @@ export interface KpResult {
   estimate: { id: string; title: string; deviceType: DeviceType; totalRub: number | null }
   project: { title: string; customer: string | null; address: string | null } | null
   snapshot: { version: number; priceListVersion: number; createdAt: string }
+  /** Исходящий номер, под которым КП ушло заказчику. */
+  kp: { number: string }
+}
+
+/** Узел состава изделия — строка списка «В комплекте». */
+export interface KpKitItem {
+  name: string
+  qty: number
+  unit: string
+}
+
+/** Подстановки девяти пунктов условий (backend/utils/kp-terms.ts). */
+export interface KpTerms {
+  vatRatePct: number
+  deliveryTo: string | null
+  shipmentFrom: string | null
+  /** ISO-дата; null — пункт о сроке действия не печатается. */
+  validUntil: string | null
+  prepaymentPct: number
+  paymentDays: number
+  leadTimeDays: string
+  euroThresholdPct: number
+  excluded: string[]
+}
+
+/** Подпись и исполнитель. */
+export interface KpSignature {
+  signerTitle: string
+  signerName: string | null
+  executorName: string | null
+  executorPhone: string | null
+  executorEmail: string | null
+}
+
+/** Позиция черновика: описание изделия, состав, количество и цена. */
+export interface KpDraftPosition {
+  number: string
+  tag: string | null
+  mark: string | null
+  tu: string | null
+  description: string
+  kit: KpKitItem[]
+  qty: number
+  unit: string
+  priceRub: number
+  totalRub: number
+}
+
+/**
+ * Черновик КП для окна выпуска: собран из опросного листа и умолчаний.
+ *
+ * Номер — следующий по сквозному счётчику, но счётчик им не тратится:
+ * открытое и закрытое окно номера журнала не прожигает.
+ */
+export interface KpDraft {
+  number: string
+  issuedAt: string
+  customer: string | null
+  object: string | null
+  position: KpDraftPosition
+  terms: KpTerms
+  signature: KpSignature
+}
+
+/** Что уходит в выпуск: всё необязательно — пустое заменяется умолчанием. */
+export interface KpIssuePayload {
+  number?: string
+  position?: {
+    tag?: string | null
+    mark?: string | null
+    tu?: string | null
+    /** Задано — печатается как есть, опросный лист не спрашивается. */
+    description?: string | null
+    unit?: string | null
+    kit?: KpKitItem[]
+  }
+  terms?: Partial<KpTerms>
+  signature?: Partial<KpSignature>
 }
 
 export const estimatesApi = {
@@ -104,9 +182,23 @@ export const estimatesApi = {
     return api.post<EstimateSnapshotInfo>(`/estimates/${id}/snapshot`, { reason }).then((r) => r.data)
   },
 
-  /** Выпуск КП: серверный гейт «нет строк без цены» + снапшот. */
-  kp(id: string): Promise<KpResult> {
-    return api.post<KpResult>(`/estimates/${id}/kp`).then((r) => r.data)
+  /**
+   * Черновик КП для окна выпуска: наименование и состав из опросного листа,
+   * условия и подпись — умолчаниями, номер — следующий по счётчику.
+   */
+  kpDraft(id: string): Promise<KpDraft> {
+    return api.get<KpDraft>(`/estimates/${id}/kp/draft`).then((r) => r.data)
+  },
+
+  /**
+   * Выпуск КП: серверный гейт «нет строк без цены» + снапшот.
+   *
+   * Шапка (номер, условия, подпись, правленые описание и состав) уходит в
+   * слепок и оттуда печатается — документ обязан воспроизводиться слово в
+   * слово. Без шапки печатаются умолчания.
+   */
+  kp(id: string, payload?: KpIssuePayload): Promise<KpResult> {
+    return api.post<KpResult>(`/estimates/${id}/kp`, payload ?? {}).then((r) => r.data)
   },
 
   /**
