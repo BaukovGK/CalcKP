@@ -6,9 +6,11 @@ import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
 import { seesAllProjects } from '../utils/access'
-import { buildProjectKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
+import { buildProjectKpDocument, documentFileName } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
+import { shellWallMm } from '../utils/kp-lookup'
+import { parseKpHeader } from '../utils/kp-payload'
 import { PRINTABLE_REASONS } from '../utils/snapshot-reason'
 import type { Response, NextFunction } from 'express'
 
@@ -216,6 +218,7 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
       orderBy: { createdAt: 'asc' },
       select: {
         id: true, title: true, deviceType: true,
+        author: { select: { name: true, email: true } },
         snapshots: { where: { reason: { in: [...PRINTABLE_REASONS] } }, orderBy: { version: 'desc' }, take: 1 },
       },
     })
@@ -243,52 +246,51 @@ projectsRouter.get('/:id/kp/export', async (req, res: Response, next: NextFuncti
       return
     }
 
-    let doc
-    try {
-      doc = buildProjectKpDocument({
-        projectId: project.id,
-        project: { title: project.title, customer: project.customer, address: project.address },
-        units: estimates.map((e) => {
-          const snapshot = e.snapshots[0]!
-          return {
-            estimateId: e.id,
-            estimateTitle: e.title,
-            deviceType: e.deviceType,
-            snapshot: {
-              version: snapshot.version,
-              priceListVersion: snapshot.priceListVersion,
-              totalRub: snapshot.totalRub,
-              createdAt: snapshot.createdAt,
-              bundlesJson: snapshot.bundlesJson,
-            },
-          }
-        }),
-      })
-    } catch (e) {
-      // Спецификацию не собрать точно — печатать нельзя (см. kp-document.ts).
-      if (e instanceof KpSpecificationIncomplete) {
-        res.status(422).json({
-          message:
-            `Печать невозможна: в расчёте «${e.estimateTitle}» ${e.rows.length} строк(и) задают ` +
-            'количество выражением, а в этой редакции не сохранён его результат. ' +
-            'Откройте расчёт, сохраните и выпустите КП заново.',
-          code: 'KP_SPEC_INCOMPLETE',
-          estimateTitle: e.estimateTitle,
-          rows: e.rows.slice(0, 20),
-          count: e.rows.length,
-        })
-        return
-      }
-      throw e
-    }
+    // Каждая позиция печатается тем описанием и составом, с которыми по ней
+    // выпускалось КП: правки менеджера лежат в её слепке.
+    const units = await Promise.all(
+      estimates.map(async (e) => {
+        const snapshot = e.snapshots[0]!
+        const header = parseKpHeader(snapshot.kpJson)
+        return {
+          estimateId: e.id,
+          estimateTitle: e.title,
+          deviceType: e.deviceType,
+          wallMm: await shellWallMm(snapshot.bundlesJson),
+          kp: header.position ?? null,
+          snapshot: {
+            version: snapshot.version,
+            priceListVersion: snapshot.priceListVersion,
+            totalRub: snapshot.totalRub,
+            createdAt: snapshot.createdAt,
+            bundlesJson: snapshot.bundlesJson,
+          },
+        }
+      }),
+    )
+
+    // Номер у проектного КП свой, и журнальный номер единицы ему не подходит:
+    // до отдельного выпуска проектного КП печатается «Исх. ___ от ⟨дата⟩».
+    // Условия и подпись — умолчания с адресом объекта проекта.
+    const doc = buildProjectKpDocument({
+      projectId: project.id,
+      project: { title: project.title, customer: project.customer, address: project.address },
+      units,
+      // Исполнитель проектного КП — автор первой единицы: телефон и почту
+      // менеджера документ не знает, а автор расчёта в карточке есть.
+      executor: {
+        name: estimates[0]?.author?.name ?? null,
+        email: estimates[0]?.author?.email ?? null,
+      },
+    })
 
     const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)
-    const filename = `${doc.number}.${format}`
+    const filename = documentFileName(doc, format)
 
     await audit(auth.userId, 'project.kp.export', 'Project', id, {
       format,
       units: doc.positions.length,
-      positions: doc.positionsCount,
+      positions: doc.meta.positionsCount,
     })
 
     res.setHeader(

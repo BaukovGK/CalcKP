@@ -528,6 +528,16 @@ function surveyPayload() {
       // Цена трубы — поле ОЛ, связанное со строкой трубы (priceBinding).
       pipePriceRub: num(form.value.pipePrice),
     },
+    // Вычисленное листом — для печатной формы КП: полная и подземная высота с
+    // горловиной и жёсткость идут в наименование изделия (`utils/kp-kit.ts`).
+    derived: {
+      shellLengthMm: s.geo.value.shellLengthMm,
+      totalDepthMm: s.geo.value.totalDepthMm,
+      neckHeightMm: s.geo.value.neckHeightMm,
+      sn: s.sn.value,
+      pn: s.pn.value,
+      pipeMark: s.pipeMark.value,
+    },
     form: { ...form.value },
   }
 }

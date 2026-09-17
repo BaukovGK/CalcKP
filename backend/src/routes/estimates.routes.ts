@@ -17,10 +17,16 @@ import {
   treePriceListVersion,
   treeRateFallbacks,
   treeTemplateVersion,
+  tirageOf,
 } from '../utils/estimate-tree'
-import { buildKpDocument, KpSpecificationIncomplete } from '../utils/kp-document'
+import { buildKpDocument, documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
+import { buildProductDraft } from '../utils/kp-kit'
+import { shellWallMm } from '../utils/kp-lookup'
+import { productDescription } from '../utils/kp-product'
+import { formatKpNumber, headerToJson, kpIssueSchema, parseKpHeader, type KpStoredHeader } from '../utils/kp-payload'
+import { defaultSignature, defaultTerms } from '../utils/kp-terms'
 import { blocksDeletion, isPrintable, PRINTABLE_REASONS, REASON_LABEL } from '../utils/snapshot-reason'
 import type { SnapshotReason } from '@prisma/client'
 
@@ -180,7 +186,37 @@ const SNAPSHOT_RETRIES = 3
  * и проигравшему достаточно перечитать максимум. Повторов немного: конкуренция
  * здесь — две вкладки одного инженера, а не нагрузка.
  */
-async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub: number, reason: SnapshotReason) {
+/** Шапка и номер КП, если слепок снимается выпуском предложения. */
+interface SnapshotKp {
+  /** Номер, вписанный менеджером; пусто — выдаст сквозной счётчик. */
+  number?: string | null
+  header?: KpStoredHeader | null
+}
+
+/**
+ * Сквозной номер КП: увеличивает счётчик и возвращает «КП-0042».
+ *
+ * Берётся ДО снятия слепка и один раз: повтор при гонке за номер версии
+ * слепка иначе съедал бы по номеру журнала на попытку. Неудачный выпуск
+ * оставляет номер неиспользованным — как пропущенный бланк, а не как дыра в
+ * нумерации документов.
+ */
+async function nextKpNumber(): Promise<string> {
+  const counter = await prisma.kpCounter.upsert({
+    where: { id: 1 },
+    update: { last: { increment: 1 } },
+    create: { id: 1, last: 1 },
+  })
+  return formatKpNumber(counter.last)
+}
+
+async function createSnapshot(
+  estimateId: string,
+  bundlesJson: unknown,
+  totalRub: number,
+  reason: SnapshotReason,
+  kp?: SnapshotKp,
+) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
@@ -206,6 +242,10 @@ async function createSnapshot(estimateId: string, bundlesJson: unknown, totalRub
             totalRub,
             bundlesJson: bundlesJson as never,
             reason,
+            // Номер и шапка живут рядом с ценой: документ печатается из
+            // слепка и обязан воспроизводиться слово в слово.
+            kpNumber: kp?.number ?? null,
+            kpJson: (kp?.header ?? null) as never,
           },
         })
       })
@@ -355,6 +395,18 @@ estimatesRouter.post(
       const auth = req as AuthRequest
       const id = String(req.params.id)
 
+      // Шапка документа приходит из окна выпуска: номер, условия, подпись и
+      // правки состава. Тело необязательно — без него печатаются умолчания.
+      const payload = kpIssueSchema.safeParse(req.body ?? {})
+      if (!payload.success) {
+        res.status(400).json({
+          message: 'Шапка КП заполнена неверно',
+          code: 'KP_HEADER_INVALID',
+          issues: payload.error.issues.slice(0, 20),
+        })
+        return
+      }
+
       const estimate = await prisma.estimate.findUnique({
         where: { id },
         include: { project: { select: { title: true, customer: true, address: true } } },
@@ -424,10 +476,17 @@ estimatesRouter.post(
         return
       }
 
-      const snapshot = await createSnapshot(id, estimate.surveyData, estimate.totalRub ?? 0, 'KP')
+      // Свой номер счётчик не трогает: у журнала исходящей корреспонденции
+      // своя нумерация, и она главнее нашей (решение Р11).
+      const number = payload.data.number?.trim() || (await nextKpNumber())
+      const snapshot = await createSnapshot(id, estimate.surveyData, estimate.totalRub ?? 0, 'KP', {
+        number,
+        header: headerToJson(payload.data),
+      })
 
       await audit(auth.userId, 'estimate.kp', 'Estimate', id, {
         snapshotVersion: snapshot.version,
+        kpNumber: number,
         // Чем закончилась сверка итога: сошлась или почему не проверялась.
         totalCheck: 'skipped' in totalCheck ? totalCheck.skipped : 'ok',
       })
@@ -445,6 +504,74 @@ estimatesRouter.post(
           priceListVersion: snapshot.priceListVersion,
           createdAt: snapshot.createdAt,
         },
+        kp: { number },
+      })
+    } catch (e) { next(e) }
+  },
+)
+
+/**
+ * GET /api/estimates/:id/kp/draft — черновик КП для окна выпуска.
+ *
+ * Собирается из ТЕКУЩЕГО состояния расчёта (выпуска ещё не было): наименование
+ * изделия и состав — из опросного листа (`utils/kp-kit.ts`), условия и подпись
+ * — умолчаниями, номер — следующий по счётчику, но счётчик не трогается:
+ * открытое и закрытое окно не должно прожигать номера журнала.
+ *
+ * Менеджер правит что нужно и отправляет обратно в `POST /:id/kp`; что
+ * отправлено, то и ляжет в слепок (`utils/kp-payload.ts`).
+ */
+estimatesRouter.get(
+  '/:id/kp/draft',
+  requireRole('ADMIN', 'MANAGER', 'ENGINEER'),
+  async (req, res: Response, next: NextFunction) => {
+    try {
+      const auth = req as AuthRequest
+      const id = String(req.params.id)
+
+      const estimate = await prisma.estimate.findUnique({
+        where: { id },
+        include: {
+          project: { select: { title: true, customer: true, address: true } },
+          author: { select: { name: true, email: true } },
+        },
+      })
+      if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+      if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+        res.status(403).json({ message: 'Нет доступа' }); return
+      }
+
+      const survey = estimate.surveyData
+      const draft = buildProductDraft(estimate.deviceType, survey, {
+        wallMm: await shellWallMm(survey),
+      })
+      const qty = Math.max(1, tirageOf(survey))
+      const totalRub = estimate.totalRub ?? 0
+      const issuedAt = new Date()
+      const counter = await prisma.kpCounter.findUnique({ where: { id: 1 } })
+      const object = [estimate.project?.title, estimate.project?.address]
+        .filter((v) => v && v.trim() !== '')
+        .join(', ') || null
+
+      res.json({
+        number: formatKpNumber((counter?.last ?? 0) + 1),
+        issuedAt,
+        customer: estimate.project?.customer ?? null,
+        object,
+        position: {
+          number: '1.1',
+          tag: null,
+          mark: null,
+          tu: draft.spec.tu,
+          description: productDescription(draft.spec, draft.kit),
+          kit: draft.kit,
+          qty,
+          unit: PRODUCT_UNIT,
+          priceRub: Math.round((totalRub / qty) * 100) / 100,
+          totalRub,
+        },
+        terms: defaultTerms(issuedAt, { deliveryTo: object }),
+        signature: defaultSignature({ name: estimate.author?.name, email: estimate.author?.email }),
       })
     } catch (e) { next(e) }
   },
@@ -493,7 +620,10 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
 
     const estimate = await prisma.estimate.findUnique({
       where: { id },
-      include: { project: { select: { title: true, customer: true, address: true } } },
+      include: {
+        project: { select: { title: true, customer: true, address: true } },
+        author: { select: { name: true, email: true } },
+      },
     })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
     // Чтение КП шире правки: наблюдатель тоже должен уметь открыть документ.
@@ -528,46 +658,37 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       return
     }
 
-    let doc
-    try {
-      doc = buildKpDocument({
-        estimateId: estimate.id,
-        estimateTitle: estimate.title,
-        deviceType: estimate.deviceType,
-        project: estimate.project,
-        snapshot: {
-          version: snapshot.version,
-          priceListVersion: snapshot.priceListVersion,
-          totalRub: snapshot.totalRub,
-          createdAt: snapshot.createdAt,
-          bundlesJson: snapshot.bundlesJson,
-        },
-      })
-    } catch (e) {
-      // Спецификацию не собрать точно — печатать нельзя (см. kp-document.ts).
-      // Лечится пересохранением расчёта: фронт проставит вычисленные
-      // количества, после чего нужен новый выпуск КП.
-      if (e instanceof KpSpecificationIncomplete) {
-        res.status(422).json({
-          message:
-            `Печать невозможна: ${e.rows.length} ${plural(e.rows.length)} задаёт количество выражением, ` +
-            'а в этой редакции не сохранён его результат. Откройте расчёт, сохраните и выпустите КП заново.',
-          code: 'KP_SPEC_INCOMPLETE',
-          rows: e.rows.slice(0, 20),
-          count: e.rows.length,
-        })
-        return
-      }
-      throw e
-    }
+    // Шапка — та, что сохранена выпуском; её нет (старый слепок или ручная
+    // фиксация) — печатаются умолчания, собранные из опросного листа.
+    const header = parseKpHeader(snapshot.kpJson)
+    const doc = buildKpDocument({
+      estimateId: estimate.id,
+      estimateTitle: estimate.title,
+      deviceType: estimate.deviceType,
+      project: estimate.project,
+      wallMm: await shellWallMm(snapshot.bundlesJson),
+      number: snapshot.kpNumber,
+      kp: header.position ?? null,
+      terms: header.terms ?? null,
+      signature: header.signature ?? null,
+      executor: { name: estimate.author?.name, email: estimate.author?.email },
+      snapshot: {
+        version: snapshot.version,
+        priceListVersion: snapshot.priceListVersion,
+        totalRub: snapshot.totalRub,
+        createdAt: snapshot.createdAt,
+        bundlesJson: snapshot.bundlesJson,
+      },
+    })
 
     const body = format === 'pdf' ? await renderKpPdf(doc) : await renderKpDocx(doc)
-    const filename = `${doc.number}.${format}`
+    const filename = documentFileName(doc, format)
 
     await audit(auth.userId, 'estimate.kp.export', 'Estimate', id, {
       format,
       snapshotVersion: snapshot.version,
-      positions: doc.positionsCount,
+      kpNumber: doc.number,
+      positions: doc.meta.positionsCount,
     })
 
     res.setHeader(

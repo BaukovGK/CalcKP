@@ -10,15 +10,18 @@ import { extractSpecification, isFotRow, isRowWithoutPrice, isWorkRow, resolveRo
 import {
   buildKpDocument,
   buildProjectKpDocument,
+  documentFileName,
+  formatAmount,
   formatDate,
   formatMoney,
   isoDate,
   formatQty,
-  KpSpecificationIncomplete,
   NBSP,
+  PRODUCT_UNIT,
   vatIncludedIn,
   VAT_RATE_PCT,
 } from './kp-document'
+import { termsItems } from './kp-terms'
 
 /** Дерево расчёта в форме, в которой его снимает снапшот. */
 function tree() {
@@ -268,7 +271,7 @@ describe('тираж', () => {
     expect(three.tirage).toBe(3)
   })
 
-  it('доходит до документа, чтобы состав и цена относились к одному заказу', () => {
+  it('доходит до документа: количество — тираж, цена — за изделие', () => {
     const doc = buildKpDocument(
       input({
         snapshot: {
@@ -278,24 +281,26 @@ describe('тираж', () => {
       }),
     )
 
-    expect(doc.positions[0]?.tirage).toBe(3)
-    expect(doc.positions[0]?.sections[0]?.rows[0]?.qty).toBe(37.5)
+    // Сумма позиции — за весь заказ, цена — за одно изделие: так читается
+    // таблица эталона, где «Сумма = Цена × Кол-во».
+    expect(doc.positions[0]?.qty).toBe(3)
+    expect(doc.positions[0]?.priceRub).toBe(1_200_000)
+    expect(doc.positions[0]?.totalRub).toBe(3_600_000)
     expect(doc.totalRub).toBe(3_600_000)
   })
 })
 
 describe('buildKpDocument', () => {
-  it('не выносит цены строк в документ — они же себестоимость', () => {
+  it('не выносит в документ ни цен строк расчёта, ни их наименований', () => {
     const doc = buildKpDocument(input())
 
-    const serialized = JSON.stringify(doc.positions.map((p) => p.sections))
+    // Цена строки в расчёте — цена ЗАКУПКИ: в документе её быть не может.
+    // Состав берётся из опросного листа, а не из дерева, поэтому в позиции
+    // нет ни строк дерева, ни их цен.
+    const serialized = JSON.stringify(doc.positions)
     expect(serialized).not.toContain('48000')
     expect(serialized).not.toContain('priceCatalog')
-    for (const section of doc.positions.flatMap((p) => p.sections)) {
-      for (const row of section.rows) {
-        expect(Object.keys(row).sort()).toEqual(['name', 'qty', 'unit'])
-      }
-    }
+    expect(serialized).not.toContain('Стеклоровинг')
   })
 
   it('выделяет НДС из цены, а не начисляет сверху', () => {
@@ -308,50 +313,97 @@ describe('buildKpDocument', () => {
     expect(doc.vatRub).toBeLessThan(doc.totalRub)
   })
 
-  it('берёт цифру из снапшота и нумерует документ его редакцией', () => {
-    const doc = buildKpDocument(input())
+  it('печатает исходящий номер выпуска, а не идентификатор расчёта', () => {
+    const doc = buildKpDocument(input({ number: 'КП-0042' }))
 
-    expect(doc.number).toBe('КП-1A2B3C4D-v2')
+    expect(doc.number).toBe('КП-0042')
     expect(doc.scope).toBe('unit')
     expect(doc.positions).toHaveLength(1)
-    expect(doc.positions[0]?.snapshotVersion).toBe(2)
-    expect(doc.positions[0]?.priceListVersion).toBe(3)
+    expect(doc.positions[0]?.number).toBe('1.1')
     expect(doc.issuedAt.toISOString()).toBe('2026-09-08T10:00:00.000Z')
+    expect(documentFileName(doc, 'docx')).toBe('КП КП-0042 от 08.09.2026.docx')
   })
 
-  it('переносит реквизиты проекта и считает позиции', () => {
+  it('без номера печатает только дату — номер даёт журнал, а не программа', () => {
+    const doc = buildKpDocument(input())
+
+    expect(doc.number).toBeNull()
+    expect(documentFileName(doc, 'pdf')).toBe('КП от 08.09.2026.pdf')
+  })
+
+  it('служебные версии остаются в meta, а не в шапке документа', () => {
+    const doc = buildKpDocument(input())
+
+    expect(doc.meta.snapshotVersions).toEqual([2])
+    expect(doc.meta.priceListVersions).toEqual([3])
+    expect(doc.meta.positionsCount).toBe(1)
+    expect(Object.keys(doc)).not.toContain('snapshotVersion')
+  })
+
+  it('сводит объект и адрес в одну строку, как в эталоне', () => {
     const doc = buildKpDocument(input())
 
     expect(doc.customer).toBe('ООО «Заказчик»')
-    expect(doc.project).toBe('Объект «Северный»')
-    expect(doc.address).toBe('г. Москва')
-    expect(doc.positionsCount).toBe(2)
+    expect(doc.object).toBe('Объект «Северный», г. Москва')
   })
 
-  it('отказывается печатать, если количество хотя бы одной строки не определено', () => {
-    const t = {
-      tree: {
-        sections: [
-          {
-            code: '1', title: 'Корпус', enabled: true,
-            components: [{ title: 'c', enabled: true, rows: [{ name: 'Труба', unit: 'м', qtyManual: '2*3' }] }],
-          },
-        ],
-      },
-    }
+  it('описание изделия собирается само, а правка менеджера его перекрывает', () => {
+    const auto = buildKpDocument(input())
+    expect(auto.positions[0]?.description).toContain('Стеклокомпозитная')
+    expect(auto.positions[0]?.description).toContain('ТУ ')
+    expect(auto.positions[0]?.unit).toBe(PRODUCT_UNIT)
 
-    // Выдуманное число в документе заказчику хуже отказа: и «пропустить»,
-    // и «подставить расчётное» разошлись бы с расчётом.
-    expect(() =>
-      buildKpDocument(
-        input({
-          snapshot: {
-            version: 1, priceListVersion: 1, totalRub: 100,
-            createdAt: new Date('2026-09-09T00:00:00Z'), bundlesJson: t,
-          },
-        }),
-      ),
-    ).toThrow(KpSpecificationIncomplete)
+    const edited = buildKpDocument(
+      input({
+        kp: {
+          description: 'Станция по чертежу заказчика',
+          kit: [{ name: 'Корпус', qty: 1, unit: 'шт.' }],
+          unit: 'шт.',
+          tag: 'НС1',
+        },
+      }),
+    )
+    expect(edited.positions[0]?.description).toBe('Станция по чертежу заказчика')
+    expect(edited.positions[0]?.kit).toEqual([{ name: 'Корпус', qty: 1, unit: 'шт.' }])
+    expect(edited.positions[0]?.unit).toBe('шт.')
+  })
+
+  it('условия по умолчанию: НДС 22 %, срок действия — две недели от выпуска', () => {
+    const doc = buildKpDocument(input())
+
+    expect(doc.terms.vatRatePct).toBe(22)
+    expect(doc.terms.validUntil?.toISOString()).toBe('2026-09-22T10:00:00.000Z')
+    expect(doc.terms.prepaymentPct).toBe(70)
+    // Адрес доставки — объект проекта: он же печатается в шапке.
+    expect(doc.terms.deliveryTo).toBe('Объект «Северный», г. Москва')
+  })
+
+  it('условия и подпись из окна выпуска перекрывают умолчания', () => {
+    const doc = buildKpDocument(
+      input({
+        terms: { prepaymentPct: 50, leadTimeDays: '30', validUntil: new Date('2026-10-01T00:00:00Z') },
+        signature: { signerTitle: 'Директор', signerName: 'И.И. Иванов' },
+        executor: { name: 'П.П. Петров', email: 'petrov@example.test' },
+      }),
+    )
+
+    const items = termsItems(doc.terms, formatDate)
+    expect(items[1]).toContain('01.10.2026')
+    expect(items[3]).toContain('предоплата 50 %')
+    expect(items[3]).toContain('оплата 50 %')
+    expect(items[4]).toContain('30 рабочих дней')
+    expect(doc.signature.signerName).toBe('И.И. Иванов')
+    expect(doc.signature.executorName).toBe('П.П. Петров')
+  })
+
+  it('девять пунктов условий: НДС, срок, соответствие, оплата, поставка и что не входит', () => {
+    const items = termsItems(buildKpDocument(input()).terms, formatDate)
+
+    expect(items).toHaveLength(9)
+    expect(items[0]).toContain('с учётом НДС 22 %')
+    expect(items[2]).toContain('ГОСТ Р 54560-2015')
+    expect(items[7]).toContain('пусконаладочные работы не включены')
+    expect(items[8]).toContain('Электромонтажные работы')
   })
 
   it('переживает расчёт без проекта и с пустым снапшотом', () => {
@@ -363,9 +415,13 @@ describe('buildKpDocument', () => {
     )
 
     expect(doc.customer).toBeNull()
-    expect(doc.positions[0]?.sections).toEqual([])
-    expect(doc.positionsCount).toBe(0)
+    expect(doc.object).toBeNull()
+    expect(doc.positions[0]?.priceRub).toBe(0)
     expect(doc.vatRub).toBe(0)
+    // Состав остаётся тем, что есть у изделия всегда (корпус, люк, лестница,
+    // вентиляция, крепление), но выдуманных характеристик в нём нет.
+    expect(doc.positions[0]?.description).not.toMatch(/null|undefined|NaN/)
+    expect(doc.positions[0]?.kit.every((i) => i.qty > 0)).toBe(true)
   })
 })
 
@@ -409,8 +465,8 @@ describe('buildProjectKpDocument', () => {
 
     expect(doc.scope).toBe('project')
     expect(doc.positions.map((p) => [p.number, p.title])).toEqual([
-      [1, 'КНС DN3000'],
-      [2, 'ЕМК 50 м³'],
+      ['1.1', 'КНС DN3000'],
+      ['1.2', 'ЕМК 50 м³'],
     ])
     // Цена проекта — сумма согласованных цен, а не новый расчёт.
     expect(doc.totalRub).toBe(2_000_000)
@@ -420,8 +476,7 @@ describe('buildProjectKpDocument', () => {
     const doc = buildProjectKpDocument(project)
 
     expect(doc.positions.map((p) => p.snapshotVersion)).toEqual([2, 1])
-    // Номер документа — по проекту: общей редакции у него нет.
-    expect(doc.number).toBe('КП-9F8E7D6C')
+    expect(doc.meta.snapshotVersions).toEqual([2, 1])
   })
 
   it('дата документа — самый поздний снапшот, чтобы печать была воспроизводимой', () => {
@@ -443,37 +498,17 @@ describe('buildProjectKpDocument', () => {
     expect(JSON.stringify(doc.positions)).not.toContain('48000')
   })
 
-  it('называет единицу, на которой спецификацию собрать не удалось', () => {
-    const broken = {
-      tree: {
-        sections: [
-          {
-            code: '1', title: 'Корпус', enabled: true,
-            components: [{ title: 'c', enabled: true, rows: [{ name: 'Труба', unit: 'м', qtyManual: '2*3' }] }],
-          },
-        ],
-      },
-    }
+  it('каждая позиция печатается своими правками из её выпуска', () => {
+    const doc = buildProjectKpDocument({
+      ...project,
+      units: [
+        unit({ kp: { description: 'Станция по чертежу', tag: 'НС1' } }),
+        project.units[1]!,
+      ],
+    })
 
-    try {
-      buildProjectKpDocument({
-        ...project,
-        units: [
-          project.units[0]!,
-          unit({
-            estimateTitle: 'КОЛ 1500',
-            snapshot: {
-              version: 1, priceListVersion: 3, totalRub: 10, createdAt: new Date(0), bundlesJson: broken,
-            },
-          }),
-        ],
-      })
-      expect.unreachable('должно было выбросить KpSpecificationIncomplete')
-    } catch (e) {
-      expect(e).toBeInstanceOf(KpSpecificationIncomplete)
-      // Без имени единицы инженер не поймёт, какой из расчётов чинить.
-      expect((e as KpSpecificationIncomplete).estimateTitle).toBe('КОЛ 1500')
-    }
+    expect(doc.positions[0]?.description).toBe('Станция по чертежу')
+    expect(doc.positions[1]?.description).toContain('Стеклокомпозитная')
   })
 
   it('проект из одной единицы даёт документ из одной позиции', () => {
@@ -485,6 +520,11 @@ describe('buildProjectKpDocument', () => {
 })
 
 describe('форматирование', () => {
+  it('сумма в колонке таблицы — без знака рубля: он в заголовке колонки', () => {
+    expect(formatAmount(1_234_567.89)).toBe(`1${NBSP}234${NBSP}567,89`)
+    expect(formatAmount(0)).toBe('0,00')
+  })
+
   it('деньги — с разрядами неразрывным пробелом и рублём', () => {
     expect(formatMoney(1234567.89)).toBe(`1${NBSP}234${NBSP}567,89${NBSP}₽`)
     expect(formatMoney(0)).toBe(`0,00${NBSP}₽`)

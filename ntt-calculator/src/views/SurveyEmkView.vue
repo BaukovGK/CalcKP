@@ -633,6 +633,17 @@ function surveyPayload() {
       // Цена трубы — поле ОЛ, связанное со строкой трубы (priceBinding).
       pipePriceRub: num(form.value.pipePrice),
     },
+    // Вычисленное листом — для печатной формы КП: габариты корпуса и
+    // жёсткость идут в наименование изделия (`utils/kp-kit.ts` на бэкенде).
+    // В самом листе они не хранились, и КП печатать их было неоткуда.
+    derived: {
+      lengthMm: s.lengthMm.value,
+      pipeTotalMm: s.pipeTotalMm.value,
+      overallMm: s.overallMm.value,
+      sn: s.sn.value,
+      pn: s.pn.value,
+      pipeMark: s.pipeMark.value,
+    },
     form: { ...form.value },
   }
 }
