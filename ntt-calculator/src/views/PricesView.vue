@@ -803,7 +803,6 @@ onBeforeUnmount(() => {
 
 .pr-more { display: flex; align-items: center; gap: 10px; padding: 12px 0; max-width: var(--pr-max); font-size: 12.6px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
-.nav-section { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
 
 .dash-state    { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
 .dash-state-txt { font-size: 14.4px; color: var(--tx3); }

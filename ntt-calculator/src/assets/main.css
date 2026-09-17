@@ -185,6 +185,13 @@ input, select { font-family: inherit; }
 .sidebar-scroll { flex: 1; overflow-y: auto; padding: 5px 4px 12px; }
 .sidebar-scroll::-webkit-scrollbar { width: 2px; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--bd2); }
+/* Навигация боковой панели. Раньше эти правила лежали scoped-копиями в трёх
+   экранах, и четвёртый (настройки) получил ссылки без них: кнопки встали в
+   строку и без отметки активного раздела. Оболочка общая — и стили общие. */
+.nav-section { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
+.nav-link { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 13.2px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
+.nav-link:hover { background: var(--bg3); color: var(--tx1); }
+.nav-link--active { background: var(--bg3); color: var(--accent); font-weight: 600; }
 
 /* Sidebar nav */
 .nb    { margin-bottom: 2px; }

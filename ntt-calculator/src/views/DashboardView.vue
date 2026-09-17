@@ -206,8 +206,4 @@ onMounted(() => projects.fetchAll())
 .dash-state   { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; opacity: .6; }
 .dash-state-txt { font-size: 14.4px; color: var(--tx3); }
 .dash-err     { color: var(--danger); }
-.nav-section  { font-size: 10.8px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); padding: 10px 8px 4px; }
-.nav-link     { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: 13.2px; color: var(--tx2); cursor: pointer; background: transparent; border: none; transition: background .12s, color .12s; }
-.nav-link:hover   { background: var(--bg3); color: var(--tx1); }
-.nav-link--active { background: var(--bg3); color: var(--accent); font-weight: 600; }
 </style>
