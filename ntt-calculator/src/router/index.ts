@@ -74,6 +74,15 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER', 'VIEWER'] },
     },
     {
+      // Выпуск КП — отдельный экран, а не окно поверх расчёта: у КНС в составе
+      // два десятка узлов, и править их в полосе высотой в треть экрана нельзя.
+      // Вложен в маршрут расчёта: документ выпускается по конкретной единице.
+      path: '/calculator/:id/kp',
+      name: 'kp-issue',
+      component: () => import('@/views/KpIssueView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER'] },
+    },
+    {
       // Заявка на закупку — отчёт поверх расчёта (ТЗ §9.6), поэтому вложена
       // в его маршрут. BUYER ведёт закупку по чужим расчётам.
       path: '/calculator/:id/purchase',
