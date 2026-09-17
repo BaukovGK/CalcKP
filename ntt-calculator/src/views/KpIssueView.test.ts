@@ -99,6 +99,10 @@ const goTo = async (w: Wrapper, label: string) => {
   await menu(w).find((b) => b.text().startsWith(label))!.trigger('click')
 }
 const issueBtn = (w: Wrapper) => w.findAll('button').find((b) => b.text().includes('Выпустить КП'))!
+/** Раздел «Комплектация» открывается текстом; таблица — по переключателю. */
+const asTable = async (w: Wrapper) => {
+  await w.find('.kpv-kit .kpv-tgl input[type="checkbox"]').setValue(true)
+}
 /** Что ушло в выпуск: тело единственного вызова. */
 const sent = () => kp.mock.calls[0]?.[1] as Record<string, never>
 
@@ -133,9 +137,43 @@ describe('экран выпуска КП', () => {
     expect(date.value).toBe('2026-10-01')
   })
 
-  it('состав правится таблицей, предпросмотр рядом пересобирается', async () => {
+  it('состав открывается текстом: строка на позицию, целиком', async () => {
     const w = await open()
     await goTo(w, 'Комплектация')
+
+    const area = w.find('textarea.kpv-text--kit')
+    expect((area.element as HTMLTextAreaElement).value.split('\n')).toEqual([
+      'Стеклокомпозитный корпус - 1 шт.',
+      'Лестница из нержавеющей стали - 1 шт.',
+    ])
+    expect(w.find('.kpv-tbl').exists()).toBe(false)
+  })
+
+  it('правка текста сразу видна в предпросмотре и уходит в выпуск', async () => {
+    const w = await open()
+    await goTo(w, 'Комплектация')
+
+    await w.find('textarea.kpv-text--kit').setValue(
+      ['Стеклокомпозитный корпус - 1 шт.', 'Лестница из нержавеющей стали - 2 шт.', 'Шкаф управления - 1 компл.'].join('\n'),
+    )
+    const prev = w.find('.kpv-prev').text()
+    expect(prev).toContain('- Лестница из нержавеющей стали - 2 шт.;')
+    expect(prev).toContain('- Шкаф управления - 1 компл.;')
+
+    await issueBtn(w).trigger('click')
+    await flushPromises()
+    const payload = sent() as unknown as { position: { kit: Array<{ name: string; qty: number; unit: string }> } }
+    expect(payload.position.kit).toEqual([
+      { name: 'Стеклокомпозитный корпус', qty: 1, unit: 'шт.' },
+      { name: 'Лестница из нержавеющей стали', qty: 2, unit: 'шт.' },
+      { name: 'Шкаф управления', qty: 1, unit: 'компл.' },
+    ])
+  })
+
+  it('таблицей — по переключателю, правка в ней пересобирает предпросмотр', async () => {
+    const w = await open()
+    await goTo(w, 'Комплектация')
+    await asTable(w)
 
     const rows = w.findAll('.kpv-tbl tbody tr')
     expect(rows).toHaveLength(2)
@@ -188,6 +226,7 @@ describe('экран выпуска КП', () => {
   it('пустые строки состава в документ не уходят', async () => {
     const w = await open()
     await goTo(w, 'Комплектация')
+    await asTable(w)
     await w.findAll('button').find((b) => b.text() === '+ строка')!.trigger('click')
     await issueBtn(w).trigger('click')
     await flushPromises()

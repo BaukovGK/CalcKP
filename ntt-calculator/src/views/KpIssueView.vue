@@ -138,13 +138,29 @@
           <div class="kpv-kit">
             <h3 class="kpv-h">
               В комплекте
-              <button class="btn btn-g kpv-add" @click="addItem">+ строка</button>
+              <label class="kpv-tgl">
+                <input v-model="kitAsTable" type="checkbox" />
+                <span v-hint="H.kitTable">таблицей</span>
+              </label>
+              <button v-if="kitAsTable" class="btn btn-g kpv-add" @click="addItem">+ строка</button>
             </h3>
 
             <p v-if="manualDescription" class="kpv-note">
               Наименование правится текстом — состав в документ не пойдёт. Снимите
               «править текстом» на вкладке «Изделие», чтобы вернуть список.
             </p>
+
+            <!-- Состав текстом: наименование узла целиком видно и правится
+                 как обычный текст — строки копируются из прошлого КП. -->
+            <template v-else-if="!kitAsTable">
+              <textarea
+                v-model="kitText"
+                v-hint="H.kitText"
+                class="kpv-text kpv-text--kit"
+                spellcheck="false"
+              ></textarea>
+              <p class="kpv-hintline">Строка на позицию: «Наименование - Кол-во Ед.»</p>
+            </template>
 
             <table v-else class="kpv-tbl">
               <thead>
@@ -289,6 +305,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import { estimatesApi, type KpDraft, type KpIssuePayload, type KpKitItem } from '@/api/estimates'
 import { serverBlock, type KpBlock } from '@/utils/kp-gate'
+import { kitToText, textToKit } from '@/utils/kp-kit-text'
 import { toast } from '@/composables/useToast'
 import '@/assets/survey-form.css'
 
@@ -322,6 +339,8 @@ const H = {
   kitName: 'Узел так, как его прочтёт заказчик: корпус, шахта, лестница, гильза, насос, шкаф',
   kitQty: 'Количество узлов на весь заказ',
   kitUnit: 'шт. или компл.',
+  kitText: 'Состав строками: «Наименование - Кол-во Ед.». Маркер списка и точку с запятой можно не убирать — они разбираются; строка без количества считается одной штукой',
+  kitTable: 'Те же позиции по полям — когда нужно поправить только количество или единицу. Длинные наименования в поле не помещаются целиком',
   kitDrop: 'Убрать узел из состава. На цену это не влияет — она посчитана в расчёте; из документа пропадёт только строка',
   vat: 'Ставка НДС для пункта условий и справочной строки. Налог уже в цене, сверху не начисляется',
   valid: 'До какой даты предложение действительно. По умолчанию — две недели от выпуска',
@@ -354,6 +373,15 @@ const unit = ref('')
 const manualDescription = ref(false)
 const description = ref('')
 const kit = ref<KpKitItem[]>([])
+/**
+ * Состав правится текстом, а таблицей — по желанию.
+ *
+ * Наименование узла в поле таблицы не помещается: «Стеклокомпозитный корпус
+ * «НТТ» GRP, D=3 000 мм, Hполная=11 900 мм, …» обрезается на середине. Текстом
+ * видно всё, что уйдёт заказчику.
+ */
+const kitAsTable = ref(false)
+const kitText = ref('')
 const validUntil = ref('')
 const deliveryTo = ref('')
 const shipmentFrom = ref('')
@@ -412,6 +440,7 @@ async function load() {
     description.value = d.position.description
     manualDescription.value = false
     kit.value = d.position.kit.map((i) => ({ ...i }))
+    kitText.value = kitToText(kit.value)
     terms.vatRatePct = d.terms.vatRatePct
     terms.prepaymentPct = d.terms.prepaymentPct
     terms.paymentDays = d.terms.paymentDays
@@ -438,6 +467,14 @@ async function load() {
 function addItem() {
   kit.value.push({ name: '', qty: 1, unit: 'шт.' })
 }
+
+// Текст — источник состава, пока он открыт: правка строки сразу видна и в
+// предпросмотре справа, и в том, что уйдёт в выпуск.
+watch(kitText, (text) => { if (!kitAsTable.value) kit.value = textToKit(text) })
+
+// Переключение режима пересобирает текст из состава: в таблице могли поправить
+// количество, и текст обязан это показать.
+watch(kitAsTable, (asTable) => { if (!asTable) kitText.value = kitToText(kit.value) })
 
 const clean = (v: string) => (v.trim() === '' ? null : v.trim())
 
@@ -554,6 +591,9 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
   border: 1px solid var(--bd); max-width: 560px; }
 
 .kpv-text { width: 100%; font: inherit; font-size: 12.6px; resize: vertical; }
+/* Состав — во весь экран: строк два десятка, и прокручивать их в полосе нельзя. */
+.kpv-text--kit { height: calc(100vh - 210px); min-height: 240px; line-height: 1.5; }
+.kpv-hintline { margin: 4px 0 0; font-size: 11.4px; color: var(--tx3); }
 .kpv-prev { margin: 0; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--bd);
   font: inherit; font-size: 12.2px; white-space: pre-wrap; max-height: 420px; overflow: auto; }
 .kpv-prev--tall { position: sticky; top: 0; max-height: calc(100vh - 160px); }
