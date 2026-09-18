@@ -52,3 +52,5 @@ doc/*.xlsx
 # Служебные файлы выкладки на машине (deploy/update.sh)
 .deploy.lock
 .deploy.last
+.deploy.ok
+.deploy.fail

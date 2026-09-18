@@ -64,21 +64,44 @@ main() {
 
   git fetch --all --quiet --prune
 
-  local before after dirty
-  before="$(git rev-parse HEAD)"
+  # Что выложено — это то, что РАБОТАЕТ, а не коммит в каталоге. Прежде
+  # сравнивали с HEAD, а `git reset` идёт до сборки: упала сборка — каталог
+  # уже на новом коммите, контейнеры прежние, и следующий запуск видел «нового
+  # нет» и молча выходил. Упавшая выкладка не повторялась никогда (так 18.09
+  # коммит 95442c3 простоял невыложенным: containerd сорвался на скачивании
+  # nginx:alpine). Теперь выложенный коммит пишется в `.deploy.ok` только после
+  # того, как стек поднялся; нет файла — выкладываем.
+  local ok_file="$dir/.deploy.ok" fail_file="$dir/.deploy.fail"
+  local deployed after dirty
+  deployed="$(cat "$ok_file" 2>/dev/null || true)"
   after="$(git rev-parse "origin/$ref")"
   # Неотслеживаемые файлы (дампы, .env, заметки администратора) поводом для
   # пересборки не считаются — их reset и не трогает. Правки отслеживаемых
   # считаются: установка разошлась с веткой, и её надо вернуть.
   dirty="$(git status --porcelain --untracked-files=no)"
-  if [ "$before" = "$after" ] && [ "$if_changed" = 1 ] && [ -z "$dirty" ]; then
+  # Последняя попытка выложить этот же коммит упала (например, ручная
+  # пересборка) — стек мог остаться нездоровым, и «нечего делать» неверно.
+  local last_failed; last_failed="$(cut -d' ' -f1 "$fail_file" 2>/dev/null || true)"
+  if [ "$deployed" = "$after" ] && [ "$last_failed" != "$after" ] && [ "$if_changed" = 1 ] && [ -z "$dirty" ]; then
     # Автомат запускается каждые несколько минут: «ничего нового» в журнал не
     # пишется, иначе он рос бы на сотни строк в день.
     return 0
   fi
 
+  # Упавшую выкладку автомат повторяет, но не чаще раза в RETRY_MINUTES: сбой
+  # бывает разовым (сеть, containerd), а бывает и стойким — тогда пересборка
+  # каждые три минуты только грела бы машину. Руками — без паузы.
+  local retry_minutes="${RETRY_MINUTES:-15}"
+  if [ "$if_changed" = 1 ] && [ -f "$fail_file" ]; then
+    local failed_sha failed_at
+    read -r failed_sha failed_at < "$fail_file" || true
+    if [ "$failed_sha" = "$after" ] && [ $(( $(date +%s) - ${failed_at:-0} )) -lt $(( retry_minutes * 60 )) ]; then
+      return 0
+    fi
+  fi
+
   local short; short="$(git rev-parse --short "$after")"
-  if [ "$wait_green" = 1 ] && [ "$before" != "$after" ]; then
+  if [ "$wait_green" = 1 ] && [ "$deployed" != "$after" ]; then
     local state; state="$(ci_state "$after")"
     case "$state" in
       green) ;;
@@ -107,9 +130,12 @@ main() {
   # минуты — выкладка неудачна, и в журнале видно почему.
   if docker compose up -d --build --remove-orphans --wait --wait-timeout 180; then
     docker image prune -f >/dev/null || true
+    git rev-parse HEAD > "$ok_file"
+    rm -f "$fail_file"
     echo "update: готово, сборка $APP_BUILD"
   else
-    echo "update: стек не поднялся за 3 минуты — хвост логов бэкенда:" >&2
+    date "+$(git rev-parse HEAD) %s" > "$fail_file"
+    echo "update: выкладка $APP_BUILD не удалась — автомат повторит через ${retry_minutes} мин. Хвост логов бэкенда:" >&2
     docker compose logs --tail=150 backend >&2 || true
     return 1
   fi
