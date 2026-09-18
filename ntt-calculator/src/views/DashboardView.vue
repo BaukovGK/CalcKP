@@ -67,10 +67,15 @@
 
     <!-- Подтверждение удаления проекта -->
     <BaseModal :show="!!deleteProjectId" title="Удалить проект?" @close="deleteProjectId = null">
-      <div style="font-size:14.5px;color:var(--tx2)">
-        Удалить <strong>{{ deleteProjectTitle }}</strong> со всеми единицами оборудования? Действие необратимо.
-      </div>
-      <div v-if="deleteError" class="auth-err" style="margin-top:8px">{{ deleteError }}</div>
+      <p class="del-q">
+        Удалить <strong>{{ deleteProjectTitle }}</strong><template v-if="deleteUnits > 0">
+        вместе с {{ deleteUnits }} {{ unitsWord(deleteUnits) }} оборудования</template>? Действие необратимо.
+      </p>
+      <p v-if="deleteUnits > 0" class="mo-sub">
+        Единицу, по которой выпущено КП или зафиксирована версия, удалить нельзя: по ней заказчику
+        ушла цена. Если такая есть — проект останется целиком, и здесь будет сказано, какая.
+      </p>
+      <div v-if="deleteError" class="auth-err del-err">{{ deleteError }}</div>
       <template #footer>
         <button class="btn btn-g" @click="deleteProjectId = null">Отмена</button>
         <button class="btn btn-danger" :disabled="deleting" @click="confirmDeleteProject">
@@ -109,11 +114,13 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectsStore } from '@/stores/projects'
 import { projectsApi } from '@/api/projects'
+import { toast } from '@/composables/useToast'
 import ProjectCard  from '@/components/dashboard/ProjectCard.vue'
 import BaseModal    from '@/components/ui/BaseModal.vue'
 import ThemeToggle  from '@/components/ui/ThemeToggle.vue'
@@ -158,7 +165,7 @@ async function createProject() {
     closeNew()
     router.push(`/projects/${p.id}`)
   } catch (e: unknown) {
-    formError.value = e instanceof Error ? e.message : 'Ошибка'
+    formError.value = apiErrorMessage(e, 'Ошибка')
   } finally {
     creating.value = false
   }
@@ -167,6 +174,14 @@ async function createProject() {
 // ── Delete project ──────────────────────────────────────────────────────────
 const deleteProjectId    = ref<string | null>(null)
 const deleteProjectTitle = ref('')
+/** Сколько единиц уйдёт вместе с проектом — окно называет число заранее. */
+const deleteUnits = computed(
+  () => projects.list.find((p) => p.id === deleteProjectId.value)?.estimates.length ?? 0,
+)
+/** «с 1 единицей», «с 3 единицами», «с 21 единицей» — творительный падеж. */
+function unitsWord(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? 'единицей' : 'единицами'
+}
 const deleteError = ref('')
 const deleting    = ref(false)
 
@@ -180,11 +195,18 @@ async function confirmDeleteProject() {
   if (!deleteProjectId.value) return
   deleting.value = true; deleteError.value = ''
   try {
+    const units = deleteUnits.value
     await projectsApi.delete(deleteProjectId.value)
     projects.list = projects.list.filter(p => p.id !== deleteProjectId.value)
+    toast(
+      units > 0
+        ? `Проект «${deleteProjectTitle.value}» удалён вместе с ${units} ${unitsWord(units)}`
+        : `Проект «${deleteProjectTitle.value}» удалён`,
+      'success',
+    )
     deleteProjectId.value = null
   } catch (e: unknown) {
-    deleteError.value = e instanceof Error ? e.message : 'Ошибка удаления'
+    deleteError.value = apiErrorMessage(e, 'Ошибка удаления')
   } finally {
     deleting.value = false
   }
@@ -203,4 +225,6 @@ onMounted(() => projects.fetchAll())
   color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 600;
   padding: 11px 13px; min-height: 96px; cursor: pointer; transition: background .15s; }
 .dash-add:hover { background: var(--bg3); }
+.del-q { font-size: 14.5px; color: var(--tx2); line-height: 1.5; margin: 0 0 8px; }
+.del-err { margin: 10px 0 0; }
 </style>

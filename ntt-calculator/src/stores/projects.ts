@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { projectsApi, type ProjectListItem, type ProjectDetail, type CreateProjectDto, type CreateEstimateInProjectDto } from '@/api/projects'
+import { apiErrorMessage } from '@/utils/api-error'
 
 export const useProjectsStore = defineStore('projects', () => {
   const list    = ref<ProjectListItem[]>([])
@@ -11,14 +12,14 @@ export const useProjectsStore = defineStore('projects', () => {
   async function fetchAll() {
     loading.value = true; error.value = null
     try { list.value = await projectsApi.list() }
-    catch (e: unknown) { error.value = e instanceof Error ? e.message : 'Ошибка загрузки' }
+    catch (e: unknown) { error.value = apiErrorMessage(e, 'Ошибка загрузки') }
     finally { loading.value = false }
   }
 
   async function fetchOne(id: string) {
     loading.value = true; error.value = null
     try { current.value = await projectsApi.get(id) }
-    catch (e: unknown) { error.value = e instanceof Error ? e.message : 'Ошибка загрузки' }
+    catch (e: unknown) { error.value = apiErrorMessage(e, 'Ошибка загрузки') }
     finally { loading.value = false }
   }
 

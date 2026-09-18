@@ -475,6 +475,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
@@ -909,7 +910,7 @@ async function createEstimate() {
     previewOpen.value = false
     await router.replace({ name: 'survey', params: { id: est.id } })
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Не удалось создать расчёт', 'error')
+    toast(apiErrorMessage(e, 'Не удалось создать расчёт'), 'error')
   } finally {
     creating.value = false
   }

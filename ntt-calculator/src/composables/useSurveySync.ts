@@ -3,6 +3,7 @@ import { useCalcTreeStore } from '@/stores/calcTree'
 import { CalcDeferredError } from '@/stores/calc-errors'
 import { hasInvalidNumericField } from '@/utils/numeric-input'
 import { stableStringify } from '@/utils/stable-stringify'
+import { apiErrorMessage } from '@/utils/api-error'
 
 /**
  * Где сейчас правка ОЛ: ждёт паузы в вводе, уходит на сервер, сохранена, упала
@@ -146,7 +147,7 @@ export function useSurveySync(opts: {
         status.value = 'deferred'
         return
       }
-      error.value = e instanceof Error ? e.message : 'Не удалось сохранить опросный лист'
+      error.value = apiErrorMessage(e, 'Не удалось сохранить опросный лист')
       status.value = 'error'
     } finally {
       inFlight = false

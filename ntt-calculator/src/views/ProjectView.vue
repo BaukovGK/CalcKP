@@ -224,6 +224,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/stores/projects'
@@ -320,7 +321,7 @@ async function saveEdit() {
     }
     editOpen.value = false
   } catch (e: unknown) {
-    editError.value = e instanceof Error ? e.message : 'Ошибка сохранения'
+    editError.value = apiErrorMessage(e, 'Ошибка сохранения')
   } finally {
     editSaving.value = false
   }
@@ -348,7 +349,7 @@ async function confirmDeleteEstimate() {
     }
     deleteEstimateId.value = null
   } catch (e: unknown) {
-    deleteError.value = e instanceof Error ? e.message : 'Ошибка удаления'
+    deleteError.value = apiErrorMessage(e, 'Ошибка удаления')
   } finally {
     deleting.value = false
   }
@@ -405,7 +406,7 @@ async function messageFromBlobError(e: unknown): Promise<string> {
     }
   }
   const msg = (data as { message?: string } | undefined)?.message
-  return msg ?? (e instanceof Error ? e.message : 'Не удалось выгрузить КП')
+  return msg ?? (apiErrorMessage(e, 'Не удалось выгрузить КП'))
 }
 
 async function downloadProjectKp(format: 'docx' | 'pdf' | 'xlsx') {

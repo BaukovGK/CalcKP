@@ -228,6 +228,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
@@ -315,7 +316,7 @@ async function saveNozzle(r: NozzleRow) {
   try {
     await templatesApi.upsertNozzleNorm(r.dn, dto)
     toast(`Норма DN${r.dn} сохранена`, 'success')
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось сохранить'), 'error') }
 }
 
 async function addNozzle() {
@@ -329,7 +330,7 @@ async function addNozzle() {
     toast(`Норма DN${dn} добавлена`, 'success')
     Object.assign(newNozzle, { dn: '', odMm: '', minLengthMm: '', moldingMassKg: '', h1Mm: '', s1Mm: '', flangeMassKg: '', bolt: '', boltCount: '' })
     await reload()
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось добавить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось добавить'), 'error') }
 }
 
 async function removeNozzle(dn: number) {
@@ -337,7 +338,7 @@ async function removeNozzle(dn: number) {
     await templatesApi.deleteNozzleNorm(dn)
     toast(`Норма DN${dn} удалена`, 'success')
     nozzleRows.value = nozzleRows.value.filter((r) => r.dn !== dn)
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось удалить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось удалить'), 'error') }
 }
 
 // ── Веса труб GRP ──────────────────────────────────────────────────────────
@@ -358,7 +359,7 @@ async function saveWeight(r: WeightRow) {
   try {
     await templatesApi.upsertPipeWeight({ dn: r.dn, pn: r.pn, sn: r.sn, wallMm: num(r.wallMm), kgPerM: kg })
     toast(`Вес (${r.dn}; ${fmtPn(r.pn)}; ${r.sn}) сохранён`, 'success')
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось сохранить'), 'error') }
 }
 
 async function addWeight() {
@@ -373,7 +374,7 @@ async function addWeight() {
     toast(`Вес (${dn}; ${fmtPn(pn)}; ${sn}) добавлен`, 'success')
     Object.assign(newWeight, { dn: '', pn: '', sn: '', wallMm: '', kgPerM: '' })
     await reload()
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось добавить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось добавить'), 'error') }
 }
 
 async function removeWeight(r: WeightRow) {
@@ -381,7 +382,7 @@ async function removeWeight(r: WeightRow) {
     await templatesApi.deletePipeWeight(r.dn, r.pn, r.sn)
     toast(`Вес (${r.dn}; ${fmtPn(r.pn)}; ${r.sn}) удалён`, 'success')
     weightRows.value = weightRows.value.filter((x) => x !== r)
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось удалить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось удалить'), 'error') }
 }
 
 // ── Инженерные матрицы ─────────────────────────────────────────────────────
@@ -406,7 +407,7 @@ async function saveMatrixCell(r: MatrixRow) {
   try {
     await templatesApi.upsertMatrixCell({ kind: activeKind.value, d: r.d, lengthMm: r.lengthMm, massKg: mass, thicknessMm: num(r.thicknessMm) })
     toast(`Ячейка D${r.d} × L${fmtInt(r.lengthMm)} сохранена`, 'success')
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось сохранить'), 'error') }
 }
 
 async function addMatrixCell() {
@@ -421,7 +422,7 @@ async function addMatrixCell() {
     toast(`Ячейка D${d} × L${fmtInt(lengthMm)} добавлена`, 'success')
     Object.assign(newCell, { lengthMm: '', massKg: '', thicknessMm: '' })
     await reload()
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось добавить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось добавить'), 'error') }
 }
 
 // ── Мс на стыке ────────────────────────────────────────────────────────────
@@ -448,7 +449,7 @@ async function saveJoint(r: JointRow) {
       odMm: num(r.odMm), hMm: num(r.hMm), sMm: num(r.sMm), xMm: num(r.xMm), yMm: num(r.yMm),
     })
     toast(`Мс Dу${r.d} · PN${r.pn} сохранена`, 'success')
-  } catch (e) { toast(e instanceof Error ? e.message : 'Не удалось сохранить', 'error') }
+  } catch (e) { toast(apiErrorMessage(e, 'Не удалось сохранить'), 'error') }
 }
 
 // ── Загрузка ───────────────────────────────────────────────────────────────
@@ -498,7 +499,7 @@ async function reloadCatalog() {
     catalogNodes.value = n
     catalogError.value = null
   } catch (e) {
-    catalogError.value = e instanceof Error ? e.message : 'Не удалось загрузить шаблоны и каталог'
+    catalogError.value = apiErrorMessage(e, 'Не удалось загрузить шаблоны и каталог')
   }
 }
 
@@ -528,7 +529,7 @@ onMounted(async () => {
   try {
     await reload()
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : 'Не удалось загрузить справочники'
+    loadError.value = apiErrorMessage(e, 'Не удалось загрузить справочники')
   } finally {
     loading.value = false
   }

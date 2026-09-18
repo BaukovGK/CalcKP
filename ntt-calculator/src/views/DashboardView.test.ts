@@ -12,11 +12,17 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { fetchAll, list } = vi.hoisted(() => ({ fetchAll: vi.fn(), list: { value: [] as unknown[] } }))
+const { fetchAll, list, deleteProject, toast } = vi.hoisted(() => ({
+  fetchAll: vi.fn(),
+  list: { value: [] as unknown[] },
+  deleteProject: vi.fn(),
+  toast: vi.fn(),
+}))
 
 vi.mock('@/stores/projects', () => ({
   useProjectsStore: () => ({
     get list() { return list.value },
+    set list(v: unknown[]) { list.value = v },
     current: null,
     loading: false,
     error: null,
@@ -24,6 +30,8 @@ vi.mock('@/stores/projects', () => ({
   }),
 }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('@/api/projects', () => ({ projectsApi: { delete: (id: string) => deleteProject(id), create: vi.fn() } }))
+vi.mock('@/composables/useToast', () => ({ toast }))
 
 const { default: DashboardView } = await import('./DashboardView.vue')
 const { SESSION_KEYS } = await import('@/api/client')
@@ -107,5 +115,65 @@ describe('экран проектов: новый проект', () => {
 
     expect(w.find('.dash-add').exists()).toBe(false)
     expect(w.text()).toContain('Проектов пока нет')
+  })
+})
+
+describe('экран проектов: удаление', () => {
+  const WITH_UNITS = {
+    ...PROJECT,
+    estimates: [
+      { id: 'e1', title: 'КНС-1', deviceType: 'KNS', status: 'CALC', totalRub: 1 },
+      { id: 'e2', title: 'ЕМК-1', deviceType: 'EMK', status: 'DRAFT', totalRub: 1 },
+    ],
+  }
+
+  async function askDelete() {
+    signIn('ADMIN')
+    list.value = [WITH_UNITS]
+    const w = await mountView()
+    await w.find('.pc-del').trigger('click')
+    return w
+  }
+
+  it('окно называет, сколько единиц уйдёт вместе с проектом', async () => {
+    const w = await askDelete()
+
+    expect(w.find('.del-q').text()).toContain('вместе с 2 единицами оборудования')
+    // И заранее говорит, что будет с единицей, по которой выпущено КП.
+    expect(w.find('.mo-sub').text()).toContain('выпущено КП')
+  })
+
+  it('отказ сервера показывает причину, а не «Request failed with status code 422»', async () => {
+    const refusal = Object.assign(new Error('Request failed with status code 422'), {
+      isAxiosError: true,
+      response: {
+        status: 422,
+        data: {
+          code: 'PROJECT_UNITS_PROTECTED',
+          message: 'Проект не удалён: «КНС-1» — выпущено КП или зафиксирована версия.',
+        },
+      },
+    })
+    deleteProject.mockRejectedValue(refusal)
+    const w = await askDelete()
+    await w.findAll('button').find((b) => b.text() === 'Удалить')!.trigger('click')
+    await flushPromises()
+
+    expect(w.find('.del-err').text()).toBe('Проект не удалён: «КНС-1» — выпущено КП или зафиксирована версия.')
+    expect(w.text()).not.toContain('Request failed')
+    // Проект остался в списке: сервер ничего не удалил.
+    expect(list.value).toHaveLength(1)
+  })
+
+  it('удалённый проект уходит из сетки, тост называет число единиц', async () => {
+    deleteProject.mockResolvedValue(undefined)
+    const w = await askDelete()
+    await w.findAll('button').find((b) => b.text() === 'Удалить')!.trigger('click')
+    await flushPromises()
+
+    expect(deleteProject).toHaveBeenCalledWith('p1')
+    expect(toast).toHaveBeenCalledWith(expect.stringContaining('вместе с 2 единицами'), 'success')
+    // Проект убран из списка стора — сетку рисует он (стор здесь подменён, не реактивен).
+    expect(list.value).toEqual([])
   })
 })

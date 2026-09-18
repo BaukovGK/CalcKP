@@ -54,6 +54,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SurveyKnsView from '@/views/SurveyKnsView.vue'
@@ -165,7 +166,7 @@ async function loadSurvey() {
       else if (est.deviceType === 'EMK') initialEmk.value = withPrices as Partial<EmkSurveyForm> | null
       else initialKol.value = withPrices as Partial<KolSurveyForm> | null
     } catch (e) {
-      loadError.value = e instanceof Error ? e.message : 'Не удалось загрузить расчёт'
+      loadError.value = apiErrorMessage(e, 'Не удалось загрузить расчёт')
     } finally {
       loading.value = false
     }

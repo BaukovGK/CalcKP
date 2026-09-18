@@ -1,4 +1,5 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
+import { apiErrorMessage } from '@/utils/api-error'
 
 /**
  * Автосохранение экрана расчёта (План_устранения 3.2, решение Р6).
@@ -69,7 +70,7 @@ export function useTreeAutosave(store: AutosaveStore, opts: { enabled: () => boo
         status.value = 'saved'
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Не удалось сохранить расчёт'
+      error.value = apiErrorMessage(e, 'Не удалось сохранить расчёт')
       status.value = 'error'
       throw e
     }

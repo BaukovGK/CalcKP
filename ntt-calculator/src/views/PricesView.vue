@@ -283,6 +283,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { pricesApi, type ImportResult, type PriceItem } from '@/api/prices'
@@ -465,7 +466,7 @@ async function load(opts: { silent?: boolean } = {}) {
   try {
     items.value = (await pricesApi.list()) as RegistryPrice[]
   } catch (e: unknown) {
-    loadError.value = e instanceof Error ? e.message : 'Ошибка загрузки'
+    loadError.value = apiErrorMessage(e, 'Ошибка загрузки')
   } finally {
     loading.value = false
   }

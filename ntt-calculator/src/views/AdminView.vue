@@ -353,6 +353,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { adminApi, type AdminUser, type AuditActionCount, type AuditEntry, type DumpInfo } from '@/api/admin'
@@ -395,7 +396,7 @@ const ROLE_LABELS: Record<AdminUser['role'], string> = {
 async function loadUsers() {
   usersLoading.value = true; usersError.value = ''
   try { users.value = await adminApi.listUsers() }
-  catch (e: unknown) { usersError.value = e instanceof Error ? e.message : 'Ошибка загрузки' }
+  catch (e: unknown) { usersError.value = apiErrorMessage(e, 'Ошибка загрузки') }
   finally { usersLoading.value = false }
 }
 

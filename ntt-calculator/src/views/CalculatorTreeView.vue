@@ -462,6 +462,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useTreeAutosave } from '@/composables/useTreeAutosave'
@@ -541,7 +542,7 @@ async function openVersions() {
   try {
     versions.value = await estimatesApi.snapshots(st.estimate.id)
   } catch (err) {
-    toast(err instanceof Error ? err.message : 'Не удалось загрузить версии', 'error')
+    toast(apiErrorMessage(err, 'Не удалось загрузить версии'), 'error')
   } finally {
     versionsLoading.value = false
   }
@@ -557,7 +558,7 @@ async function onManualSnapshot() {
     toast(`Версия v${snap.version} зафиксирована`, 'success')
     versions.value = await estimatesApi.snapshots(st.estimate.id)
   } catch (err) {
-    toast(err instanceof Error ? err.message : 'Не удалось зафиксировать версию', 'error')
+    toast(apiErrorMessage(err, 'Не удалось зафиксировать версию'), 'error')
   } finally {
     snapBusy.value = false
   }
@@ -760,7 +761,7 @@ async function onRebuildRefs() {
       lost ? 'info' : 'success',
     )
   } catch (err) {
-    toast(err instanceof Error ? err.message : 'Расчёт пересобран, но сохранить его не удалось', 'error')
+    toast(apiErrorMessage(err, 'Расчёт пересобран, но сохранить его не удалось'), 'error')
   } finally {
     rebuilding.value = false
   }
@@ -1056,7 +1057,7 @@ async function onRebuildTemplate() {
       lost ? 'info' : 'success',
     )
   } catch (err) {
-    toast(err instanceof Error ? err.message : 'Расчёт пересобран, но сохранить его не удалось', 'error')
+    toast(apiErrorMessage(err, 'Расчёт пересобран, но сохранить его не удалось'), 'error')
   } finally {
     rebuilding.value = false
   }
@@ -1094,7 +1095,7 @@ async function onReprice() {
     await st.save()
     toast(repricedToastText(summary.changed, st.priceListVersion), 'success')
   } catch (err) {
-    toast(err instanceof Error ? err.message : 'Цены пересчитаны, но сохранить расчёт не удалось', 'error')
+    toast(apiErrorMessage(err, 'Цены пересчитаны, но сохранить расчёт не удалось'), 'error')
   } finally {
     repricing.value = false
   }
@@ -1129,7 +1130,7 @@ async function onSave() {
     await autosave.flush()
     toast(had ? 'Расчёт сохранён' : 'Всё уже сохранено', 'success')
   } catch (err) {
-    toast(err instanceof Error ? err.message : 'Не удалось сохранить', 'error')
+    toast(apiErrorMessage(err, 'Не удалось сохранить'), 'error')
   }
 }
 
@@ -1148,7 +1149,7 @@ onBeforeRouteLeave(async () => {
     // Конфликт перечитал расчёт — терять уже нечего.
     if (!autosave.dirty()) return true
     leaveAnyway = true
-    toast(`Расчёт не сохранён: ${err instanceof Error ? err.message : 'ошибка'}. Уйти без сохранения — ещё раз`, 'error')
+    toast(`Расчёт не сохранён: ${apiErrorMessage(err, 'ошибка')}. Уйти без сохранения — ещё раз`, 'error')
     return false
   }
 })
@@ -1238,7 +1239,7 @@ async function openKp() {
     await st.save()
     await router.push({ name: 'kp-issue', params: { id: st.estimate.id } })
   } catch (err) {
-    toast(err instanceof Error ? err.message : 'Не удалось сохранить расчёт', 'error')
+    toast(apiErrorMessage(err, 'Не удалось сохранить расчёт'), 'error')
   } finally {
     kpBusy.value = false
   }

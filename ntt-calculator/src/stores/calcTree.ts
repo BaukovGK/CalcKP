@@ -38,6 +38,7 @@ import { hasBasketIn, hasGrinderIn, PIPE_MATERIALS, type Grinder, type PipeMater
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
 import { hasPriceDelta, hasPriceDrift, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
 import { refsChanges as refsChangesOf, type RefChange } from '@/engines/refs-used'
+import { apiErrorMessage } from '@/utils/api-error'
 
 /**
  * Стор дерева расчёта (§9, Библиотека §6.3).
@@ -183,7 +184,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       await settled()
       await fetchEstimate(id)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Не удалось загрузить расчёт'
+      error.value = apiErrorMessage(e, 'Не удалось загрузить расчёт')
     } finally {
       loading.value = false
     }

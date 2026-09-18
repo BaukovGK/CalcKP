@@ -65,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
@@ -146,7 +147,7 @@ async function onExport() {
     URL.revokeObjectURL(url)
     toast('Заявка выгружена', 'success')
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Не удалось выгрузить заявку', 'error')
+    toast(apiErrorMessage(e, 'Не удалось выгрузить заявку'), 'error')
   } finally {
     busy.value = false
   }

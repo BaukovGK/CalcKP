@@ -12,8 +12,13 @@ import { renderKpPdf } from '../utils/kp-pdf'
 import { renderKpXlsx } from '../utils/kp-xlsx'
 import { shellWallMm } from '../utils/kp-lookup'
 import { parseKpHeader } from '../utils/kp-payload'
-import { PRINTABLE_REASONS } from '../utils/snapshot-reason'
+import { blocksDeletion, PRINTABLE_REASONS } from '../utils/snapshot-reason'
+import { projectDeletionBlocks, projectDeletionMessage } from '../utils/project-delete'
+import type { SnapshotReason } from '@prisma/client'
 import type { Response, NextFunction } from 'express'
+
+/** Причины слепков, защищающих расчёт от удаления: выпуск КП и ручная фиксация. */
+const DELETION_BLOCKING_REASONS = (['CREATE', 'MANUAL', 'KP'] as SnapshotReason[]).filter(blocksDeletion)
 
 export const projectsRouter = Router()
 projectsRouter.use('/', requireAuth)
@@ -128,39 +133,79 @@ projectsRouter.patch('/:id', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), valida
 })
 
 /**
- * DELETE /api/projects/:id (ADMIN).
+ * DELETE /api/projects/:id (ADMIN) — проект вместе с единицами оборудования.
  *
- * Расчёты вместе с проектом НЕ удаляются: внешний ключ объявлен
- * `ON DELETE SET NULL`, поэтому они остались бы без проекта — а вместе с ним
- * без заказчика, объекта и адреса, которые печатаются в КП. Поэтому проект с
- * расчётами не удаляется вовсе: сначала разберитесь с расчётами.
+ * Окно подтверждения обещает «со всеми единицами», и так и происходит: единицы
+ * удаляются вместе с проектом одной транзакцией. Удалить только проект нельзя —
+ * `Estimate.projectId` объявлен `ON DELETE SET NULL`, и расчёты остались бы без
+ * заказчика и объекта, которые печатаются в КП.
+ *
+ * Правила — те же, что у единицы по отдельности (`utils/project-delete.ts`):
+ * утверждённый расчёт и расчёт с выпущенным КП или зафиксированной версией не
+ * удаляются. Хоть одна такая единица — 422 `PROJECT_UNITS_PROTECTED` со
+ * списком, и не удаляется ничего: удалить полпроекта хуже, чем ничего.
  */
 projectsRouter.delete('/:id', requireRole('ADMIN'), async (req, res: Response, next: NextFunction) => {
   try {
     const auth = req as AuthRequest
     const id = String(req.params.id)
 
-    // Без явной проверки удаление несуществующего проекта давало P2025 и 500.
     const project = await prisma.project.findUnique({
       where: { id },
-      select: { id: true, title: true, _count: { select: { estimates: true } } },
+      select: {
+        id: true,
+        title: true,
+        estimates: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            deviceType: true,
+            totalRub: true,
+            _count: { select: { snapshots: { where: { reason: { in: DELETION_BLOCKING_REASONS } } } } },
+          },
+        },
+      },
     })
     if (!project) { res.status(404).json({ message: 'Проект не найден' }); return }
 
-    if (project._count.estimates > 0) {
+    const blocks = projectDeletionBlocks(
+      project.estimates.map((e) => ({
+        id: e.id,
+        title: e.title,
+        status: e.status,
+        protectedSnapshots: e._count.snapshots,
+      })),
+    )
+    if (blocks.length > 0) {
       res.status(422).json({
-        message:
-          `В проекте ${project._count.estimates} расчёт(ов). Удаление проекта не удаляет их, ` +
-          'а оставляет без заказчика и объекта — эти данные печатаются в КП. ' +
-          'Сначала удалите или перенесите расчёты.',
-        code: 'PROJECT_HAS_ESTIMATES',
-        estimateCount: project._count.estimates,
+        message: projectDeletionMessage(blocks),
+        code: 'PROJECT_UNITS_PROTECTED',
+        units: blocks,
       })
       return
     }
 
-    await prisma.project.delete({ where: { id } })
-    await audit(auth.userId, 'project.delete', 'Project', id, { title: project.title })
+    // Слепки создания уходят каскадом (EstimateSnapshot → Estimate: Cascade).
+    await prisma.$transaction([
+      prisma.estimate.deleteMany({ where: { projectId: id } }),
+      prisma.project.delete({ where: { id } }),
+    ])
+
+    // Каждая единица — своей записью: цепочка событий по расчёту в журнале
+    // должна заканчиваться удалением, а не обрываться.
+    for (const e of project.estimates) {
+      await audit(auth.userId, 'estimate.delete', 'Estimate', e.id, {
+        title: e.title,
+        deviceType: e.deviceType,
+        project: project.title,
+        totalRub: e.totalRub,
+      })
+    }
+    await audit(auth.userId, 'project.delete', 'Project', id, {
+      title: project.title,
+      units: project.estimates.length,
+    })
     res.status(204).send()
   } catch (e) { next(e) }
 })

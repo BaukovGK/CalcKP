@@ -309,6 +309,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/utils/api-error'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -685,7 +686,7 @@ async function createEstimate() {
     previewOpen.value = false
     await router.replace({ name: 'survey', params: { id: est.id } })
   } catch (e) {
-    toast(e instanceof Error ? e.message : 'Не удалось создать расчёт', 'error')
+    toast(apiErrorMessage(e, 'Не удалось создать расчёт'), 'error')
   } finally {
     creating.value = false
   }
