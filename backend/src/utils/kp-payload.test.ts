@@ -8,7 +8,7 @@
  * `KpIssueModal.vue`.
  */
 import { describe, expect, it } from 'vitest'
-import { formatKpNumber, headerToJson, kpIssueSchema, parseKpHeader } from './kp-payload'
+import { formatKpNumber, headerToJson, isSuggestedNumber, kpIssueSchema, parseKpHeader } from './kp-payload'
 
 /** Тело, которое шлёт окно выпуска (KpIssueModal, функция submit). */
 const FROM_UI = {
@@ -106,5 +106,23 @@ describe('сквозной номер', () => {
 
   it('приставка меняется переменной окружения', () => {
     expect(formatKpNumber(7, { KP_NUMBER_PREFIX: 'КПВ' })).toBe('КПВ0007')
+  })
+
+  it('пустая приставка — «не задана»: так её передаёт docker-compose', () => {
+    // 18.09.2026 два КП вышли с номером «0001»: compose отдаёт незаданную
+    // переменную пустой строкой, и приставка пропадала.
+    expect(formatKpNumber(1, { KP_NUMBER_PREFIX: '' })).toBe('КП-0001')
+    expect(formatKpNumber(1, { KP_NUMBER_PREFIX: '   ' })).toBe('КП-0001')
+  })
+
+  it('принятый как есть следующий номер — это номер счётчика, а не вписанный свой', () => {
+    // Окно подставляет следующий номер; не тронули — счётчик должен вырасти,
+    // иначе следующее КП получит тот же номер.
+    expect(isSuggestedNumber('КП-0001', 0, {})).toBe(true)
+    expect(isSuggestedNumber(' КП-6394 ', 6393, {})).toBe(true)
+    expect(isSuggestedNumber('КПВ0008', 7, { KP_NUMBER_PREFIX: 'КПВ' })).toBe(true)
+    // Вписанный свой — нет: у журнала корреспонденции своя нумерация.
+    expect(isSuggestedNumber('КПВ6393', 0, {})).toBe(false)
+    expect(isSuggestedNumber('КП-0001', 1, {})).toBe(false)
   })
 })

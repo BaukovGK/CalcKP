@@ -334,6 +334,13 @@ const draft = ref<KpDraft | null>(null)
 const block = ref<KpBlock | null>(null)
 
 const number = ref('')
+/**
+ * Номер, который предложил сервер, — следующий по счётчику. Если менеджер его
+ * не менял, номер на сервер не уходит: его выдаст счётчик и потратит. Прежде
+ * уходил, считался вписанным вручную, счётчик стоял — и все КП подряд
+ * получали один и тот же номер (18.09.2026).
+ */
+const suggestedNumber = ref('')
 const tag = ref('')
 const mark = ref('')
 const tu = ref('')
@@ -408,6 +415,7 @@ async function load() {
     const d = await estimatesApi.kpDraft(estimateId.value)
     draft.value = d
     number.value = d.number
+    suggestedNumber.value = d.number
     tag.value = d.position.tag ?? ''
     mark.value = d.position.mark ?? ''
     tu.value = d.position.tu ?? ''
@@ -448,7 +456,10 @@ const clean = (v: string) => (v.trim() === '' ? null : v.trim())
 /** Шапка документа в том виде, в каком её принимает сервер. */
 function payload(): KpIssuePayload {
   return {
-    number: number.value.trim(),
+    // Свой номер — только если его вписали; иначе — следующий по счётчику.
+    ...(number.value.trim() !== '' && number.value.trim() !== suggestedNumber.value.trim()
+      ? { number: number.value.trim() }
+      : {}),
     position: {
       tag: clean(tag.value),
       mark: clean(mark.value),

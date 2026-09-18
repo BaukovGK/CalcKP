@@ -27,7 +27,7 @@ import { renderKpXlsx } from '../utils/kp-xlsx'
 import { buildProductDraft } from '../utils/kp-kit'
 import { shellWallMm } from '../utils/kp-lookup'
 import { productDescription } from '../utils/kp-product'
-import { formatKpNumber, headerToJson, kpIssueSchema, parseKpHeader, type KpStoredHeader } from '../utils/kp-payload'
+import { formatKpNumber, headerToJson, isSuggestedNumber, kpIssueSchema, parseKpHeader, type KpStoredHeader } from '../utils/kp-payload'
 import { defaultSignature, defaultTerms } from '../utils/kp-terms'
 import { blocksDeletion, isPrintable, PRINTABLE_REASONS, REASON_LABEL } from '../utils/snapshot-reason'
 import type { SnapshotReason } from '@prisma/client'
@@ -479,8 +479,17 @@ estimatesRouter.post(
       }
 
       // Свой номер счётчик не трогает: у журнала исходящей корреспонденции
-      // своя нумерация, и она главнее нашей (решение Р11).
-      const number = payload.data.number?.trim() || (await nextKpNumber())
+      // своя нумерация, и она главнее нашей (решение Р11). Но номер,
+      // совпадающий с предложенным следующим, — это номер счётчика, принятый
+      // как есть: его счётчик тратит, иначе следующее КП получит тот же.
+      const sent = payload.data.number?.trim() ?? ''
+      let number: string
+      if (sent === '') {
+        number = await nextKpNumber()
+      } else {
+        const counter = await prisma.kpCounter.findUnique({ where: { id: 1 } })
+        number = isSuggestedNumber(sent, counter?.last ?? 0) ? await nextKpNumber() : sent
+      }
       const snapshot = await createSnapshot(id, estimate.surveyData, estimate.totalRub ?? 0, 'KP', {
         number,
         header: headerToJson(payload.data),

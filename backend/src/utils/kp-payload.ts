@@ -149,6 +149,27 @@ const DIGITS = 4
  * свой (`doc/Эталон_КП_разбор.md` §12).
  */
 export function formatKpNumber(seq: number, env: NodeJS.ProcessEnv = process.env): string {
-  const prefix = env.KP_NUMBER_PREFIX ?? DEFAULT_PREFIX
+  // Пустая приставка — «не задана», а не «без приставки»: docker-compose.yml
+  // передаёт незаданную переменную пустой строкой, и `??` её не заменял —
+  // КП выходили с номером «0001» вместо «КП-0001» (18.09.2026).
+  const raw = env.KP_NUMBER_PREFIX
+  const prefix = raw != null && raw.trim() !== '' ? raw : DEFAULT_PREFIX
   return `${prefix}${String(Math.max(1, Math.trunc(seq))).padStart(DIGITS, '0')}`
+}
+
+/**
+ * Номер из окна выпуска — принятый от счётчика, а не вписанный свой.
+ *
+ * Окно подставляет в поле следующий номер счётчика. Если менеджер его не
+ * менял, это номер счётчика, и его надо потратить: прежде такой номер
+ * считался вписанным вручную, счётчик стоял, и каждое следующее КП получало
+ * тот же номер (18.09.2026 — два КП подряд «0001»). Новый экран в этом случае
+ * номер не присылает вовсе; проверка страхует вкладку со старым кодом.
+ */
+export function isSuggestedNumber(
+  number: string,
+  lastIssued: number,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return number.trim() === formatKpNumber(lastIssued + 1, env).trim()
 }

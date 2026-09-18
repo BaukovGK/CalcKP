@@ -180,7 +180,9 @@ describe('экран выпуска КП', () => {
       signature: { signerTitle: string; executorName: string; executorPosition: string; executorPhone: string }
     }
     expect(kp).toHaveBeenCalledWith('e1', expect.anything())
-    expect(payload.number).toBe('КП-0007')
+    // Номер не меняли — не уходит: его выдаст и потратит счётчик. Прежде
+    // уходил как «вписанный», счётчик стоял, и КП подряд получали один номер.
+    expect(payload.number).toBeUndefined()
     expect(payload.position.kit.map((i) => i.name)).toEqual([
       'Стеклокомпозитный корпус',
       'Лестница из нержавеющей стали',
@@ -195,6 +197,15 @@ describe('экран выпуска КП', () => {
     expect(payload.signature.executorName).toBe('Петров П.П.')
     expect(payload.signature.executorPosition).toBe('Инженер-конструктор')
     expect(payload.signature.executorPhone).toBe('+7 (499) 000-00-00 доб. 101')
+  })
+
+  it('вписанный свой номер уходит в выпуск', async () => {
+    const w = await open()
+    await w.find('.ol-grid').findAll('input')[0]!.setValue('КПВ6394')
+    await issueBtn(w).trigger('click')
+    await flushPromises()
+
+    expect((sent() as unknown as { number?: string }).number).toBe('КПВ6394')
   })
 
   it('после выпуска возвращает в расчёт и говорит номер', async () => {
