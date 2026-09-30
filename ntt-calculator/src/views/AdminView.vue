@@ -10,6 +10,9 @@
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'users' }"  @click="tab = 'users'">Пользователи</button>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'audit' }"  @click="tab = 'audit'; loadAudit()">Журнал действий</button>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'db' }"     @click="tab = 'db'; loadBackups()">База данных</button>
+        <button class="nav-link" :class="{ 'nav-link--active': tab === 'bugs' }"   @click="tab = 'bugs'">
+          Отчёты об ошибках<span v-if="bugsNew" v-hint.plain="'Новых, ещё не разобранных'" class="nav-cnt bugs-cnt">{{ bugsNew }}</span>
+        </button>
       </div>
       <div class="sidebar-footer">
         <ThemeToggle />
@@ -31,6 +34,7 @@
             {{ dbBusy ? 'Работаем…' : '＋ Снять дамп' }}
           </button>
         </template>
+        <button v-if="tab === 'bugs'" class="btn" @click="bugsPanel?.load()">↻ Обновить</button>
       </div>
 
       <!-- ── Users ── -->
@@ -246,6 +250,16 @@
           <div class="dash-state-txt">Дампов пока нет</div>
         </div>
       </div>
+
+      <!-- ── Отчёты об ошибках ──
+           Смонтирован сразу, а не при первом заходе: список нужен счётчику
+           новых у пункта меню. -->
+      <BugReportsPanel
+        v-show="tab === 'bugs'"
+        ref="bugsPanel"
+        :role-labels="ROLE_LABELS"
+        @new-count="bugsNew = $event"
+      />
     </div>
 
     <!-- Подтверждение восстановления -->
@@ -355,7 +369,7 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/utils/api-error'
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { adminApi, type AdminUser, type AuditActionCount, type AuditEntry, type DumpInfo } from '@/api/admin'
 import {
   AUDIT_GROUPS,
@@ -368,6 +382,7 @@ import {
 } from '@/utils/audit-labels'
 import { AUDIT_HINTS } from '@/hints/account'
 import BaseModal   from '@/components/ui/BaseModal.vue'
+import BugReportsPanel from '@/components/admin/BugReportsPanel.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
 import { ADMIN_PASSWORD_HINTS } from '@/hints/account'
@@ -376,11 +391,25 @@ import { hasNonLatin, LATIN_ONLY_HINT } from '@/utils/latin-input'
 import { MIN_PASSWORD_LENGTH } from '@/utils/password-form'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
-const tab = ref<'users' | 'audit' | 'db'>('users')
-const tabTitle = computed(
-  () => ({ users: 'Пользователи', audit: 'Журнал действий', db: 'База данных' })[tab.value],
+type AdminTab = 'users' | 'audit' | 'db' | 'bugs'
+const TAB_TITLES: Record<AdminTab, string> = {
+  users: 'Пользователи',
+  audit: 'Журнал действий',
+  db: 'База данных',
+  bugs: 'Отчёты об ошибках',
+}
+/** Раздел можно открыть ссылкой: `/admin?tab=bugs`. */
+const tab = ref<AdminTab>(
+  (Object.keys(TAB_TITLES) as AdminTab[]).find((t) => t === route.query.tab) ?? 'users',
 )
+const tabTitle = computed(() => TAB_TITLES[tab.value])
+
+// ── Отчёты об ошибках ────────────────────────────────────────────────────────
+const bugsPanel = ref<InstanceType<typeof BugReportsPanel> | null>(null)
+/** Новых отчётов — счётчик у пункта меню. */
+const bugsNew = ref(0)
 
 // ── Users ────────────────────────────────────────────────────────────────────
 const users        = ref<AdminUser[]>([])
@@ -765,7 +794,11 @@ async function onRestore() {
   finally { dbBusy.value = false }
 }
 
-onMounted(loadUsers)
+onMounted(() => {
+  void loadUsers()
+  if (tab.value === 'audit') void loadAudit()
+  if (tab.value === 'db') void loadBackups()
+})
 </script>
 
 <style scoped>
@@ -834,4 +867,6 @@ onMounted(loadUsers)
 .adm-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .db-acts { white-space: nowrap; text-align: right; }
 .btn.is-busy { opacity: .5; pointer-events: none; }
+/* Новые отчёты об ошибках — счётчик акцентом: их надо разобрать. */
+.bugs-cnt { color: var(--acc); font-weight: 700; }
 </style>

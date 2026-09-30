@@ -24,6 +24,7 @@ export const AUDIT_GROUPS: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'user', label: 'Сотрудники' },
   { key: 'template', label: 'Шаблоны и справочники' },
   { key: 'db', label: 'База данных' },
+  { key: 'bugreport', label: 'Отчёты об ошибках' },
 ]
 
 /** Названия событий. Ключ — код действия из `backend/utils/audit.ts`. */
@@ -80,6 +81,10 @@ export const AUDIT_LABELS: Readonly<Record<string, string>> = {
   'template.product.publish': 'Опубликован шаблон изделия',
   'template.product.activate': 'Возврат версии шаблона',
   'template.product.discard': 'Отменён черновик шаблона',
+
+  'bugreport.create': 'Отправлен отчёт об ошибке',
+  'bugreport.update': 'Разбор отчёта об ошибке',
+  'bugreport.delete': 'Удалён отчёт об ошибке',
 }
 
 /** События, которые стоит замечать: неудачный вход, удаление, восстановление. */
@@ -126,6 +131,7 @@ export function entityLabel(entityType: string | null): string | null {
     NodeDef: 'узел каталога',
     ProductTemplate: 'шаблон изделия',
     Backup: 'дамп',
+    BugReport: 'отчёт',
   }
   return map[entityType] ?? entityType
 }
@@ -176,6 +182,8 @@ const META_LABELS: Readonly<Record<string, string>> = {
   from: 'было',
   to: 'стало',
   status: 'статус',
+  page: 'экран',
+  screenshots: 'скриншотов',
 }
 
 /** Значение `meta` строкой: списки — через запятую, объекты — коротким JSON. */

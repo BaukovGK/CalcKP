@@ -113,14 +113,18 @@
 │           ├── TemplatesView    редактор шаблонов /templates (TECHNOLOG):
 │           │                    components/templates/ — ProductTemplateEditor,
 │           │                    NodeCatalogEditor, TreePreview, FormulaPalette
-│           └── AdminView        пользователи, аудит
+│           └── AdminView        пользователи, аудит, дампы, отчёты об
+│                                ошибках (components/admin/BugReportsPanel)
+│   («Сообщить об ошибке» — components/ui/BugReportWidget в App.vue, на всех
+│    экранах после входа; помощники скриншотов — utils/bug-report.ts)
 │
 ├── backend/
 │   ├── src/
 │   │   ├── app.ts               Express, монтирование роутеров
 │   │   ├── middleware/          auth (JWT), rbac, validate (Zod), errorHandler
 │   │   ├── routes/              auth, estimates, projects, prices, purchase,
-│   │   │                        refs, templates, catalog, pump-station, admin
+│   │   │                        refs, templates, catalog, pump-station, admin,
+│   │   │                        bug-reports
 │   │   └── utils/               prisma, jwt, audit, logger, nn-sheet (импорт
 │   │                            прайса), estimate-tree (обход дерева: гейты и
 │   │                            спецификация КП), kp-document + kp-docx/kp-pdf
@@ -362,13 +366,19 @@ POST   /api/templates/products/:device/publish|activate  (version: null —
 POST   /api/pump-station/dimensions              габарит корпуса (DN, Нподз)
 POST   /api/pump-station/ring-stiffness          SN по глубине и «под проезжей
                                                  частью»; ТТ МВК — обозначение
-POST   /api/pump-station/discharge-pipe-diameter диаметр напорного по расходу
+POST   /api/pump-station/discharge-pipe-diameter диаметр стояка насоса по расходу
 POST   /api/pump-station/pressure-piping         напорный узел: стояк насоса,
-                                                 коллектор, отводящий патрубок
+                                                 коллектор, напорная линия и
+                                                 проверка DN напорного из ОЛ
 POST   /api/pump-station/select-pump             марка насоса по рабочей точке
 
 GET    /api/admin/users               POST/PATCH пользователи
 GET    /api/admin/audit               GET /api/health
+
+Отчёты об ошибках (отправка — любая роль, остальное — ADMIN):
+POST   /api/bug-reports               текст + до 5 скриншотов (multipart)
+GET    /api/bug-reports[/:id]         список / отчёт; /:id/files/:name — скриншот
+PATCH|DELETE /api/bug-reports/:id     статус и пометка / удалить
 ```
 
 ## 9. Схема БД (Prisma)
