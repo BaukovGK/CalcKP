@@ -1,22 +1,9 @@
 <template>
-  <button
-    v-if="!isOpen"
-    v-hint="HINT"
-    class="bug-fab"
-    :class="{ 'bug-fab--raised': raised }"
-    type="button"
-    aria-label="Сообщить об ошибке"
-    @click="open"
-  >
-    <span class="bug-fab-ic" aria-hidden="true">!</span>
-    <span class="bug-fab-t">Сообщить об ошибке</span>
-  </button>
-
   <!-- Картинку можно бросить на любое место окна и вставить откуда угодно в
        нём: слушатели — на подложке, куда всплывают события из поля. -->
   <BaseModal
-    :show="isOpen"
-    title="Сообщить об ошибке"
+    :show="bugReportOpen"
+    title="Сообщить о проблеме"
     :close-on-backdrop="false"
     class="bug-mo"
     @close="close"
@@ -106,23 +93,24 @@
 
 <script setup lang="ts">
 /**
- * «Сообщить об ошибке» — на каждом экране приложения.
+ * Окно «Сообщить о проблеме» — одно на всё приложение, открывается кнопкой в
+ * оболочке любого экрана (`composables/useBugReport.ts`).
  *
- * Кнопка в правом нижнем углу открывает окно: пояснение, поле для текста,
- * скриншоты и «Отправить». Скриншот вставляется из буфера (снимок экрана
- * Win+Shift+S лежит там файлом), перетаскивается на окно или выбирается
- * файлом; крупный пережимается сам (`utils/bug-report.ts`). Экран, размер
- * окна и браузер прикладываются к отчёту без участия сотрудника — по ним
- * администратор находит, где искать.
+ * В окне пояснение, поле для текста, скриншоты и «Отправить». Скриншот
+ * вставляется из буфера (снимок экрана Win+Shift+S лежит там файлом),
+ * перетаскивается на окно или выбирается файлом; крупный пережимается сам
+ * (`utils/bug-report.ts`). Экран, размер окна и браузер прикладываются к
+ * отчёту без участия сотрудника — по ним администратор находит, где искать.
  *
  * Окно живёт в `App.vue`, поверх любого экрана, поэтому черновик переживает
  * переход между экранами: закрыть окно, сделать снимок нужного места и
  * вернуться к тексту — обычный порядок. Очищается черновик только отправкой.
  */
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { bugReportsApi } from '@/api/bugReports'
+import { bugReportOpen, closeBugReport, useDialogPresence } from '@/composables/useBugReport'
 import { apiErrorMessage } from '@/utils/api-error'
 import {
   fileSizeLabel,
@@ -136,11 +124,6 @@ import {
   screenLabel,
 } from '@/utils/bug-report'
 
-const HINT = {
-  title: 'Сообщить об ошибке',
-  text: 'Что-то посчитано неверно, не сохраняется или непонятно — опишите это и приложите скриншот. Отчёт уйдёт администратору вместе с адресом экрана.',
-}
-
 interface Shot {
   id: number
   file: File
@@ -151,8 +134,8 @@ interface Shot {
 }
 
 const route = useRoute()
+useDialogPresence()
 
-const isOpen = ref(false)
 const text = ref('')
 const shots = ref<Shot[]>([])
 const problems = ref<string[]>([])
@@ -169,12 +152,6 @@ let pastedSeq = 0
 
 const canSend = computed(() => !sending.value && text.value.trim() !== '' && text.value.length <= MAX_TEXT_LENGTH)
 
-/**
- * В опросном листе правый нижний угол занят: там «Создать расчёт» — главная
- * кнопка экрана. Кнопка отчёта поднимается над ней.
- */
-const raised = computed(() => route.name === 'survey')
-
 /** Экран, с которого открыли окно: об ошибке сообщают там, где её видят. */
 function captureContext() {
   context.value = {
@@ -184,16 +161,21 @@ function captureContext() {
   }
 }
 
-function open() {
-  captureContext()
-  sent.value = ''
-  error.value = ''
-  isOpen.value = true
-  void nextTick(() => textEl.value?.focus())
-}
+/** Окно открыли — с этого экрана и отчёт; прежний «отправлено» уже ни к чему. */
+watch(
+  bugReportOpen,
+  (open) => {
+    if (!open) return
+    captureContext()
+    sent.value = ''
+    error.value = ''
+    void nextTick(() => textEl.value?.focus())
+  },
+  { immediate: true },
+)
 
 function close() {
-  isOpen.value = false
+  closeBugReport()
   dragOver.value = false
   problems.value = []
   if (sent.value) sent.value = ''
@@ -272,30 +254,15 @@ async function send() {
   }
 }
 
-onBeforeUnmount(clearDraft)
+// Выход из системы убирает окно вместе с черновиком: следующий сотрудник за
+// этим браузером не должен ни увидеть чужой текст, ни войти с открытым окном.
+onBeforeUnmount(() => {
+  clearDraft()
+  closeBugReport()
+})
 </script>
 
 <style scoped>
-/* Кнопка в правом нижнем углу: на всех экранах одно место. Свёрнута до знака,
-   подпись раскрывается при наведении — так она не закрывает последнюю
-   колонку таблиц и кнопки в подвалах. */
-.bug-fab {
-  position: fixed; right: 14px; bottom: 14px; z-index: 90;
-  display: flex; align-items: center; gap: 0; height: 30px; padding: 0 7px;
-  background: var(--panel2); border: 1px solid var(--line2); color: var(--muted);
-  font: inherit; font-size: 13px; cursor: pointer; opacity: .82;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
-  transition: opacity .12s, color .12s, border-color .12s;
-}
-.bug-fab:hover, .bug-fab:focus-visible { opacity: 1; color: var(--text); border-color: var(--acc); }
-.bug-fab--raised { bottom: 62px; }
-.bug-fab-ic {
-  width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
-  background: var(--acc); color: var(--on-acc); font-weight: 700; font-size: 12px; line-height: 1;
-}
-.bug-fab-t { max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width .18s, margin .18s; }
-.bug-fab:hover .bug-fab-t, .bug-fab:focus-visible .bug-fab-t { max-width: 180px; margin-left: 7px; }
-
 .bug-mo :deep(.mo-box) { width: 640px; }
 .bug-lead { font-size: 13.5px; line-height: 1.5; color: var(--tx2); margin: 0 0 8px; }
 .bug-lead kbd { font: inherit; font-size: 12px; padding: 0 4px; border: 1px solid var(--line2); background: var(--panel2); }
@@ -318,8 +285,6 @@ onBeforeUnmount(clearDraft)
 .bug-keys { margin-right: auto; align-self: center; font-size: 12px; color: var(--faint); }
 
 @media (max-width: 760px) {
-  .bug-fab { right: 10px; bottom: 10px; }
-  .bug-fab--raised { bottom: 58px; }
   .bug-keys { display: none; }
 }
 </style>

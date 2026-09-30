@@ -13,6 +13,7 @@
         <button class="btn btn-acc" :disabled="busy || !rows.length" @click="onExport">
           {{ busy ? 'Готовим…' : 'Выгрузить xlsx' }}
         </button>
+        <BugReportButton compact />
         <ThemeToggle compact />
       </div>
     </header>
@@ -67,6 +68,7 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/utils/api-error'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import ToastHost from '@/components/ui/ToastHost.vue'

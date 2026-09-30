@@ -115,8 +115,10 @@
 │           │                    NodeCatalogEditor, TreePreview, FormulaPalette
 │           └── AdminView        пользователи, аудит, дампы, отчёты об
 │                                ошибках (components/admin/BugReportsPanel)
-│   («Сообщить об ошибке» — components/ui/BugReportWidget в App.vue, на всех
-│    экранах после входа; помощники скриншотов — utils/bug-report.ts)
+│   («Сообщить о проблеме»: кнопка BugReportButton — в оболочке каждого
+│    экрана, рядом с ThemeToggle; окно BugReportDialog и запасная кнопка
+│    BugReportFab для экрана без оболочки — в App.vue; общее состояние —
+│    composables/useBugReport.ts; помощники скриншотов — utils/bug-report.ts)
 │
 ├── backend/
 │   ├── src/

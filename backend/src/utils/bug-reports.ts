@@ -65,7 +65,7 @@ export interface BugReport {
   updatedAt: string
   status: BugReportStatus
   text: string
-  /** Где был сотрудник, когда нажал «Сообщить об ошибке». */
+  /** Где был сотрудник, когда нажал «Сообщить о проблеме». */
   page: { url: string | null; title: string | null }
   /** Снимок учётной записи на момент отправки: ФИО могут потом поменять. */
   author: BugReportAuthor | null

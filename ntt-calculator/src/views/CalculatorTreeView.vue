@@ -41,6 +41,7 @@
           <button v-hint="KP_HINT" class="btn btn-acc" :disabled="kpBusy" @click="onKp">Сформировать КП</button>
         </template>
         <button v-else v-hint="VERSIONS_HINT" class="btn" @click="openVersions">Версии</button>
+        <BugReportButton compact />
         <ThemeToggle compact />
       </div>
     </header>
@@ -469,6 +470,7 @@ import { useTreeAutosave } from '@/composables/useTreeAutosave'
 import CalcTableRow from '@/components/calculator/CalcTableRow.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { useCalcTreeStore } from '@/stores/calcTree'
 import { useAuthStore } from '@/stores/auth'

@@ -16,6 +16,7 @@
         <RouterLink v-if="estimateId" class="ol-lnk" :to="{ name: 'calculator', params: { id: estimateId } }">
           → Расчёт
         </RouterLink>
+        <BugReportButton compact />
         <ThemeToggle compact />
       </div>
     </header>
@@ -482,6 +483,7 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/utils/api-error'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'

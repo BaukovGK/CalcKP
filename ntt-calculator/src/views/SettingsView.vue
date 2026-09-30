@@ -16,6 +16,7 @@
         </button>
       </div>
       <div class="sidebar-footer">
+        <BugReportButton />
         <ThemeToggle />
       </div>
     </aside>
@@ -105,6 +106,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ChangePasswordModal from '@/components/ui/ChangePasswordModal.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectsStore } from '@/stores/projects'

@@ -20,6 +20,7 @@
         </button>
       </div>
       <div class="sidebar-footer">
+        <BugReportButton />
         <ThemeToggle />
         <UserMenu />
       </div>
@@ -232,6 +233,7 @@ import { apiErrorMessage } from '@/utils/api-error'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
 import ToastHost from '@/components/ui/ToastHost.vue'
 import ProductTemplateEditor from '@/components/templates/ProductTemplateEditor.vue'

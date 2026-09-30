@@ -15,6 +15,7 @@
         </button>
       </div>
       <div class="sidebar-footer">
+        <BugReportButton />
         <ThemeToggle />
         <UserMenu />
       </div>
@@ -384,6 +385,7 @@ import { AUDIT_HINTS } from '@/hints/account'
 import BaseModal   from '@/components/ui/BaseModal.vue'
 import BugReportsPanel from '@/components/admin/BugReportsPanel.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
 import { ADMIN_PASSWORD_HINTS } from '@/hints/account'
 import { useAuthStore } from '@/stores/auth'
