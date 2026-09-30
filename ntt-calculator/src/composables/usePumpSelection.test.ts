@@ -321,12 +321,12 @@ describe('usePumpSelection', () => {
   it('скорость вне 1…2 м/с — предупреждение сервера отдаётся экрану', async () => {
     const warning = { code: 'VELOCITY_ABOVE_RANGE', message: 'Скорость 3,41 м/с выше экономического диапазона 1…2 м/с — растут потери напора.' }
     pressurePiping.mockResolvedValue(piping({
-      outletCheck: { ...piping().outletCheck, dn: 100, diameterMm: 110, wallMm: 6.6, innerDiameterMm: 96.8, velocityMs: 3.415, parallelVelocityMs: 1.707, warnings: [warning] },
+      outletCheck: { ...piping().outletCheck, dn: 100, diameterMm: 110, wallMm: 6.6, innerDiameterMm: 96.8, velocityMs: 3.4148, parallelVelocityMs: 1.7074, warnings: [warning] },
     }))
     const p = usePumpSelection(makeForm({ rashod: '25,13', rashodUnit: 'l/s', napor: '12,9', nRab: '2', napDn: '100' }))
     await settle()
 
-    expect(p.pipeExplain.value).toContain('3,42 м/с на одну нитку')
+    expect(p.pipeExplain.value).toContain('3,41 м/с на одну нитку')
     expect(p.pipeWarnings.value).toEqual([warning])
   })
 
