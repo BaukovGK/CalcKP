@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { requireAuth } from '../middleware/auth'
 import { calcPumpStationDimensions } from '../utils/pump-station-dimensions'
 import { ringStiffnessDesignation, ringStiffnessPa } from '../utils/ring-stiffness'
-import { calcDischargePipeDiameterMm, selectPressurePiping } from '../utils/pipe-hydraulics'
+import { calcDischargePipeDiameterMm, checkOutletPipe, selectPressurePiping } from '../utils/pipe-hydraulics'
 import { selectPump } from '../utils/pump-selection'
 import { prisma } from '../utils/prisma'
 
@@ -104,21 +104,28 @@ const pressurePipingSchema = z.object({
   workingPumps: z.number().int().positive(),
   outletCount: z.number().int().positive(),
   designVelocityMs: z.number().positive().optional(),
+  /** DN напорного из опросного листа — проверить скорость в нём. */
+  outletDn: z.number().int().positive().optional(),
 })
 
 /**
- * POST /api/pump-station/pressure-piping — диаметры напорного узла.
+ * POST /api/pump-station/pressure-piping — диаметры напорного узла и
+ * проверка напорного DN из опросного листа.
  *
  * Из трёх параметров ОЛ (расход, напор, число рабочих насосов) напор уходит в
- * подбор насоса, а расход с числом насосов делят поток на два участка:
- * напорный патрубок насоса (приток / рабочих) и отводящий патрубок станции
- * (приток / число напорных трубопроводов). Чистый расчёт
- * `selectOutletNozzles` — см. `utils/pipe-hydraulics.ts`.
+ * подбор насоса, а расход с числом насосов делят поток по участкам: стояк
+ * насоса (приток / рабочих), коллектор и напорная линия на выходе (весь
+ * приток — работа на одну нитку). С `outletDn` в ответе ещё `outletCheck` —
+ * скорость в заданном DN, `null`, если ПЭ-трубы такого DN в ряду нет. Чистые
+ * расчёты `selectPressurePiping` и `checkOutletPipe` — см. `utils/pipe-hydraulics.ts`.
  */
 pumpStationRouter.post('/pressure-piping', (req, res, next) => {
   try {
-    const { flowM3h, workingPumps, outletCount, designVelocityMs } = pressurePipingSchema.parse(req.body)
-    res.json(selectPressurePiping(flowM3h, workingPumps, outletCount, designVelocityMs))
+    const { flowM3h, workingPumps, outletCount, designVelocityMs, outletDn } = pressurePipingSchema.parse(req.body)
+    res.json({
+      ...selectPressurePiping(flowM3h, workingPumps, outletCount, designVelocityMs),
+      outletCheck: outletDn == null ? null : checkOutletPipe(flowM3h, outletDn, outletCount),
+    })
   } catch (e) {
     if (e instanceof z.ZodError) {
       res.status(400).json({ message: 'Некорректные параметры', issues: e.issues })

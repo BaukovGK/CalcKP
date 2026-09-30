@@ -3,7 +3,6 @@ import { toLps } from '@/engines/survey-kns'
 import { tryEvalExpr } from '@/engines/expr'
 import {
   pumpStationApi,
-  type DischargePipeResult,
   type PressurePipingResult,
   type PumpCandidate,
   type PumpSelectionResult,
@@ -23,10 +22,11 @@ import type { KnsSurveyForm } from '@/types/survey'
  * «марки нет», поэтому автоподстановка в поле не нужна: она затёрла бы
  * возможность вернуться к расчётной.
  *
- * Диаметр напорного трубопровода — только подсказка. Автоматически подставлять
- * его в `napDn` нельзя: от DN напорного зависят наименования строк расчёта
+ * Гидравлика напорного — подсказка и проверка. Расчётный DN автоматически в
+ * `napDn` не подставляется: от DN напорного зависят наименования строк расчёта
  * (нитка, кран, отводы), и молчаливая правка увела бы за собой ручные цены
- * (рематериализация сопоставляет строки по наименованию).
+ * (рематериализация сопоставляет строки по наименованию). Вместо этого сервер
+ * проверяет скорость в том DN, что стоит в листе, — как лист «Гидравл. расчет».
  */
 
 /** Пауза перед запросом, мс: приток и напор набирают посимвольно. */
@@ -52,9 +52,15 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     return n != null && Number.isInteger(n) && n > 0 ? n : null
   })
 
-  /** Количество напорных трубопроводов на выходе — делит поток по ниткам. */
+  /** Количество напорных трубопроводов на выходе. */
   const outletCount = computed<number | null>(() => {
     const n = num(form.value.napKol)
+    return n != null && Number.isInteger(n) && n > 0 ? n : null
+  })
+
+  /** DN напорного из листа — в нём сервер проверяет скорость. */
+  const outletDn = computed<number | null>(() => {
+    const n = num(form.value.napDn)
     return n != null && Number.isInteger(n) && n > 0 ? n : null
   })
 
@@ -70,7 +76,6 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
   const ready = computed(() => missing.value.length === 0)
 
   const selection = ref<PumpSelectionResult | null>(null)
-  const pipe = ref<DischargePipeResult | null>(null)
   const piping = ref<PressurePipingResult | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -82,24 +87,26 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
    */
   let seq = 0
 
-  async function request(flow: number, head: number, pumps: number, outlets: number) {
+  /**
+   * Подбор насоса и гидравлика напорного. Напор нужен только подбору: диаметры
+   * и скорости считаются по расходу и числу насосов, и без напора лист их
+   * всё равно показывает.
+   */
+  async function request(flow: number, head: number | null, pumps: number, outlets: number, dn: number | null) {
     const mine = ++seq
     loading.value = true
     error.value = null
     try {
-      const [sel, pd, nz] = await Promise.all([
-        pumpStationApi.selectPump(flow, head, pumps),
-        pumpStationApi.dischargePipeDiameter(flow, pumps),
-        pumpStationApi.pressurePiping(flow, pumps, outlets),
+      const [sel, nz] = await Promise.all([
+        head != null ? pumpStationApi.selectPump(flow, head, pumps) : Promise.resolve(null),
+        pumpStationApi.pressurePiping(flow, pumps, outlets, dn),
       ])
       if (mine !== seq) return
       selection.value = sel
-      pipe.value = pd
       piping.value = nz
     } catch (e) {
       if (mine !== seq) return
       selection.value = null
-      pipe.value = null
       piping.value = null
       const r = (e as { response?: { data?: { message?: string } } }).response
       error.value = r?.data?.message ?? 'Не удалось получить подбор с сервера'
@@ -109,14 +116,13 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
   }
 
   watch(
-    () => [flowM3h.value, headM.value, workingPumps.value, outletCount.value] as const,
-    ([flow, head, pumps, outlets]) => {
+    () => [flowM3h.value, headM.value, workingPumps.value, outletCount.value, outletDn.value] as const,
+    ([flow, head, pumps, outlets, dn]) => {
       if (timer) clearTimeout(timer)
-      if (flow == null || head == null || pumps == null) {
+      if (flow == null || pumps == null) {
         // Ответ на прежние значения уже не относится к делу — гасим его.
         seq++
         selection.value = null
-        pipe.value = null
         piping.value = null
         loading.value = false
         error.value = null
@@ -124,7 +130,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
       }
       // Ниток по умолчанию столько же, сколько рабочих насосов: пока поле ОЛ
       // не заполнено, считаем прямую нитку, а не коллектор.
-      timer = setTimeout(() => void request(flow, head, pumps, outlets ?? pumps), DEBOUNCE_MS)
+      timer = setTimeout(() => void request(flow, head, pumps, outlets ?? pumps, dn), DEBOUNCE_MS)
     },
     { immediate: true },
   )
@@ -155,7 +161,9 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     if (!sel) return null
 
     const perPump = nf(sel.flowPerPumpM3h)
-    const head = nf(headM.value ?? 0, 2)
+    // Напор — тот, по которому сервер подбирал, а не текущий из поля: пока
+    // идёт пауза перед запросом, в поле уже новый, а подбор ещё старый.
+    const head = nf(sel.requiredHeadM ?? headM.value ?? 0, 2)
     if (!sel.name) {
       // Причина отказа важнее самого отказа: по ней видно, что менять.
       return sel.warnings[0]?.message ?? `подходящего насоса нет: ${perPump} м³/ч на насос, напор ${head} м`
@@ -213,35 +221,45 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     form.value.marka = ''
   }
 
-  /** Подсказка по напорному трубопроводу: расчётный диаметр и скорость. */
+  /**
+   * Проверка напорного DN из листа — то, что лист «Гидравл. расчет» считает
+   * для заданной трубы: скорость при работе на одну нитку (весь приток через
+   * одну линию) и, если напорных несколько, когда работают все сразу.
+   */
   const pipeExplain = computed<string | null>(() => {
-    const p = pipe.value
+    const p = piping.value
     if (!p) return null
+    const c = p.outletCheck
+    if (!c) {
+      return outletDn.value != null
+        ? `DN${outletDn.value}: трубы ПЭ-100 SDR17 такого DN нет в ряду — скорость не проверена`
+        : null
+    }
+    const all = c.outletCount === 2 ? 'обе' : `все ${c.outletCount}`
+    const parallel = c.outletCount > 1 ? ` · ${all} сразу — ${nf(c.parallelVelocityMs, 2)} м/с` : ''
     return (
-      `расчётный DN${p.dn} (⌀${p.diameterMm}×${nf(p.wallMm, 1)}, проход ${nf(p.innerDiameterMm, 0)} мм) · ` +
-      `скорость ${nf(p.velocityMs, 2)} м/с при целевой ${nf(p.designVelocityMs, 2)} м/с`
+      `напорный DN${c.dn} (⌀${c.diameterMm}×${nf(c.wallMm, 1)}, проход ${nf(c.innerDiameterMm, 0)} мм): ` +
+      `${nf(c.velocityMs, 2)} м/с на одну нитку${parallel}`
     )
   })
 
+  /** Скорость в DN из листа вне экономического диапазона 1…2 м/с. */
+  const pipeWarnings = computed(() => piping.value?.outletCheck?.warnings ?? [])
+
   /**
-   * Подсказка по напорному узлу: стояк насоса, коллектор и выходной патрубок.
+   * Расчётный напорный узел: какой DN брать напорному и коллектору (весь
+   * приток) и стояку насоса (расход одного насоса). DN — из ряда патрубков,
+   * скорость — ближайшая к целевой 1,5 м/с.
    *
-   * Одинаковые диаметры не повторяются: при одном рабочем насосе все три
-   * участка совпадают, и три раза «DN125» — шум, а не информация.
+   * Одинаковые диаметры не повторяются: при одном рабочем насосе все участки
+   * совпадают, и три раза «DN100» — шум, а не информация.
    */
   const pipingExplain = computed<string | null>(() => {
     const p = piping.value
     if (!p) return null
-    const fmt = (r: { dn: number; diameterMm: number; velocityMs: number }) =>
-      `DN${r.dn} (⌀${r.diameterMm}, ${nf(r.velocityMs, 2)} м/с)`
-
-    const parts: string[] = [`стояк насоса ${fmt(p.riser)}`]
-    if (p.collectorWiderThanRiser) parts.push(`коллектор ${fmt(p.collector)}`)
-    if (p.outlet.dn !== p.riser.dn || p.outlet.dn !== p.collector.dn) {
-      parts.push(`отводящий ${fmt(p.outlet)}`)
-    }
-    if (parts.length === 1) return `весь напорный узел — ${fmt(p.riser)}`
-    return parts.join(' · ')
+    const fmt = (r: { dn: number; velocityMs: number }) => `DN${r.dn} (${nf(r.velocityMs, 2)} м/с)`
+    if (!p.collectorWiderThanRiser) return `расчётный: весь напорный узел — ${fmt(p.outlet)}`
+    return `расчётный: напорный и коллектор ${fmt(p.outlet)} · стояк насоса ${fmt(p.riser)}`
   })
 
   /** Предупреждения подбора — показываем как есть, они объясняют границы каталога. */
@@ -256,7 +274,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     loading,
     error,
     selection,
-    pipe,
+    piping,
     pumpModelCalc,
     pumpModel,
     pumpModelOverridden,
@@ -268,6 +286,7 @@ export function usePumpSelection(form: Ref<KnsSurveyForm>) {
     choose,
     resetToCalculated,
     pipeExplain,
+    pipeWarnings,
     pipingExplain,
     warnings,
   }

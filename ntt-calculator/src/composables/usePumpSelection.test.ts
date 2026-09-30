@@ -2,22 +2,21 @@
  * Подбор насоса в опросном листе: реактивная обвязка над `/api/pump-station`.
  *
  * Сам алгоритм живёт на сервере и покрыт его тестами
- * (`backend/src/utils/pump-selection.test.ts`), здесь проверяется обвязка:
- * когда запрос уходит, что считается расчётным значением, а что ручным
- * переопределением, и не затирает ли устаревший ответ свежий.
+ * (`backend/src/utils/pump-selection.test.ts`, `pipe-hydraulics.test.ts`),
+ * здесь проверяется обвязка: когда запрос уходит, что считается расчётным
+ * значением, а что ручным переопределением, не затирает ли устаревший ответ
+ * свежий и что лист говорит о напорном.
  */
 import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeDefaultKnsSurvey, type KnsSurveyForm } from '@/types/survey'
 
 const selectPump = vi.fn()
-const dischargePipeDiameter = vi.fn()
 const pressurePiping = vi.fn()
 
 vi.mock('@/api/pumpStation', () => ({
   pumpStationApi: {
     selectPump: (...a: unknown[]) => selectPump(...a),
-    dischargePipeDiameter: (...a: unknown[]) => dischargePipeDiameter(...a),
     pressurePiping: (...a: unknown[]) => pressurePiping(...a),
   },
 }))
@@ -40,6 +39,29 @@ function result(name: string | null, flowPerPumpM3h = 45) {
   }
 }
 
+const section = (dn: number, od: number, wall: number, inner: number, v: number, flowM3h: number) => ({
+  diameterMm: od, dn, wallMm: wall, innerDiameterMm: inner,
+  theoreticalDiameterMm: 146.1, velocityMs: v, designVelocityMs: 1.5,
+  flowM3h, warnings: [],
+})
+
+/** Ответ сервера на ОЛ3487: стояк DN100, коллектор и напорная DN150, в листе DN150 ×2. */
+function piping(over: Record<string, unknown> = {}) {
+  return {
+    riser: section(100, 110, 6.6, 96.8, 1.707, 45.234),
+    collector: section(150, 160, 9.5, 141, 1.609, 90.468),
+    outlet: section(150, 160, 9.5, 141, 1.609, 90.468),
+    outletCount: 2,
+    outletParallelVelocityMs: 0.8047,
+    collectorWiderThanRiser: true,
+    outletCheck: {
+      dn: 150, diameterMm: 160, wallMm: 9.5, innerDiameterMm: 141,
+      flowM3h: 90.468, velocityMs: 1.6094, outletCount: 2, parallelVelocityMs: 0.8047, warnings: [],
+    },
+    ...over,
+  }
+}
+
 /** Прокрутить дебаунс и дождаться разрешения промисов запроса. */
 async function settle() {
   await vi.runAllTimersAsync()
@@ -54,28 +76,26 @@ describe('usePumpSelection', () => {
     vi.useFakeTimers()
     vi.clearAllMocks()
     selectPump.mockResolvedValue(result('Vandjord VSL.80.37.4.5.0D'))
-    const section = (dn: number, od: number, wall: number, inner: number, v: number) => ({
-      diameterMm: od, dn, wallMm: wall, innerDiameterMm: inner,
-      theoreticalDiameterMm: 103.2, velocityMs: v, designVelocityMs: 1.5,
-      flowM3h: 45, warnings: [],
-    })
-    dischargePipeDiameter.mockResolvedValue({ ...section(125, 125, 7.4, 110.2, 1.32), flowPerPumpM3h: 45 })
-    pressurePiping.mockResolvedValue({
-      riser: section(125, 125, 7.4, 110.2, 1.32),
-      collector: section(180, 180, 10.7, 158.6, 1.27),
-      outlet: section(125, 125, 7.4, 110.2, 1.32),
-      collectorWiderThanRiser: true,
-    })
+    pressurePiping.mockResolvedValue(piping())
   })
   afterEach(() => vi.useRealTimers())
 
-  it('не ходит на сервер, пока не заполнены приток, напор и число рабочих', async () => {
+  it('не подбирает насос, пока не заполнены приток, напор и число рабочих', async () => {
     const p = usePumpSelection(makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '', nRab: '2' }))
     await settle()
 
     expect(selectPump).not.toHaveBeenCalled()
     expect(p.ready.value).toBe(false)
     expect(p.missing.value).toEqual(['расчётный напор'])
+  })
+
+  it('без притока или числа насосов не считает и напорный', async () => {
+    usePumpSelection(makeForm({ rashod: '', napor: '12,9', nRab: '2' }))
+    usePumpSelection(makeForm({ rashod: '25', napor: '12,9', nRab: '' }))
+    await settle()
+
+    expect(selectPump).not.toHaveBeenCalled()
+    expect(pressurePiping).not.toHaveBeenCalled()
   })
 
   it('переводит приток в м³/ч — сервер считает в них', async () => {
@@ -246,5 +266,104 @@ describe('usePumpSelection', () => {
 
     expect(p.pumpModelCalc.value).toBeNull()
     expect(p.pumpExplain.value).toBe('Некорректные параметры')
+  })
+  // ── Напорный: проверка DN из листа и расчётный узел ──
+
+  it('просит у сервера проверку того DN напорного, что стоит в листе', async () => {
+    usePumpSelection(makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2', napKol: '2', napDn: '150' }))
+    await settle()
+
+    expect(pressurePiping).toHaveBeenCalledWith(90, 2, 2, 150)
+  })
+
+  it('напорный считается и без напора: ему нужны только расход и число насосов', async () => {
+    const p = usePumpSelection(makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '', nRab: '2' }))
+    await settle()
+
+    expect(selectPump).not.toHaveBeenCalled()
+    expect(pressurePiping).toHaveBeenCalledTimes(1)
+    expect(p.pipeExplain.value).not.toBeNull()
+  })
+
+  it('правка DN напорного перезапрашивает проверку', async () => {
+    const form = makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2', napDn: '150' })
+    usePumpSelection(form)
+    await settle()
+
+    form.value.napDn = '100'
+    await settle()
+    expect(pressurePiping).toHaveBeenLastCalledWith(90, 2, 2, 100)
+  })
+
+  // Как лист «Гидравл. расчет»: скорость в заданной трубе при работе на одну
+  // нитку, а при двух напорных — ещё и когда работают обе.
+  it('говорит скорость в DN из листа: на одну нитку и когда работают обе', async () => {
+    const p = usePumpSelection(makeForm({ rashod: '25,13', rashodUnit: 'l/s', napor: '12,9', nRab: '2' }))
+    await settle()
+
+    expect(p.pipeExplain.value).toBe(
+      'напорный DN150 (⌀160×9,5, проход 141 мм): 1,61 м/с на одну нитку · обе сразу — 0,8 м/с',
+    )
+    expect(p.pipeWarnings.value).toEqual([])
+  })
+
+  it('одна напорная — без строки про одновременную работу', async () => {
+    pressurePiping.mockResolvedValue(piping({
+      outletCount: 1,
+      outletCheck: { ...piping().outletCheck, outletCount: 1, parallelVelocityMs: 1.609 },
+    }))
+    const p = usePumpSelection(makeForm({ rashod: '25,13', rashodUnit: 'l/s', napor: '12,9', nRab: '2', napKol: '1' }))
+    await settle()
+
+    expect(p.pipeExplain.value).toBe('напорный DN150 (⌀160×9,5, проход 141 мм): 1,61 м/с на одну нитку')
+  })
+
+  it('скорость вне 1…2 м/с — предупреждение сервера отдаётся экрану', async () => {
+    const warning = { code: 'VELOCITY_ABOVE_RANGE', message: 'Скорость 3,41 м/с выше экономического диапазона 1…2 м/с — растут потери напора.' }
+    pressurePiping.mockResolvedValue(piping({
+      outletCheck: { ...piping().outletCheck, dn: 100, diameterMm: 110, wallMm: 6.6, innerDiameterMm: 96.8, velocityMs: 3.415, parallelVelocityMs: 1.707, warnings: [warning] },
+    }))
+    const p = usePumpSelection(makeForm({ rashod: '25,13', rashodUnit: 'l/s', napor: '12,9', nRab: '2', napDn: '100' }))
+    await settle()
+
+    expect(p.pipeExplain.value).toContain('3,42 м/с на одну нитку')
+    expect(p.pipeWarnings.value).toEqual([warning])
+  })
+
+  it('DN без ПЭ-трубы в ряду — так и говорит, а не молчит', async () => {
+    pressurePiping.mockResolvedValue(piping({ outletCheck: null }))
+    const p = usePumpSelection(makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2', napDn: '650' }))
+    await settle()
+
+    expect(p.pipeExplain.value).toBe('DN650: трубы ПЭ-100 SDR17 такого DN нет в ряду — скорость не проверена')
+  })
+
+  it('расчётный узел: напорный и коллектор на весь приток, стояк — на насос', async () => {
+    const p = usePumpSelection(makeForm({ rashod: '25,13', rashodUnit: 'l/s', napor: '12,9', nRab: '2' }))
+    await settle()
+
+    expect(p.pipingExplain.value).toBe('расчётный: напорный и коллектор DN150 (1,61 м/с) · стояк насоса DN100 (1,71 м/с)')
+  })
+
+  it('один насос — весь узел одним DN, без повторов', async () => {
+    const one = section(100, 110, 6.6, 96.8, 1.707, 45.234)
+    pressurePiping.mockResolvedValue(piping({ riser: one, collector: one, outlet: one, collectorWiderThanRiser: false }))
+    const p = usePumpSelection(makeForm({ rashod: '12,57', rashodUnit: 'l/s', napor: '12,9', nRab: '1' }))
+    await settle()
+
+    expect(p.pipingExplain.value).toBe('расчётный: весь напорный узел — DN100 (1,71 м/с)')
+  })
+
+  // Пока идёт пауза перед запросом, в поле уже новый напор, а подбор ещё
+  // старый — подсказка не должна склеивать одно с другим.
+  it('в пояснении подбора — напор, по которому сервер подбирал, а не текущий из поля', async () => {
+    const form = makeForm({ rashod: '25', rashodUnit: 'l/s', napor: '12,9', nRab: '2' })
+    const p = usePumpSelection(form)
+    await settle()
+
+    form.value.napor = '20'
+    await vi.advanceTimersByTimeAsync(100) // запрос ещё не ушёл
+    expect(p.pumpExplain.value).toContain('напор 12,9 м')
+    expect(p.pumpExplain.value).not.toContain('напор 20 м')
   })
 })
