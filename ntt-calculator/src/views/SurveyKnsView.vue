@@ -78,7 +78,7 @@
               <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d" :disabled="form.mvk && Number(d) < s.mvkMinDn.value">{{ d }}</option></select>
             </label>
             <ToggleYesNo v-model="form.underRoadway" :hint="H.underRoadway" label="Под проезжей частью" stacked class="fld--3" />
-            <ToggleYesNo v-model="form.mvk" :hint="H.mvk" label="По ТТ МВК" stacked class="fld--3" />
+            <ToggleYesNo :model-value="form.mvk" :hint="H.mvk" label="По ТТ МВК" stacked class="fld--3" @update:model-value="s.setMvk" />
           </div>
 
           <div v-if="form.mvk" class="ol-card" data-testid="mvk-requirements">

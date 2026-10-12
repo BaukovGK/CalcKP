@@ -11,9 +11,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { kpDraft, kp, push, toast } = vi.hoisted(() => ({
+const { kpDraft, kp, kpExport, push, toast } = vi.hoisted(() => ({
   kpDraft: vi.fn(),
   kp: vi.fn(),
+  kpExport: vi.fn(),
   push: vi.fn(),
   toast: vi.fn(),
 }))
@@ -22,6 +23,7 @@ vi.mock('@/api/estimates', () => ({
   estimatesApi: {
     kpDraft: (id: string) => kpDraft(id),
     kp: (id: string, payload: unknown) => kp(id, payload),
+    kpExport: (id: string, format: string, version: number) => kpExport(id, format, version),
   },
 }))
 vi.mock('vue-router', () => ({
@@ -84,6 +86,10 @@ beforeEach(() => {
     kp: { number: 'КП-0007' },
     snapshot: { version: 4, priceListVersion: 5 },
   })
+  kpExport.mockResolvedValue(new Blob(['%PDF-1.7'], { type: 'application/pdf' }))
+  URL.createObjectURL = vi.fn(() => 'blob:kp-download')
+  URL.revokeObjectURL = vi.fn()
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 })
 
 async function open() {
@@ -99,10 +105,74 @@ const goTo = async (w: Wrapper, label: string) => {
   await menu(w).find((b) => b.text().startsWith(label))!.trigger('click')
 }
 const issueBtn = (w: Wrapper) => w.findAll('button').find((b) => b.text().includes('Выпустить КП'))!
+const confirmBtn = (w: Wrapper) => w.find('.mo-ft .btn-acc')
+async function issueAndDownload(w: Wrapper) {
+  await issueBtn(w).trigger('click')
+  await confirmBtn(w).trigger('click')
+  await flushPromises()
+}
 /** Что ушло в выпуск: тело единственного вызова. */
 const sent = () => kp.mock.calls[0]?.[1] as Record<string, never>
 
 describe('экран выпуска КП', () => {
+  it('сначала открывает выбор формата; отмена не выпускает КП', async () => {
+    const w = await open()
+    await issueBtn(w).trigger('click')
+    expect(w.find('.mo-tt').text()).toBe('Формат КП')
+    expect(w.findAll('.kpv-format strong').map((el) => el.text())).toEqual(['PDF', 'Word (.docx)', 'Excel (.xlsx)'])
+    expect((w.find('input[value="pdf"]').element as HTMLInputElement).checked).toBe(true)
+    expect(kp).not.toHaveBeenCalled()
+    await w.find('.mo-ft .btn').trigger('click')
+    expect(w.find('.mo').exists()).toBe(false)
+    expect(kp).not.toHaveBeenCalled()
+    expect(kpExport).not.toHaveBeenCalled()
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it.each(['pdf', 'docx', 'xlsx'])('выпускает КП и скачивает выбранный формат %s по точной редакции', async (format) => {
+    const w = await open()
+    await issueBtn(w).trigger('click')
+    await w.find(`input[value="${format}"]`).setValue(true)
+    await confirmBtn(w).trigger('click')
+    await flushPromises()
+    expect(kp).toHaveBeenCalledTimes(1)
+    expect(kpExport).toHaveBeenCalledWith('e1', format, 4)
+    const link = vi.mocked(HTMLAnchorElement.prototype.click).mock.instances[0] as unknown as HTMLAnchorElement
+    expect(link.download).toBe(`КП_КП-0007_v4.${format}`)
+    expect(link.href).toBe('blob:kp-download')
+    expect(push).toHaveBeenCalledWith({ name: 'calculator', params: { id: 'e1' } })
+  })
+
+  it('при ошибке скачивания остаётся на экране и повторяет выгрузку без нового выпуска', async () => {
+    kpExport.mockRejectedValueOnce({ isAxiosError: true, response: { data: { message: 'Файл временно недоступен' } } })
+    const w = await open()
+    await issueAndDownload(w)
+    expect(kp).toHaveBeenCalledTimes(1)
+    expect(push).not.toHaveBeenCalled()
+    expect(w.find('.mo [role="alert"]').text()).toContain('Файл временно недоступен')
+    expect(w.text()).toContain('КП КП-0007 выпущено')
+    expect(confirmBtn(w).text()).toBe('Скачать')
+    await w.find('input[value="docx"]').setValue(true)
+    await confirmBtn(w).trigger('click')
+    await flushPromises()
+    expect(kp).toHaveBeenCalledTimes(1)
+    expect(kpExport).toHaveBeenLastCalledWith('e1', 'docx', 4)
+    expect(push).toHaveBeenCalledTimes(1)
+  })
+
+  it('возвращается в расчёт только после получения файла', async () => {
+    let finish: (value: Blob) => void = () => {}
+    kpExport.mockReturnValueOnce(new Promise<Blob>((resolve) => { finish = resolve }))
+    const w = await open()
+    await issueAndDownload(w)
+    expect(kpExport).toHaveBeenCalled()
+    expect(push).not.toHaveBeenCalled()
+    expect(confirmBtn(w).attributes('disabled')).toBeDefined()
+    finish(new Blob(['%PDF-1.7']))
+    await flushPromises()
+    expect(push).toHaveBeenCalledTimes(1)
+  })
+
   it('разделы разведены по боковому меню, открыт первый', async () => {
     const w = await open()
 
@@ -159,8 +229,7 @@ describe('экран выпуска КП', () => {
     await w.findAll('.kit-row')[2]!.find('input.kit-unit').setValue('компл.')
     await w.findAll('.kit-row')[0]!.find('.kit-drop').trigger('click')
 
-    await issueBtn(w).trigger('click')
-    await flushPromises()
+    await issueAndDownload(w)
     const payload = sent() as unknown as { position: { kit: Array<{ name: string; qty: number; unit: string }> } }
     expect(payload.position.kit).toEqual([
       { name: 'Лестница из нержавеющей стали с ограждением', qty: 2, unit: 'шт.' },
@@ -170,8 +239,7 @@ describe('экран выпуска КП', () => {
 
   it('в выпуск уходят номер, состав, условия и подпись', async () => {
     const w = await open()
-    await issueBtn(w).trigger('click')
-    await flushPromises()
+    await issueAndDownload(w)
 
     const payload = sent() as unknown as {
       number: string
@@ -202,16 +270,14 @@ describe('экран выпуска КП', () => {
   it('вписанный свой номер уходит в выпуск', async () => {
     const w = await open()
     await w.find('.ol-grid').findAll('input')[0]!.setValue('КПВ6394')
-    await issueBtn(w).trigger('click')
-    await flushPromises()
+    await issueAndDownload(w)
 
     expect((sent() as unknown as { number?: string }).number).toBe('КПВ6394')
   })
 
   it('после выпуска возвращает в расчёт и говорит номер', async () => {
     const w = await open()
-    await issueBtn(w).trigger('click')
-    await flushPromises()
+    await issueAndDownload(w)
 
     expect(toast).toHaveBeenCalledWith(expect.stringContaining('КП-0007'), 'success')
     expect(push).toHaveBeenCalledWith({ name: 'calculator', params: { id: 'e1' } })
@@ -221,8 +287,7 @@ describe('экран выпуска КП', () => {
     const w = await open()
     await goTo(w, 'Комплектация')
     await w.findAll('button').find((b) => b.text() === '+ строка')!.trigger('click')
-    await issueBtn(w).trigger('click')
-    await flushPromises()
+    await issueAndDownload(w)
 
     const payload = sent() as unknown as { position: { kit: unknown[] } }
     expect(payload.position.kit).toHaveLength(2)
@@ -232,17 +297,16 @@ describe('экран выпуска КП', () => {
     const w = await open()
     await w.find('.kpv-tgl input[type="checkbox"]').setValue(true)
     await w.find('textarea.kpv-text').setValue('Станция по чертежу заказчика')
-    await issueBtn(w).trigger('click')
-    await flushPromises()
+    await goTo(w, 'Комплектация')
+    expect(w.find('.kit-list').exists()).toBe(false)
+    expect(w.find('.kpv-note').text()).toContain('состав в документ не пойдёт')
+    await issueAndDownload(w)
 
     const payload = sent() as unknown as { position: { description: string; kit?: unknown[] } }
     expect(payload.position.description).toBe('Станция по чертежу заказчика')
     expect(payload.position.kit).toBeUndefined()
 
-    // Список состава спрятан: править его и текст одновременно нельзя.
-    await goTo(w, 'Комплектация')
-    expect(w.find('.kit-list').exists()).toBe(false)
-    expect(w.find('.kpv-note').text()).toContain('состав в документ не пойдёт')
+
   })
 
   it('отказ гейта виден на экране, а строки открываются в расчёте', async () => {
@@ -256,8 +320,7 @@ describe('экран выпуска КП', () => {
       },
     })
     const w = await open()
-    await issueBtn(w).trigger('click')
-    await flushPromises()
+    await issueAndDownload(w)
 
     expect(w.find('.kpv-block-msg').text()).toBe('В расчёте 4 строки без цены')
     expect(w.findAll('.kpv-block-list li')).toHaveLength(2)

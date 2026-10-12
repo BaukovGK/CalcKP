@@ -86,6 +86,16 @@ describe('СТО МВК: ОЛ, состав расчёта, КП и сервер
     expect(form.value.shu).toBe(false)
   })
 
+  it('нажатие МВК применяет связанные переключатели сразу, до чтения и сохранения формы', () => {
+    const form = ref({ ...makeDefaultKnsSurvey(), mvk: false, dn: '2000', nRab: '2', emergency: false,
+      shu: false, shuPusk: 'ЧП' as const, datchikiDavl: false, datchikiUrov: false, rashodomer: false,
+      drobilka: 'дробилка' as const })
+    const s = useKnsSurvey(form)
+    s.setMvk(true)
+    expect(form.value).toMatchObject({ mvk: true, dn: '2800', shu: true, shuPusk: 'плавный',
+      emergency: true, datchikiDavl: true, datchikiUrov: true, rashodomer: true, drobilka: 'обе' })
+  })
+
   it.each([200, 200.001])('смена единиц сохраняет проверку точного порога %s', async (capacity) => {
     const form = ref({ ...makeDefaultKnsSurvey(), mvk: true, rashod: String(capacity), rashodUnit: 'm3/day' as const, rashodomer: false })
     const s = useKnsSurvey(form)
