@@ -72,6 +72,11 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const capacityM3day = computed(() => anchorLps.value == null ? null : Number((anchorLps.value * 86.4).toPrecision(12)))
   const mvkFlowMeter = computed(() => form.value.mvk && (capacityM3day.value ?? 0) > 200)
   const flowMeterNotNeeded = computed(() => capacityM3day.value != null && capacityM3day.value >= 0 && capacityM3day.value < 200)
+  /** Нажатие МВК меняет связанные поля до сохранения или чтения формы. */
+  function setMvk(enabled: boolean) {
+    const patch = mvkFormPatch({ ...form.value, mvk: enabled }, capacityM3day.value ?? undefined)
+    Object.assign(form.value, { mvk: enabled }, patch)
+  }
   watch([form, capacityM3day], () => {
     const patch = mvkFormPatch(form.value, capacityM3day.value ?? undefined)
     for (const key of Object.keys(patch) as (keyof KnsSurveyForm)[]) {
@@ -208,6 +213,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const canCreate = computed(() => missingRequired.value.length === 0)
 
   return {
+    setMvk,
     mvkMinDn,
     mvkFlowMeter,
     flowMeterNotNeeded,

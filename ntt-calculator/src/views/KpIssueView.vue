@@ -39,14 +39,20 @@
         </div>
         <div class="tb-r">
           <button class="btn" :disabled="busy" @click="toCalculator">Отмена</button>
-          <button class="btn btn-acc" :disabled="busy || loading || !draft" @click="issue">
-            {{ busy ? 'Выпускаем…' : 'Выпустить КП' }}
+          <button class="btn btn-acc" :disabled="busy || loading || !draft" @click="openFormat">
+            {{ busy ? (issued ? 'Скачиваем…' : 'Выпускаем…') : (issued ? 'Скачать КП' : 'Выпустить КП') }}
           </button>
         </div>
       </header>
 
       <div v-if="loading" class="kpv-state">Собираем черновик…</div>
       <div v-else-if="error" class="kpv-state kpv-state--err">{{ error }}</div>
+
+      <div v-else-if="issued" class="kpv-state">
+        <strong>КП {{ issued.kp.number }} выпущено</strong>
+        <p v-if="downloadError" class="kpv-state--err">{{ downloadError }}</p>
+        <p>Нажмите «Скачать КП», чтобы скачать уже выпущенный документ в выбранном формате.</p>
+      </div>
 
       <div v-else-if="draft" class="calc-area kpv-body">
         <!-- Отказ гейта — на месте, а не всплывающим уведомлением: инженеру
@@ -249,6 +255,20 @@
         </section>
       </div>
     </div>
+    <BaseModal :show="formatOpen" :title="issued ? 'Скачать КП' : 'Формат КП'" :close-on-backdrop="!busy" @close="closeFormat">
+      <p class="kpv-sub">{{ issued ? 'Выберите формат уже выпущенного КП.' : 'Выберите формат файла. После подтверждения КП будет выпущено и файл скачается.' }}</p>
+      <label v-for="option in FORMATS" :key="option.value" class="kpv-format">
+        <input v-model="downloadFormat" type="radio" name="kp-format" :value="option.value" :disabled="busy" />
+        <span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span>
+      </label>
+      <p v-if="downloadError" class="kpv-state--err" role="alert">{{ downloadError }} КП уже выпущено; повторное скачивание не создаёт новый выпуск.</p>
+      <template #footer>
+        <button class="btn" :disabled="busy" @click="closeFormat">{{ issued ? 'Закрыть' : 'Отмена' }}</button>
+        <button class="btn btn-acc" :disabled="busy" @click="issue">
+          {{ busy ? (issued ? 'Скачиваем…' : 'Выпускаем…') : (issued ? 'Скачать' : 'Выпустить и скачать') }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -276,7 +296,9 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import BugReportButton from '@/components/ui/BugReportButton.vue'
-import { estimatesApi, type KpDraft, type KpIssuePayload, type KpKitItem } from '@/api/estimates'
+import { estimatesApi, type KpDraft, type KpIssuePayload, type KpKitItem, type KpResult } from '@/api/estimates'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import { apiErrorMessage } from '@/utils/api-error'
 import { serverBlock, type KpBlock } from '@/utils/kp-gate'
 import { toast } from '@/composables/useToast'
 import '@/assets/survey-form.css'
@@ -334,6 +356,15 @@ const busy = ref(false)
 const error = ref<string | null>(null)
 const draft = ref<KpDraft | null>(null)
 const block = ref<KpBlock | null>(null)
+const issued = ref<KpResult | null>(null)
+const formatOpen = ref(false)
+const downloadError = ref<string | null>(null)
+const downloadFormat = ref<'pdf' | 'docx' | 'xlsx'>('pdf')
+const FORMATS = [
+  { value: 'pdf', label: 'PDF', description: 'Готовый документ для отправки заказчику' },
+  { value: 'docx', label: 'Word (.docx)', description: 'Документ для редактирования в Word' },
+  { value: 'xlsx', label: 'Excel (.xlsx)', description: 'Коммерческое предложение в виде книги Excel' },
+] as const
 
 const number = ref('')
 /**
@@ -413,6 +444,9 @@ const fromDateInput = (v: string) => (v ? new Date(`${v}T12:00:00.000Z`).toISOSt
 async function load() {
   loading.value = true
   error.value = null
+  issued.value = null
+  downloadError.value = null
+  formatOpen.value = false
   try {
     const d = await estimatesApi.kpDraft(estimateId.value)
     draft.value = d
@@ -496,18 +530,45 @@ function payload(): KpIssuePayload {
   }
 }
 
+function openFormat() {
+  if (!busy.value && draft.value) formatOpen.value = true
+}
+
+function closeFormat() {
+  if (!busy.value) formatOpen.value = false
+}
+
 async function issue() {
-  if (!draft.value) return
+  if (!draft.value || busy.value) return
   busy.value = true
   block.value = null
+  downloadError.value = null
   try {
-    const data = await estimatesApi.kp(estimateId.value, payload())
-    toast(
-      `КП ${data.kp.number} выпущено · снапшот v${data.snapshot.version} (прайс v${data.snapshot.priceListVersion})`,
-      'success',
-    )
+    if (!issued.value) {
+      issued.value = await estimatesApi.kp(estimateId.value, payload())
+      toast(`КП ${issued.value.kp.number} выпущено`, 'success')
+    }
+    const data = issued.value
+    // Скачивается именно выпущенная редакция, даже при параллельном выпуске.
+    const blob = await estimatesApi.kpExport(estimateId.value, downloadFormat.value, data.snapshot.version)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const safeNumber = data.kp.number.replace(/[<>:"/\\|?*]/g, '_').replace(/\p{Cc}/gu, '_')
+    link.download = `КП_${safeNumber}_v${data.snapshot.version}.${downloadFormat.value}`
+    document.body.append(link)
+    link.click()
+    link.remove()
+    // Даём браузеру начать чтение Blob до освобождения адреса.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    formatOpen.value = false
     await router.push({ name: 'calculator', params: { id: estimateId.value } })
   } catch (err) {
+    if (issued.value) {
+      downloadError.value = apiErrorMessage(err, 'Не удалось скачать файл КП. Повторите скачивание')
+      return
+    }
+    formatOpen.value = false
     const data = (
       err as {
         response?: {
@@ -546,6 +607,9 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
 
 
 .kpv-pane { max-width: 1040px; }
+.kpv-format { display: flex; align-items: flex-start; gap: 10px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--line2); cursor: pointer; }
+.kpv-format input { margin-top: 3px; }
+.kpv-format small { display: block; margin-top: 4px; color: var(--tx2); }
 
 .kpv-sub { font-size: 12.5px; color: var(--tx2); margin-bottom: 14px; max-width: 720px; }
 .kpv-tgl { display: flex; align-items: center; gap: 5px; margin-left: auto;

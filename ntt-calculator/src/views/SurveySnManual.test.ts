@@ -115,6 +115,26 @@ describe('ОЛ КНС: ручной SN по ТТ МВК', () => {
 
 
 describe('ОЛ КНС: дополнительные параметры и обязательная комплектация', () => {
+  it.each([199, 201])('кнопка МВК включает связанные переключатели с учётом расхода %s', async (capacity) => {
+    const w = mountSurvey(SurveyKnsView, 'KNS', { mvk: false, dn: '2000', nRab: '2', nRez: '1', emergency: false,
+      shu: false, shuPusk: 'ЧП', datchikiDavl: false, datchikiUrov: false, drobilka: 'дробилка',
+      rashod: String(capacity), rashodUnit: 'm3/day', rashodomer: false })
+    const toggle = (name: string) => w.findAll('.tg').find((t) => t.find('.tg-l').text() === name)!
+    await toggle('По ТТ МВК').findAll('button')[0]!.trigger('click')
+    for (const name of ['Корзина', 'Шкаф управления', 'Датчики давления', 'Датчики уровня', 'Аварийный трубопровод']) {
+      expect(toggle(name).findAll('button')[0]!.classes(), name).toContain('on')
+      expect(toggle(name).findAll('button')[1]!.attributes('disabled'), name).toBeDefined()
+    }
+    expect(toggle('Дробилка').findAll('button')[0]!.classes()).toContain('on')
+    const start = w.findAll('label').find((l) => l.text().startsWith('Пуск'))!.find('select')
+    expect((start.element as HTMLSelectElement).value).toBe('плавный')
+    expect(start.attributes('disabled')).toBeDefined()
+    expect(toggle('Расходомер').findAll('button')[capacity > 200 ? 0 : 1]!.classes()).toContain('on')
+    await toggle('По ТТ МВК').findAll('button')[1]!.trigger('click')
+    expect(toggle('Шкаф управления').findAll('button')[1]!.attributes('disabled')).toBeUndefined()
+    w.unmount()
+  })
+
   it('арматура сохраняет скрытые изменения, а кнопка возвращает все расчётные количества', async () => {
     const w = mountSurvey(SurveyKnsView, 'KNS', { mvk: false, nRab: '2', nRez: '1', napKol: '2', podvKol: '1', armaturaManual: true, zadvManual: '4', kranManual: '8', klapanManual: '6' })
     const card = () => w.findAll('.ol-card').find((c) => c.find('.ol-card-h').text() === 'Арматура')!
