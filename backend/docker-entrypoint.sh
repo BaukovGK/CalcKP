@@ -14,11 +14,13 @@
 #                        =off      не снимать (например, при отдельном
 #                                  внешнем бэкапе)
 #   BACKUP_DIR=/backups            каталог дампов (том из docker-compose.yml)
+#   BUGREPORT_DIR=/bugreports      каталог отчётов об ошибках (том оттуда же)
 #   RUN_SEED=1                     запускать сид (по умолчанию да)
 #   APP_USER=node                  от кого работает приложение
 set -eu
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
+BUGREPORT_DIR="${BUGREPORT_DIR:-/bugreports}"
 APP_USER="${APP_USER:-node}"
 
 # Приложение работает НЕ от root (План_устранения 2.6): прав суперпользователя
@@ -28,12 +30,16 @@ APP_USER="${APP_USER:-node}"
 # сервере это не требует: существующая установка после обновления образа
 # получает и права на каталог, и непривилегированный процесс.
 if [ "$(id -u)" = 0 ]; then
-  mkdir -p "$BACKUP_DIR"
-  if [ "$(stat -c %u "$BACKUP_DIR")" != "$(id -u "$APP_USER")" ]; then
-    echo "entrypoint: отдаю каталог дампов $BACKUP_DIR пользователю $APP_USER"
-    chown -R "$APP_USER" "$BACKUP_DIR" ||
-      echo "entrypoint: сменить владельца $BACKUP_DIR не удалось — проверьте права на хосте" >&2
-  fi
+  # Каталог дампов и каталог отчётов об ошибках — оба с хоста, оба пишет
+  # приложение.
+  for dir in "$BACKUP_DIR" "$BUGREPORT_DIR"; do
+    mkdir -p "$dir"
+    if [ "$(stat -c %u "$dir")" != "$(id -u "$APP_USER")" ]; then
+      echo "entrypoint: отдаю каталог $dir пользователю $APP_USER"
+      chown -R "$APP_USER" "$dir" ||
+        echo "entrypoint: сменить владельца $dir не удалось — проверьте права на хосте" >&2
+    fi
+  done
   echo "entrypoint: дальше — от пользователя $APP_USER (uid $(id -u "$APP_USER"))"
   exec su-exec "$APP_USER" "$0" "$@"
 fi

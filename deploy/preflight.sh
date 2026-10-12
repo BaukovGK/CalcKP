@@ -107,6 +107,13 @@ if [ -d backups ]; then
 else
   ok "каталог дампов создастся при первом запуске"
 fi
+if [ -d bugreports ]; then
+  OWNER=$(stat -c %u bugreports)
+  [ "$OWNER" = 1000 ] && ok "каталог отчётов об ошибках bugreports/ принадлежит uid 1000" \
+    || warn "bugreports/ принадлежит uid $OWNER: точка входа контейнера выставит права сама при старте"
+else
+  ok "каталог отчётов об ошибках создастся при первом запуске"
+fi
 
 part "Стек"
 if docker compose ps --status running --format '{{.Service}}' 2>/dev/null | grep -q .; then

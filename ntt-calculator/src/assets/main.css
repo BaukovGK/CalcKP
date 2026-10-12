@@ -224,9 +224,13 @@ input, select { font-family: inherit; }
 .tb-sub   { font-size: 12px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; }
 .tb-spacer { flex: 1; }
 /* Левая и правая группы шапки: слева «назад», название и подписи, справа —
-   действия. Правая группа не переносится внутри себя. */
+   действия. Правая группа не делится, пока помещается в строку — рядом с
+   названием или под ним; не помещается и одна — переносит кнопки внутри
+   себя, а не уводит их за край экрана. С flex: none, как было раньше, в
+   шапке расчёта уже на 1024 px часть кнопок оказывалась за краем. */
 .tb-l { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
-.tb-r { display: flex; align-items: center; gap: 7px; flex: none; margin-left: auto; }
+.tb-r { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px;
+  flex: 0 1 auto; max-width: 100%; margin-left: auto; }
 .tb-total-label { font-size: 11px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: 1px; }
 .tb-total { font-family: Archivo, system-ui, sans-serif; font-size: 17px; font-weight: 600; color: var(--am); }
 /* Ссылка «назад» и перекрёстные ссылки в шапке — один вид на все экраны.
@@ -560,7 +564,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .sidebar-footer { border-top: none; margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 4px 8px; }
   .sidebar-footer > * { width: auto; }
   .topbar { padding: 6px 12px; }
-  .tb-r { margin-left: 0; flex-wrap: wrap; }
+  .tb-r { margin-left: 0; justify-content: flex-start; }
   .calc-area { padding: 10px 12px 24px; }
 }
 

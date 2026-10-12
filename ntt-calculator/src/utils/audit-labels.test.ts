@@ -21,6 +21,16 @@ describe('названия событий', () => {
     expect(auditLabel('db.restore')).toBe('База восстановлена из дампа')
   })
 
+  it('отчёты об ошибках — своим разделом, с экраном и числом скриншотов', () => {
+    expect(auditLabel('bugreport.create')).toBe('Отправлен отчёт об ошибке')
+    expect(auditGroupLabel('bugreport.update')).toBe('Отчёты об ошибках')
+    expect(entityLabel('BugReport')).toBe('отчёт')
+    expect(auditDetails({ page: '/calculator/1', screenshots: 2 })).toEqual([
+      { label: 'экран', value: '/calculator/1' },
+      { label: 'скриншотов', value: '2' },
+    ])
+  })
+
   it('незнакомое событие показывает кодом, а не пустотой', () => {
     expect(auditLabel('estimate.новое_событие')).toBe('estimate.новое_событие')
   })

@@ -26,6 +26,7 @@
           <div class="kpv-sum-v">{{ fmtMoney(draft.position.totalRub) }} ₽</div>
           <div class="kpv-sum-n">{{ number || 'без номера' }}</div>
         </div>
+        <BugReportButton />
         <ThemeToggle />
       </div>
     </aside>
@@ -274,6 +275,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import { estimatesApi, type KpDraft, type KpIssuePayload, type KpKitItem } from '@/api/estimates'
 import { serverBlock, type KpBlock } from '@/utils/kp-gate'
 import { toast } from '@/composables/useToast'

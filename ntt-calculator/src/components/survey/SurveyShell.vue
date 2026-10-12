@@ -12,6 +12,7 @@
              страницы с подписью «сохранено», хотя не сохранялось ничего. -->
         <span v-hint.plain="statusTitle" class="ol-draft" :class="statusKind ? `ol-draft--${statusKind}` : ''">{{ status }}</span>
         <slot name="topbar-actions" />
+        <BugReportButton compact />
         <ThemeToggle compact />
       </div>
     </header>
@@ -52,6 +53,7 @@
 
 <script setup lang="ts">
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import '@/assets/survey-form.css'
 import { ref } from 'vue'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'

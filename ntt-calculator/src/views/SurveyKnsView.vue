@@ -16,6 +16,7 @@
         <RouterLink v-if="estimateId" class="ol-lnk" :to="{ name: 'calculator', params: { id: estimateId } }">
           → Расчёт
         </RouterLink>
+        <BugReportButton compact />
         <ThemeToggle compact />
       </div>
     </header>
@@ -291,9 +292,14 @@
                    полями: они длиннее поля в несколько строк и, стоя в сетке,
                    раздвигали её так, что вторая строка карточек разъезжалась.
                    DN автоматически не подставляется — он входит в наименования
-                   строк расчёта, и молчаливая подмена увела бы ручные цены. -->
+                   строк расчёта, и молчаливая подмена увела бы ручные цены.
+                   Первая строка — проверка DN из листа, как в листе «Гидравл.
+                   расчет»; скорость вне 1…2 м/с подсвечена. -->
               <div v-if="p.pipeExplain.value || p.pipingExplain.value" class="ol-card-foot">
-                <div v-if="p.pipeExplain.value">{{ p.pipeExplain.value }}</div>
+                <div v-if="p.pipeExplain.value" :class="{ 'ol-pick--warn': p.pipeWarnings.value.length }">
+                  {{ p.pipeExplain.value }}
+                </div>
+                <div v-for="w in p.pipeWarnings.value" :key="w.code" class="ol-pick--warn">{{ w.message }}</div>
                 <div v-if="p.pipingExplain.value">{{ p.pipingExplain.value }}</div>
               </div>
             </div>
@@ -491,6 +497,7 @@
 <script setup lang="ts">
 import { apiErrorMessage } from '@/utils/api-error'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -885,8 +892,8 @@ function surveyPayload() {
       // Марка насоса: подобранная сервером либо введённая вручную. Идёт в
       // наименование строки насоса, а оттуда — в спецификацию КП.
       pumpModel: p.pumpModel.value,
-      /** Диаметр напорного по гидравлике — справочно, DN берётся из поля ОЛ. */
-      dischargePipeDiameterMm: p.pipe.value?.diameterMm ?? null,
+      /** Стояк насоса по гидравлике, ⌀ мм — справочно, DN берётся из поля ОЛ. */
+      dischargePipeDiameterMm: p.piping.value?.riser.diameterMm ?? null,
     },
   }
 }

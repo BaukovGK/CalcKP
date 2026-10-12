@@ -27,7 +27,12 @@ vi.mock('@/api/admin', () => ({
     auditActions: () => auditActions(),
   },
 }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ query: {} }) }))
+// Раздел «Отчёты об ошибках» смонтирован сразу — ему нужен свой ответ.
+vi.mock('@/api/bugReports', () => ({
+  BUG_REPORT_STATUS_LABELS: { new: 'Новый', in_progress: 'В работе', resolved: 'Закрыт' },
+  bugReportsApi: { list: () => Promise.resolve({ items: [], newCount: 0 }) },
+}))
 
 const { default: AdminView } = await import('./AdminView.vue')
 const { SESSION_KEYS } = await import('@/api/client')

@@ -96,16 +96,40 @@ export interface DischargePipeResult extends PipeDiameterResult {
   flowPerPumpM3h: number
 }
 
-/** Диаметры напорного узла: стояк насоса, коллектор и выходной патрубок. */
+/** Скорость в напорной линии того DN, что стоит в опросном листе. */
+export interface OutletPipeCheck {
+  dn: number
+  /** Наружный диаметр ПЭ-трубы этого DN, мм. */
+  diameterMm: number
+  wallMm: number
+  /** Проход, мм — по нему считается скорость. */
+  innerDiameterMm: number
+  /** Расход линии при работе на одну нитку — весь приток, м³/ч. */
+  flowM3h: number
+  /** Скорость при работе на одну нитку, м/с. */
+  velocityMs: number
+  outletCount: number
+  /** Скорость, когда работают все линии сразу и приток делится поровну, м/с. */
+  parallelVelocityMs: number
+  /** Скорость при работе на одну нитку вне экономического диапазона 1…2 м/с. */
+  warnings: PumpWarning[]
+}
+
+/** Диаметры напорного узла: стояк насоса, коллектор и напорная линия. */
 export interface PressurePipingResult {
   /** Стояк насоса — расход одного рабочего насоса. */
   riser: PipeDiameterResult
   /** Коллектор — полный расход рабочих насосов. */
   collector: PipeDiameterResult
-  /** Выходной патрубок — полный расход, делённый на число отводящих. */
+  /** Напорная линия — весь приток: работа на одну нитку. */
   outlet: PipeDiameterResult
+  outletCount: number
+  /** Скорость в подобранной линии, когда работают все напорные сразу, м/с. */
+  outletParallelVelocityMs: number
   /** Коллектор шире стояка: рабочих насосов больше одного. */
   collectorWiderThanRiser: boolean
+  /** Проверка DN из опросного листа; `null` — DN не задан или ПЭ-трубы такого DN нет. */
+  outletCheck: OutletPipeCheck | null
 }
 
 export const pumpStationApi = {
@@ -130,11 +154,22 @@ export const pumpStationApi = {
 
   /**
    * Диаметры напорного узла: стояк насоса (приток / рабочих насосов),
-   * коллектор (полный приток) и выходной патрубок (приток / число отводящих).
+   * коллектор и напорная линия (весь приток — работа на одну нитку). С
+   * `outletDn` сервер ещё проверяет скорость в DN из опросного листа.
    */
-  pressurePiping(flowM3h: number, workingPumps: number, outletCount: number): Promise<PressurePipingResult> {
+  pressurePiping(
+    flowM3h: number,
+    workingPumps: number,
+    outletCount: number,
+    outletDn: number | null = null,
+  ): Promise<PressurePipingResult> {
     return api
-      .post<PressurePipingResult>('/pump-station/pressure-piping', { flowM3h, workingPumps, outletCount })
+      .post<PressurePipingResult>('/pump-station/pressure-piping', {
+        flowM3h,
+        workingPumps,
+        outletCount,
+        ...(outletDn != null ? { outletDn } : {}),
+      })
       .then((r) => r.data)
   },
 }

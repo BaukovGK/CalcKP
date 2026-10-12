@@ -13,6 +13,7 @@
         <button class="nav-link" v-if="auth.role === 'ADMIN'" @click="router.push('/admin')">Администрирование</button>
       </div>
       <div class="sidebar-footer">
+        <BugReportButton />
         <ThemeToggle />
         <UserMenu />
       </div>
@@ -124,6 +125,7 @@ import { toast } from '@/composables/useToast'
 import ProjectCard  from '@/components/dashboard/ProjectCard.vue'
 import BaseModal    from '@/components/ui/BaseModal.vue'
 import ThemeToggle  from '@/components/ui/ThemeToggle.vue'
+import BugReportButton from '@/components/ui/BugReportButton.vue'
 import UserMenu     from '@/components/ui/UserMenu.vue'
 
 const router   = useRouter()

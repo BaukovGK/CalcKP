@@ -3,7 +3,16 @@
  * принималось как есть и уходило в наименования строк расчёта.
  */
 import { describe, expect, it } from 'vitest'
+import backendSeries from '../../../backend/src/utils/nozzle-dn-series.json'
 import { acceptDn, NOZZLE_DN_SERIES, snapToSeries } from './dn-series'
+
+// Гидравлика напорного на сервере подбирает DN из того же ряда: разойдись
+// копии — подсказка снова предлагала бы DN, который поле не пропустит.
+describe('ряд патрубков — один на лист и на гидравлику сервера', () => {
+  it('совпадает с backend/src/utils/nozzle-dn-series.json', () => {
+    expect([...NOZZLE_DN_SERIES]).toEqual(backendSeries.series)
+  })
+})
 
 describe('acceptDn — ввод поля DN', () => {
   it('2850 заменяется краем ряда, и видно, что было введено', () => {

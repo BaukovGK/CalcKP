@@ -102,6 +102,11 @@ export type AuditAction =
   | 'template.product.publish'
   | 'template.product.activate'
   | 'template.product.discard'
+  /** Сотрудник отправил отчёт об ошибке — со страницей и числом скриншотов. */
+  | 'bugreport.create'
+  /** Администратор сменил статус отчёта или его пометку. */
+  | 'bugreport.update'
+  | 'bugreport.delete'
 
 /**
  * Частое событие — одной записью на сеанс.
