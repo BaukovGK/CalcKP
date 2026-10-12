@@ -2,8 +2,8 @@
   <div class="tg" :class="{ 'tg--stacked': stacked }">
     <span v-hint="hint" class="tg-l">{{ label }}</span>
     <div class="tg-seg">
-      <button class="tg-b" :class="{ on: modelValue }" @click="emit('update:modelValue', true)">{{ onLabel ?? 'да' }}</button>
-      <button class="tg-b" :class="{ on: !modelValue }" @click="emit('update:modelValue', false)">{{ offLabel ?? 'нет' }}</button>
+      <button class="tg-b" :class="{ on: modelValue }" :disabled="unavailable" @click="emit('update:modelValue', true)">{{ onLabel ?? 'да' }}</button>
+      <button class="tg-b" :class="{ on: !modelValue }" :disabled="required" @click="emit('update:modelValue', false)">{{ offLabel ?? 'нет' }}</button>
     </div>
   </div>
 </template>
@@ -15,6 +15,10 @@ import type { HintValue } from '@/directives/hint'
 // Прогрессивное раскрытие: «нет» сворачивает зависимые поля (решает родитель).
 defineProps<{
   modelValue: boolean
+  /** Обязательное оборудование: выключение недоступно. */
+  required?: boolean
+  /** Оборудование не требуется при текущих параметрах. */
+  unavailable?: boolean
   label: string
   /**
    * Подпись сверху, «да/нет» под ней — вид ячейки сетки листа: тумблер встаёт
@@ -47,5 +51,6 @@ const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
   border: 1px solid var(--line2); background: transparent; color: var(--muted);
 }
 .tg-b + .tg-b { margin-left: -1px; }
+.tg-b:disabled { opacity: 0.45; cursor: not-allowed; }
 .tg-b.on { background: var(--acc); border-color: var(--acc); color: var(--on-acc); position: relative; z-index: 1; }
 </style>

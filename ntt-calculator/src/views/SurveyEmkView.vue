@@ -104,7 +104,7 @@
           </div>
 
           <label class="ol-chk">
-            <input v-model="form.pipeManual" type="checkbox" /><span v-hint="H.pipeManual">изменить вручную</span>
+            <input v-model="form.pipeManual" type="checkbox" /><span v-hint="H.pipeManual">дополнительные параметры трубы</span>
           </label>
           <div v-if="form.pipeManual" class="ol-manual">
             <label class="fld fld--3"><span v-hint="H.lengthManual">Длина трубы, мм</span>
@@ -124,7 +124,7 @@
             <div v-if="legacySnManual(form.snManual)" class="ol-pick ol-pick--warn fld--12">
               SN {{ form.snManual }} выбран раньше, а завод делает корпус из трубы SN 5000 или 10000 — выберите одну из них.
             </div>
-            <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
+            <button class="ol-reset fld--12" @click="resetPipe">вернуть расчётные параметры</button>
           </div>
         </div>
 
@@ -291,7 +291,7 @@
     </template>
 
     <!-- ── Модал-превью ── -->
-    <BaseModal :show="previewOpen" :title="s.title.value" :close-on-backdrop="true" @close="previewOpen = false">
+    <BaseModal :show="previewOpen" title="Чек-лист" :close-on-backdrop="true" @close="previewOpen = false">
       <p class="mo-sub">{{ s.pipeMark.value }} · {{ form.placement }} · {{ form.installation }}</p>
       <ul class="mo-list">
         <li v-for="b in blocks" :key="b.t">
@@ -471,7 +471,7 @@ const liveValues = computed(() => {
       k: 'Длина трубы',
       v: s.lengthMm.value != null ? `${fmtInt(s.lengthMm.value)} мм` : '—',
       hint: s.lengthOverridden.value
-        ? { title: 'Длина трубы', text: 'Введена вручную — «изменить вручную» у трубы корпуса.', tone: 'ovr' as const }
+        ? { title: 'Длина трубы', text: 'Введена вручную — «дополнительные параметры трубы» у трубы корпуса.', tone: 'ovr' as const }
         : form.value.placement === 'горизонтальное'
           ? {
               title: 'Длина трубы',

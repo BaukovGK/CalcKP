@@ -205,16 +205,16 @@ describe('Нподз — известные расхождения с листо
     expect(r.heightMm).not.toBe(OL_DNS_PEHOTNAYA_8KA.realNpodzMm)
   })
 
-  it(`${OL3462_KNS_2500.file}: DN поднят МВК до 2600 (в листе остался 2500) + рама 0,14 и запас 0,15 vs дефолты`, () => {
+  it(`${OL3462_KNS_2500.file}: DN 2500 допустим по СТО МВК (1+1), отличается рама 0,14 и запас 0,15 vs дефолты`, () => {
     const r = calcPumpStationDimensions(OL3462_KNS_2500.input)
-    expect(r.diameterMm).toBe(2600)
+    expect(r.diameterMm).toBe(2500)
     expect(r.heightMm).toBe(4300)
     expect(r.heightMm).not.toBe(OL3462_KNS_2500.realNpodzMm)
   })
 
   it(`${OL3462_LNS_2500.file}: тот же набор причин, что и КНС 2500`, () => {
     const r = calcPumpStationDimensions(OL3462_LNS_2500.input)
-    expect(r.diameterMm).toBe(2600)
+    expect(r.diameterMm).toBe(2500)
     expect(r.heightMm).toBe(4900)
     expect(r.heightMm).not.toBe(OL3462_LNS_2500.realNpodzMm)
   })
@@ -235,9 +235,9 @@ describe('Нподз — известные расхождения с листо
 // ─── 5. Диаметр и МВК — включая реальное противоречие ТЗ/листов ──
 
 describe('диаметр корпуса', () => {
-  it('МВК=Да, DN не задан → подбирается 2600 мм (минимум по МВК)', () => {
+  it('МВК=Да, DN не задан → подбирается 2500 мм (минимум 1+1 по МВК)', () => {
     const r = calcPumpStationDimensions({ inletPipeHeightM: 5, mvkRequired: true, capacityM3h: 30 })
-    expect(r.diameterMm).toBe(2600)
+    expect(r.diameterMm).toBe(2500)
     expect(r.diameterAssumed).toBe(true)
     expect(r.warnings.map((w) => w.code)).toContain('DN_ASSUMED')
   })
@@ -260,14 +260,21 @@ describe('диаметр корпуса', () => {
     expect(r.warnings.map((w) => w.code)).toContain('DN_ABOVE_RANGE')
   })
 
-  it(`реальное противоречие: ${OL3462_KNS_2500.file} — лист «По ТТ МВК: Да» при DN 2500 мм (< ${MVK_DN_MIN_MM})`, () => {
-    // Правило ТЗ («МВК ⇒ DN ≥ 2600») в этом реальном (согласованном, с ценами)
-    // листе не соблюдено. Функция следует правилу ТЗ буквально и поднимает DN;
-    // это разошлось с историческим листом — стоит уточнить у заказчика, не
-    // единичный ли это допуск/устаревшее правило.
-    const r = calcPumpStationDimensions(OL3462_KNS_2500.input) // mvkRequired: true, diameterMm: 2500
+  it('DN2500 при 1+1 соответствует СТО МВК без предупреждения', () => {
+    const r = calcPumpStationDimensions(OL3462_KNS_2500.input)
     expect(r.diameterMm).toBe(MVK_DN_MIN_MM)
+    expect(r.warnings.map((w) => w.code)).not.toContain('DN_BELOW_MVK')
+  })
+
+  it('при 2+1 заданный DN2500 поднимается до 2800', () => {
+    const r = calcPumpStationDimensions({ ...OL3462_KNS_2500.input, pumpsWorking: 2 })
+    expect(r.diameterMm).toBe(2800)
     expect(r.warnings.map((w) => w.code)).toContain('DN_BELOW_MVK')
+  })
+
+  it('при 2+1 автоматический подбор даёт 2800', () => {
+    const r = calcPumpStationDimensions({ inletPipeHeightM: 5, mvkRequired: true, capacityM3h: 30, pumpsWorking: 2 })
+    expect(r.diameterMm).toBe(2800)
   })
 
   it('resolveDiameterMm напрямую: диаметр в допустимом диапазоне остаётся без изменений', () => {

@@ -7,6 +7,7 @@ import { validate } from '../middleware/validate'
 import { audit, auditRepeating } from '../utils/audit'
 import { canAccessEstimate, canReadEstimate, seesAllEstimates } from '../utils/access'
 import { verifyKpTotal } from '../utils/estimate-economics'
+import { mvkIssues } from '../utils/mvk'
 import { ESTIMATE_CHANGED, isStaleTreeWrite, isSurveyRevRegression, isVersionConflict, SURVEY_CHANGED } from '../utils/survey-write'
 import { logger } from '../utils/logger'
 import {
@@ -418,6 +419,11 @@ estimatesRouter.post(
         res.status(403).json({ message: 'Нет доступа' }); return
       }
 
+      const mvkErrors = mvkIssues(estimate.deviceType, estimate.surveyData)
+      if (mvkErrors.length) {
+        res.status(422).json({ code: 'MVK_REQUIREMENTS', message: `Нельзя выпустить КП: ${mvkErrors.join('; ')}`, issues: mvkErrors })
+        return
+      }
       const unpriced = rowsWithoutPrice(estimate.surveyData)
       if (unpriced.length > 0) {
         res.status(422).json({

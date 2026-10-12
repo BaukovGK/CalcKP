@@ -19,6 +19,7 @@ import { pipeLengthM } from './formulas'
 import { buildBasket, buildGrinder } from './basket-grinder'
 import { buildMountingLoops } from './mounting-loops'
 import { buildPumpMounting } from './station-equipment'
+import { buildMvkService, buildMvkVent } from './mvk-equipment'
 import { computeEmkGeometry, computeKolGeometry } from './survey-emk-kol'
 import {
   buildFasteners,
@@ -151,7 +152,8 @@ export const BUILTIN_NODES: readonly BuiltinNode[] = [
         pumpsReserve: s.pumpsReserve,
       }),
   }),
-  kns({ ref: 'kns.vent', codes: ['C1'], title: 'Вентиляционный стояк', reads: '—', build: (ctx) => buildVent(ctx) }),
+  kns({ ref: 'kns.mvkService', codes: ['B4', 'B7'], title: 'Площадка, откидные люки и перехватывающее устройство МВК', reads: 'ТТ МВК', build: buildMvkService }),
+  kns({ ref: 'kns.vent', codes: ['C1'], title: 'Вентиляция', reads: 'ТТ МВК', build: (ctx, s) => s.mvk ? buildMvkVent(ctx, s) : buildVent(ctx) }),
   kns({ ref: 'kns.pressurePipe', codes: ['C2'], title: 'Напорный трубопровод', reads: 'напорные патрубки, насосы, аварийный трубопровод, расходомер', build: buildPressurePipe }),
   kns({ ref: 'kns.fasteners', codes: ['C3'], title: 'Крепёжный комплект', reads: 'DN и число напорных патрубков, насосы, расходомер', build: buildFasteners }),
   kns({ ref: 'kns.valves', codes: ['C4'], title: 'Узел запорной арматуры', reads: 'патрубки, насосы, ручные количества ОЛ', build: buildKnsValves }),
@@ -363,7 +365,7 @@ export const BUILTIN_TEMPLATES: Readonly<Record<DeviceType, TemplateBody>> = {
     // У КНС корзина и дробилка — в «Корпусе», как в листе (строки 74–113).
     ['kns.shell', 'kns.bottom', 'kns.nozzles', 'kns.inletFlange', 'kns.cableEntry', 'kns.insulation', 'kns.loops', 'kns.grinder', 'kns.basket'],
     ['kns.ladder'],
-    ['kns.slab', 'kns.pumpMounting'],
+    ['kns.slab', 'kns.pumpMounting', 'kns.mvkService'],
     ['kns.vent'],
     ['kns.pressurePipe'],
     ['kns.fasteners'],

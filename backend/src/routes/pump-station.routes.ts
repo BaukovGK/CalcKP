@@ -15,6 +15,7 @@ const dimensionsSchema = z.object({
   mvkRequired: z.boolean(),
   capacityM3h: z.number().positive(),
   diameterMm: z.number().positive().optional(),
+  pumpsWorking: z.number().int().positive().optional(),
   minPumpLevelM: z.number().min(0).optional(),
   perMinuteRunMin: z.number().positive().optional(),
   startsPerHour: z.number().positive().optional(),

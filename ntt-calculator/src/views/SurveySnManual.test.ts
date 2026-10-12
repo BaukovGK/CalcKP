@@ -112,3 +112,55 @@ describe('ОЛ КНС: ручной SN по ТТ МВК', () => {
     wrapper.unmount()
   })
 })
+
+
+describe('ОЛ КНС: дополнительные параметры и обязательная комплектация', () => {
+  it('арматура сохраняет скрытые изменения, а кнопка возвращает все расчётные количества', async () => {
+    const w = mountSurvey(SurveyKnsView, 'KNS', { mvk: false, nRab: '2', nRez: '1', napKol: '2', podvKol: '1', armaturaManual: true, zadvManual: '4', kranManual: '8', klapanManual: '6' })
+    const card = () => w.findAll('.ol-card').find((c) => c.find('.ol-card-h').text() === 'Арматура')!
+    expect(card().text()).not.toContain('ƒ')
+    expect(card().find('.ol-grade').text()).toContain('задвижек 12 · обратных клапанов 6')
+    await card().find('input[type="checkbox"]').setValue(false)
+    expect(card().find('.ol-manual').exists()).toBe(false)
+    expect(card().find('.ol-grade').text()).toContain('задвижек 12')
+    await card().find('input[type="checkbox"]').setValue(true)
+    const reset = card().findAll('button').find((b) => b.text() === 'вернуть расчётные параметры')!
+    await reset.trigger('click')
+    expect(card().find('.ol-grade').text()).toContain('задвижек 6 · обратных клапанов 3')
+    expect(card().find('.ol-manual').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('аварийная линия открывает выбор муфты и сохраняет размер после выключения', async () => {
+    const w = mountSurvey(SurveyKnsView, 'KNS', { mvk: false, emergency: false, muftaGm: '80' })
+    const toggle = () => w.findAll('.tg').find((t) => t.find('.tg-l').text() === 'Аварийный трубопровод')!
+    expect(w.findAll('label').some((l) => l.text().startsWith('Быстросъёмная муфта'))).toBe(false)
+    await toggle().findAll('button')[0]!.trigger('click')
+    const select = () => w.findAll('label').find((l) => l.text().startsWith('Быстросъёмная муфта'))!.find('select')
+    expect((select().element as HTMLSelectElement).value).toBe('80')
+    await select().setValue('100')
+    await toggle().findAll('button')[1]!.trigger('click')
+    await toggle().findAll('button')[0]!.trigger('click')
+    expect((select().element as HTMLSelectElement).value).toBe('100')
+    w.unmount()
+  })
+
+  it('при расходе ниже 200 расходомер выключен и включение недоступно', () => {
+    const w = mountSurvey(SurveyKnsView, 'KNS', { mvk: false, rashod: '199', rashodUnit: 'm3/day', rashodomer: true })
+    const toggle = w.findAll('.tg').find((t) => t.find('.tg-l').text() === 'Расходомер')!
+    expect(toggle.findAll('button')[0]!.attributes('disabled')).toBeDefined()
+    expect(toggle.findAll('button')[1]!.classes()).toContain('on')
+    expect(w.text()).toContain('расходомер не нужен')
+    w.unmount()
+  })
+
+  it('новый опросный лист не получает номер образца; сохранённый номер восстанавливается', () => {
+    const blank = mountSurvey(SurveyKnsView, 'KNS', { mvk: false })
+    const number = blank.findAll('label').find((l) => l.text().startsWith('№ заявки ОЛ'))!.find('input')
+    expect((number.element as HTMLInputElement).value).toBe('')
+    blank.unmount()
+    const saved = mountSurvey(SurveyKnsView, 'KNS', { mvk: false, zayavka: 'ОЛ-42' })
+    expect((saved.findAll('label').find((l) => l.text().startsWith('№ заявки ОЛ'))!.find('input').element as HTMLInputElement).value).toBe('ОЛ-42')
+    saved.unmount()
+  })
+})
