@@ -29,6 +29,7 @@ import {
   docNumber,
 } from './kp-product'
 import { ringStiffnessDesignation } from './ring-stiffness'
+import { capacityM3day } from './mvk'
 
 /** Черновик позиции КП: описание изделия и его комплектация. */
 export interface ProductDraft {
@@ -153,6 +154,7 @@ function shellName(parts: {
 function knsDraft(survey: unknown, extras: ProductExtras): ProductDraft {
   const form = dict(survey, 'form')
   const derived = dict(survey, 'derived')
+  const mvk = bool(form, 'mvk')
 
   const dn = num(form, 'dn')
   const npodz = num(derived, 'npodzMm') ?? num(form, 'npodzManual')
@@ -209,7 +211,12 @@ function knsDraft(survey: unknown, extras: ProductExtras): ProductDraft {
   push(kit, LADDER, 1)
   sleeve(kit, 'подводящего', num(form, 'podvDn'), count(form, 'podvKol'))
   sleeve(kit, 'напорного', num(form, 'napDn'), count(form, 'napKol'))
-  push(kit, VENT, 1)
+  push(kit, mvk ? 'Приточно-вытяжная вентиляция с механическим побуждением из нержавеющей стали' : VENT, 1)
+  if (mvk) {
+    push(kit, 'Площадка обслуживания из нержавеющей стали', 1, KOMPL)
+    push(kit, 'Откидывающиеся люки площадки обслуживания из нержавеющей стали', 1, KOMPL)
+    push(kit, 'Перехватывающее устройство', 1, KOMPL)
+  }
 
   const grinder = str(form, 'drobilka') ?? 'нет'
   if (grinder === 'корзина' || grinder === 'обе') {
@@ -244,7 +251,7 @@ function knsDraft(survey: unknown, extras: ProductExtras): ProductDraft {
   const podvDn = num(form, 'podvDn')
   push(
     kit,
-    `Задвижка на подводящем трубопроводе${podvDn != null ? ` DN ${mm(podvDn)}` : ''}`,
+    (mvk ? 'Задвижка шиберная на подводящем трубопроводе с удлинённым штоком до отметки 0.000' : 'Задвижка на подводящем трубопроводе') + `${podvDn != null ? ` DN ${mm(podvDn)}` : ''}`,
     inletGates,
   )
 
@@ -252,7 +259,7 @@ function knsDraft(survey: unknown, extras: ProductExtras): ProductDraft {
     const gm = str(form, 'muftaGm')
     push(
       kit,
-      `Аварийный трубопровод с быстросъёмной муфтой${gm ? ` ГМ-${gm}` : ''}`,
+      `Аварийный трубопровод с ${mvk ? 'Рот-гайкой (быстросъёмной муфтой)' : 'быстросъёмной муфтой'}${gm ? ` ГМ-${gm}` : ''}`,
       1,
       KOMPL,
     )
@@ -286,11 +293,12 @@ function knsDraft(survey: unknown, extras: ProductExtras): ProductDraft {
   }
 
   // Датчик давления — на каждый насос (эталон: два насоса, два датчика).
-  if (bool(form, 'datchikiDavl')) push(kit, 'Датчик давления', Math.max(pumps, 1))
+  if (bool(form, 'datchikiDavl')) push(kit, mvk ? 'Датчик давления общепромышленного применения с врезкой в боковую часть трубы' : 'Датчик давления', mvk ? count(form, 'napKol') : Math.max(pumps, 1))
   if (bool(form, 'datchikiUrov')) {
-    push(kit, 'Погружной датчик уровня (гидростатического давления)', 1)
+    push(kit, 'Погружной датчик уровня (гидростатического давления)' + (mvk ? ' в защитном футляре с перфорацией до отметки 0.000' : ''), 1)
   }
-  if (bool(form, 'rashodomer')) push(kit, 'Расходомер', 1)
+  const capacity = num(derived, 'capacityM3day') ?? capacityM3day(form)
+  if (bool(form, 'rashodomer') && (capacity == null || capacity >= 200)) push(kit, mvk ? 'Расходомер электромагнитный' : 'Расходомер', mvk ? count(form, 'napKol') : 1)
   if (bool(form, 'shu')) {
     const kind = str(form, 'shuTip') === 'внутренний' ? 'внутреннего' : 'уличного'
     const start = SHU_START[str(form, 'shuPusk') ?? '']

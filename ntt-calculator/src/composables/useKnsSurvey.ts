@@ -1,4 +1,4 @@
-import { computed, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import {
   checkValveCount,
   convertFlowText,
@@ -15,6 +15,7 @@ import {
 import { tryEvalExpr } from '@/engines/expr'
 import { usePipeOverride } from './usePipeOverride'
 import type { KnsSurveyForm } from '@/types/survey'
+import { mvkFormPatch, mvkMinDiameterMm } from '@/engines/mvk'
 
 /**
  * Производные величины опросного листа КНС.
@@ -26,6 +27,8 @@ import type { KnsSurveyForm } from '@/types/survey'
 export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const num = (s: string): number | null => tryEvalExpr(s)
 
+  const mvkMinDn = computed(() => mvkMinDiameterMm(num(form.value.nRab) ?? 1))
+
   // Смена единиц расхода пересчитывает само значение: воды столько же, в
   // новых единицах (25,13 л/с → 90,47 м³/ч). Раньше менялась только подпись —
   // и расход тихо становился в 3,6 раза меньше или больше.
@@ -33,7 +36,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   // Пересчёт идёт от ТОЧНОГО значения последнего ручного ввода (в л/с), а не
   // от показанного округлённого: цепочка л/с → м³/ч → м³/сут иначе копила бы
   // ошибку округления (2171,28 вместо 2171,23).
-  let anchorLps: number | null = null
+  const anchorLps = ref<number | null>(null)
   let convertedText: string | null = null
 
   watch(
@@ -42,7 +45,7 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
       if (raw === convertedText) return // это наш пересчёт, а не ввод
       convertedText = null
       const v = num(raw)
-      anchorLps = v == null ? null : toLps(v, form.value.rashodUnit)
+      anchorLps.value = v == null ? null : toLps(v, form.value.rashodUnit)
     },
     { immediate: true },
   )
@@ -50,12 +53,31 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   watch(
     () => form.value.rashodUnit,
     (to, from) => {
-      const text = anchorLps != null ? formatFlow(fromLps(anchorLps, to)) : convertFlowText(form.value.rashod, from, to)
+      let text = anchorLps.value != null ? formatFlow(fromLps(anchorLps.value, to)) : convertFlowText(form.value.rashod, from, to)
       if (text == null) return
+      if (anchorLps.value != null) {
+        const exactOver = Number((anchorLps.value * 86.4).toPrecision(12)) > 200
+        const roundedOver = Number((toLps(num(text) ?? 0, to) * 86.4).toPrecision(12)) > 200
+        const exactUnder = Number((anchorLps.value * 86.4).toPrecision(12)) < 200
+        const roundedUnder = Number((toLps(num(text) ?? 0, to) * 86.4).toPrecision(12)) < 200
+        if (exactOver !== roundedOver || exactUnder !== roundedUnder) text = String(Number(fromLps(anchorLps.value, to).toPrecision(12))).replace('.', ',')
+      }
       convertedText = text
       form.value.rashod = text
     },
   )
+
+  // Порог проверяется по точному вводу: 200 м³/сут → 8,33 м³/ч меняет
+  // только отображение, но не обязательность прибора.
+  const capacityM3day = computed(() => anchorLps.value == null ? null : Number((anchorLps.value * 86.4).toPrecision(12)))
+  const mvkFlowMeter = computed(() => form.value.mvk && (capacityM3day.value ?? 0) > 200)
+  const flowMeterNotNeeded = computed(() => capacityM3day.value != null && capacityM3day.value >= 0 && capacityM3day.value < 200)
+  watch([form, capacityM3day], () => {
+    const patch = mvkFormPatch(form.value, capacityM3day.value ?? undefined)
+    for (const key of Object.keys(patch) as (keyof KnsSurveyForm)[]) {
+      if (form.value[key] !== patch[key]) Object.assign(form.value, { [key]: patch[key] })
+    }
+  }, { deep: true, immediate: true })
 
   /** Подбор глубины — фирменная механика ОЛ (live-панель прототипа). */
   const depth = computed(() =>
@@ -186,6 +208,10 @@ export function useKnsSurvey(form: Ref<KnsSurveyForm>) {
   const canCreate = computed(() => missingRequired.value.length === 0)
 
   return {
+    mvkMinDn,
+    mvkFlowMeter,
+    flowMeterNotNeeded,
+    capacityM3day,
     depth,
     depthMm,
     depthOverridden,

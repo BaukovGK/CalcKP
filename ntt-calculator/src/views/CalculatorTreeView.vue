@@ -58,7 +58,7 @@
         ✕ ввод не принят · {{ st.invalidInputIds.size }}
       </button>
       <button v-hint="FILTER_HINTS.override" class="chip-f chip-blue" :class="{ on: filters.override }" @click="filters.override = !filters.override">
-        override · {{ st.overrideIds.size }}
+        Ручные изменения · {{ st.overrideIds.size }}
       </button>
       <template v-if="st.priceDeltaIds.size">
         <button v-hint="FILTER_HINTS.repriced" class="chip-f chip-amber" :class="{ on: filters.repriced }" @click="filters.repriced = !filters.repriced">
@@ -283,7 +283,7 @@
 
         <!-- Легенда — по прототипу: пояснение override + таблица клавиш. -->
         <div class="tot-legend">
-          Синее значение — override, ↺ возвращает расчётное. ФОТ-спутники пересчитываются от массы родителя.
+          Синее значение введено вручную; ↺ возвращает расчётное. ФОТ-спутники пересчитываются от массы родителя.
           Задержите указатель на строке или подписи с пунктиром — появится пояснение.
           <div class="keys">
             <span class="k">↑ ↓</span><span>по строкам</span>

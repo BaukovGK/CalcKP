@@ -18,6 +18,7 @@ export const SAMPLE_SURVEYS: { readonly [D in DeviceType]: DeviceSurvey[D] } = {
     pnSurvey: 0.1,
     sn: 10000,
     mvk: false,
+    capacityM3day: 2171.232,
     inletDn: 250,
     inletCount: 1,
     inletTrayDepthMm: 9910,

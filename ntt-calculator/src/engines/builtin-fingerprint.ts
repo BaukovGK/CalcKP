@@ -81,6 +81,11 @@ const SURVEYS: { readonly [D in DeviceType]: ReadonlyArray<DeviceEnv['survey']> 
     { dn: 2500, depthMm: 9000, pipeExecution: 'частями' },
     // Порог формованной гильзы напорного — DN 300 включительно.
     { outletDn: 300, outletCount: 1 },
+    // СТО МВК: минимум по схеме и строгая граница расходомера.
+    { dn: 2000, pumpsWorking: 1, capacityM3day: 200 },
+    { dn: 2500, pumpsWorking: 2, capacityM3day: 200.001 },
+    { hasFlowMeter: true, capacityM3day: 199 },
+    { mvk: false, hasFlowMeter: true, capacityM3day: 199 },
     // Трубы из стеклокомпозита заводятся через муфту: гильза из трубы (DN400)
     // и формованная (DN150).
     { inletMaterial: 'стеклокомпозит', inletDn: 400, outletMaterial: 'стеклокомпозит' },

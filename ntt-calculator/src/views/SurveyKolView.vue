@@ -85,7 +85,7 @@
           </div>
 
           <label class="ol-chk">
-            <input v-model="form.pipeManual" type="checkbox" /><span v-hint="H.pipeManual">изменить вручную</span>
+            <input v-model="form.pipeManual" type="checkbox" /><span v-hint="H.pipeManual">дополнительные параметры трубы</span>
           </label>
           <div v-if="form.pipeManual" class="ol-manual">
             <label class="fld fld--3"><span v-hint="H.pnManual">PN, МПа</span>
@@ -102,7 +102,7 @@
             <div v-if="legacySnManual(form.snManual)" class="ol-pick ol-pick--warn fld--12">
               SN {{ form.snManual }} выбран раньше, а завод делает корпус из трубы SN 5000 или 10000 — выберите одну из них.
             </div>
-            <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
+            <button class="ol-reset fld--12" @click="resetPipe">вернуть расчётные параметры</button>
           </div>
         </div>
 
@@ -166,7 +166,7 @@
               <label class="fld"><span v-hint="H.podvDn">DN, мм</span><input v-model.lazy="form.podvDn" class="num" list="nozzle-dn" @change="onDnChange('podvDn', $event)" /></label>
               <label class="fld"><span v-hint="H.podvKol">Кол-во</span><input v-model="form.podvKol" class="num" /></label>
               <!-- От глубины лотка — цепь и направляющие корзины и дробилки. -->
-              <label class="fld"><span v-hint="H.podvLotok">Глубина лотка, мм <b v-if="needsTray" class="req">*</b></span>
+              <label class="fld"><span v-hint="H.podvLotok">Глубина лотка, мм</span>
                 <input v-model="form.podvLotok" class="num" :class="{ 'is-missing': needsTray && !form.podvLotok }" />
               </label>
             </div>
@@ -254,7 +254,7 @@
       </div>
     </template>
 
-    <BaseModal :show="previewOpen" :title="s.title.value" :close-on-backdrop="true" @close="previewOpen = false">
+    <BaseModal :show="previewOpen" title="Чек-лист" :close-on-backdrop="true" @close="previewOpen = false">
       <p class="mo-sub">{{ s.pipeMark.value }} · глубина {{ fmtInt(s.geo.value.totalDepthMm) }} мм</p>
       <ul class="mo-list">
         <li v-for="b in blocks" :key="b.t">

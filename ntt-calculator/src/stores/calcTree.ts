@@ -34,6 +34,7 @@ import { stableStringify } from '@/utils/stable-stringify'
 import type { PriceBinding, RowResult } from '@/engines/types'
 import { PRICE_BINDING_FIELDS } from '@/engines/price-binding'
 import { tryEvalExpr } from '@/engines/expr'
+import { toLps, type FlowUnit } from '@/engines/survey-kns'
 import { hasBasketIn, hasGrinderIn, PIPE_MATERIALS, type Grinder, type PipeMaterial } from '@/types/survey'
 import { normalizePriceName, normalizePriceText } from '@/engines/price-name'
 import { hasPriceDelta, hasPriceDrift, priceMarkAfter, repriceTree, type RepriceSummary } from '@/engines/reprice'
@@ -477,6 +478,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     const dNum = (k: string): number | null => (typeof derived[k] === 'number' ? (derived[k] as number) : null)
 
     const n = (v: unknown) => Number(String(v ?? '').replace(',', '.')) || 0
+    const flow = tryEvalExpr(String(kns.rashod ?? ''))
     return {
       dn: n(kns.dn),
       depthMm: derived.npodzMm,
@@ -486,6 +488,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
       pumpModel: typeof derived.pumpModel === 'string' ? derived.pumpModel : null,
       // Влияет только на обозначение жёсткости в марке трубы (8000/12000).
       mvk: Boolean(kns.mvk),
+      capacityM3day: dNum('capacityM3day') ?? (flow == null ? undefined : Number((toLps(flow, (kns.rashodUnit || 'l/s') as FlowUnit) * 86.4).toPrecision(12))),
       inletDn: n(kns.podvDn),
       inletCount: n(kns.podvKol),
       outletDn: n(kns.napDn),

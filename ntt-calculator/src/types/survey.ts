@@ -178,7 +178,7 @@ export interface KnsSurveyForm extends SurveyCommonForm {
  */
 export function makeDefaultKnsSurvey(): KnsSurveyForm {
   return {
-    zayavka: '2406-118',
+    zayavka: '',
     tipNs: 'Канализационная',
     stadiya: 'рабочая',
     zakazchik: 'АО «ГК «ЕКС»',

@@ -140,7 +140,7 @@ describe('материализация ОЛ3487 (сценарий приёмки
 
   it('расчёт самодостаточен: параметры ОЛ и версия прайса зафиксированы', () => {
     const tree = materializeKns(ctx, OL3487)
-    expect(tree.survey).toEqual(OL3487)
+    expect(tree.survey).toMatchObject({ ...OL3487, emergencyPipeline: true })
     expect(tree.priceListVersion).toBe(1)
   })
 
@@ -212,10 +212,10 @@ describe('раздел 3 «Перекрытие» (B2, B6)', () => {
     expect(byName('Изготовление рамы перекрытия из профильной трубы').qtyCalc).toBe(7)
     expect(byName('Монтаж рамы перекрытия на верхнем стеклокомпозитном перекрытии').qtyCalc).toBe(6)
 
-    const small = flattenRows(materializeKns(ctx, { ...OL3487, dn: 2000 }))
+    const small = flattenRows(materializeKns(ctx, { ...OL3487, mvk: false, dn: 2000 }))
     expect(small.find((r) => r.name === 'Изготовление рамы перекрытия из профильной трубы')!.qtyCalc).toBe(6)
     // Меньше DN 1200 профиля в листе нет — нет и рамы.
-    const tiny = flattenRows(materializeKns(ctx, { ...OL3487, dn: 1000 }))
+    const tiny = flattenRows(materializeKns(ctx, { ...OL3487, mvk: false, dn: 1000 }))
     expect(tiny.find((r) => r.name === 'Изготовление рамы перекрытия из профильной трубы')).toBeUndefined()
   })
 
@@ -248,7 +248,7 @@ describe('раздел 3 «Перекрытие» (B2, B6)', () => {
 })
 
 describe('раздел 4 «Вентстояк» (C1)', () => {
-  const rows = materializeKns(ctx, OL3487).sections.find((s) => s.code === '4')!.components.flatMap((c) => c.rows)
+  const rows = materializeKns(ctx, { ...OL3487, mvk: false }).sections.find((s) => s.code === '4')!.components.flatMap((c) => c.rows)
 
   it('монтаж — норматив 3 чел.ч', () => {
     expect(rows.find((r) => r.name === 'Монтаж вентиляционного стояка')!.qtyCalc).toBe(3)
@@ -330,7 +330,7 @@ describe('раздел 5 «Напорный трубопровод» (C2)', () =
 
   // Аварийный трубопровод — флаг ОЛ; в ОЛ3487 он выключен.
   it('аварийный трубопровод выключен флагом ОЛ, а не отсутствует', () => {
-    const emergency = materializeKns(ctx, OL3487)
+    const emergency = materializeKns(ctx, { ...OL3487, mvk: false })
       .sections.find((s) => s.code === '5')!
       .components.find((c) => c.title === 'Аварийный трубопровод')!
     expect(emergency.enabled).toBe(false)
@@ -909,7 +909,7 @@ describe('раздел 7: автоматика и оборудование об�
   const byTitle = (cs: ReturnType<typeof section7>, t: string) => cs.find((c) => c.title === t)!
 
   it('без полей автоматики узлы собираются выключенными «призраками»', () => {
-    const cs = section7({})
+    const cs = section7({ mvk: false })
     for (const t of ['Шкаф управления', 'Датчики давления', 'Датчик уровня', 'Расходомер']) {
       expect(byTitle(cs, t).enabled, t).toBe(false)
       expect(byTitle(cs, t).enabledCalc, t).toBe(false)
@@ -1130,7 +1130,7 @@ describe('промах справочника весов не превращае
   // подтвердил (2026-09-09), что у труб классы 0,1 и 0,4 идентичны 0,6, —
   // теперь ключ ищется по 0,6 и находится.
   it('DN1300 глубже 5 м находит вес: ключ 0,6, а не несуществующий 0,4', () => {
-    const tree = materializeKns(ctx, { ...OL3487, dn: 1300, sn: 5000 })
+    const tree = materializeKns(ctx, { ...OL3487, mvk: false, dn: 1300, sn: 5000 })
     const pipe = flattenRows(tree).find((r) => r.name.startsWith('Труба СК/НПС-К 1300'))!
     expect(pipe.note).toContain('166.6 кг/пм')
     expect(pipe.note).toContain('PN трубы 0.6')
@@ -1139,7 +1139,7 @@ describe('промах справочника весов не превращае
   // Сам механизм «промах не даёт тихого нуля» проверяем на диаметре, которого
   // в заглушке справочника нет вовсе.
   it('чего нет в справочнике — то «красная» строка с явным примечанием', () => {
-    const tree = materializeKns(ctx, { ...OL3487, dn: 1234 })
+    const tree = materializeKns(ctx, { ...OL3487, mvk: false, dn: 1234 })
     const pipe = flattenRows(tree).find((r) => r.name.startsWith('Труба СК/НПС-К 1234'))!
     expect(pipe.note).toContain('Вес трубы не найден')
     expect(pipe.qtyCalc).not.toBeNull() // количество известно, неизвестен вес
@@ -1210,7 +1210,7 @@ describe('раздел 1: корзина и дробилка (D3, D4)', () => {
   })
 
   it('только дробилка — корзина выключена', () => {
-    const list = korpus({ hasBasket: false, hasGrinder: true, inletTrayDepthMm: 9910 })
+    const list = korpus({ mvk: false, hasBasket: false, hasGrinder: true, inletTrayDepthMm: 9910 })
     expect(byTitle(list, 'Корзина')?.enabled).toBe(false)
     expect(byTitle(list, 'Дробилка')?.enabled).toBe(true)
   })

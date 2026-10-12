@@ -29,6 +29,7 @@ import {
 import { materializeNode, type CatalogNode, type NodeDefBody, type NodeParamValues } from './node-def'
 import { BUILTIN_TEMPLATES, builtinNode, builtinNodesOf, type DeviceSurvey } from './code-nodes'
 import { builtinRevision } from './builtin-revisions'
+import { applyMvkParams } from './mvk'
 import { ratesFromPrices } from './economics'
 import { recordingContext, type RefsUsed } from './refs-used'
 import { computeEmkGeometry, computeKolGeometry } from './survey-emk-kol'
@@ -113,6 +114,7 @@ const KNS_FIELDS: Fields<DeviceSurvey['KNS']> = [
   num('pnSurvey', 'PN опросного листа', 'МПа'),
   num('sn', 'Кольцевая жёсткость SN', 'Па'),
   bool('mvk', 'Объект по ТТ МВК'),
+  num('capacityM3day', 'Производительность станции', 'м³/сут'),
   { key: 'pipeExecution', label: 'Исполнение корпуса', type: 'text', input: true, options: ['целая', 'частями'], get: (s) => s.pipeExecution ?? 'целая' },
   { key: 'pipeParts', label: 'Корпус частями', type: 'bool', get: (s) => s.pipeExecution === 'частями' },
   num('inletDn', 'DN подводящего патрубка', 'мм'),
@@ -328,6 +330,17 @@ function materializeRef(
  * неотличимое от прежнего.
  */
 export function materializeTemplate(baseCtx: MaterializeContext, env: DeviceEnv, template: ProductTemplate): CalcTree {
+  if (env.device === 'KNS') env = { device: 'KNS', survey: applyMvkParams(env.survey) }
+  if (env.device === 'KNS' && env.survey.mvk) {
+    // Обязательные узлы МВК включаются и в опубликованные шаблоны.
+    const required = ['kns.basket', 'kns.vent', 'kns.mvkService', 'kns.pressurePipe', 'kns.valves', 'kns.automation']
+    const present = new Set(template.body.sections.flatMap((s) => s.nodes.flatMap((n) => n.kind === 'builtin' ? [n.ref] : [])))
+    const missing = required.filter((ref) => !present.has(ref))
+    if (missing.length) template = { ...template, body: { sections: [
+      ...template.body.sections,
+      { title: 'Обязательная комплектация МВК', nodes: missing.map((ref) => ({ kind: 'builtin' as const, ref })) },
+    ] } }
+  }
   // Какие значения справочников прочтёт сборка — в дерево: по ним экран
   // расчёта увидит, что справочник под расчётом изменился (План_устранения 3.6).
   const refsUsed: RefsUsed = {}

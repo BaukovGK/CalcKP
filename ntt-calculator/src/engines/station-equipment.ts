@@ -331,9 +331,9 @@ export function buildAutomation(ctx: MaterializeContext, p: AutomationParams): C
       rows: [
         sized(
           ctx,
-          sensor(SIZED_NAMES.pressureSensor, 'Датчик давления 0..10 бар, 4..20 мА (кабель по высоте станции)'),
+          sensor(SIZED_NAMES.pressureSensor, 'Датчик давления общепромышленного применения 0..10 бар, 4..20 мА (кабель по высоте станции)'),
           p.outletCount,
-          `ƒ по одному на напорный патрубок (${p.outletCount})`,
+          `ƒ по одному на напорный патрубок (${p.outletCount}) · общепромышленный датчик, врезка в боковую часть трубы`,
         ),
         work(ctx, W.sensorsMount, p.outletCount, 'ƒ 1 чел.ч на датчик'),
       ],

@@ -74,10 +74,23 @@
                на жёсткость и марку трубы, то есть читаются вместе с DN. -->
           <div class="ol-grid ol-grid--mid">
             <label class="fld fld--3"><span v-hint="H.dn">DN корпуса, мм</span>
-              <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d">{{ d }}</option></select>
+              <select v-model="form.dn"><option v-for="d in DN_LIST" :key="d" :disabled="form.mvk && Number(d) < s.mvkMinDn.value">{{ d }}</option></select>
             </label>
             <ToggleYesNo v-model="form.underRoadway" :hint="H.underRoadway" label="Под проезжей частью" stacked class="fld--3" />
             <ToggleYesNo v-model="form.mvk" :hint="H.mvk" label="По ТТ МВК" stacked class="fld--3" />
+          </div>
+
+          <div v-if="form.mvk" class="ol-card" data-testid="mvk-requirements">
+            <div class="ol-card-h">Комплектация по СТО МВК</div>
+            <p class="ol-explain">Корпус от {{ s.mvkMinDn.value }} мм (1+1 — 2500 мм, 2+1 — 2800 мм).
+              Обязательны: механическая приточно-вытяжная вентиляция из нержавеющей стали,
+              ШУ с плавным пуском, датчик давления с боковой врезкой, датчик уровня в
+              перфорированном футляре до 0.000, аварийная линия с Рот-гайкой, нержавеющая
+              корзина, шиберная задвижка со штоком до 0.000, откидные люки площадки
+              из нержавеющей стали и перехватывающее устройство.</p>
+            <p class="ol-explain">Электромагнитный расходомер обязателен при производительности больше 200 м³/сут.
+              Вентиляция, площадка, люки и перехватывающее устройство добавляются комплектами:
+              их состав уточняется по проекту, цена включает изготовление и монтаж.</p>
           </div>
 
           <!-- Труба корпуса: PN/SN вычисляются, не задаются -->
@@ -101,7 +114,7 @@
 
             <label class="ol-chk">
               <input v-model="form.pipeManual" type="checkbox" />
-              <span v-hint="H.pipeManual">изменить вручную</span>
+              <span v-hint="H.pipeManual">дополнительные параметры трубы</span>
             </label>
 
             <div v-if="form.pipeManual" class="ol-manual">
@@ -141,7 +154,7 @@
               <div v-if="legacySnManual(form.snManual)" class="ol-pick ol-pick--warn fld--12">
                 SN {{ snManualLabel(form.snManual, form.mvk) }} выбран раньше, а завод делает корпус из трубы SN {{ snOptions[0]?.label }} или {{ snOptions[1]?.label }} — выберите одну из них.
               </div>
-              <button class="ol-reset fld--12" @click="resetPipe">↺ вернуть расчётные</button>
+              <button class="ol-reset fld--12" @click="resetPipe">вернуть расчётные параметры</button>
             </div>
           </div>
 
@@ -159,7 +172,7 @@
           <!-- Две строки: сверху то, что задаёт рабочую точку (расход и напор),
                снизу — сколько насосов её обслуживают. -->
           <div class="ol-grid">
-            <label class="fld fld--4"><span v-hint="H.rashod">Рабочий расход <b class="req">*</b></span>
+            <label class="fld fld--4"><span v-hint="H.rashod">Рабочий расход</span>
               <div class="ol-unit">
                 <input v-model="form.rashod" class="num" />
                 <select v-model="form.rashodUnit" class="ol-unit-sel">
@@ -173,7 +186,7 @@
           </div>
 
           <div class="ol-grid">
-            <label class="fld fld--4"><span v-hint="H.nRab">Рабочих насосов <b class="req">*</b></span><input v-model="form.nRab" class="num" /></label>
+            <label class="fld fld--4"><span v-hint="H.nRab">Рабочих насосов</span><input v-model="form.nRab" class="num" /></label>
             <label class="fld fld--4"><span v-hint="H.nRez">Резервных насосов</span><input v-model="form.nRez" class="num" /></label>
             <!-- «На склад» — формулировка опросного листа завода: эти насосы
                  в станцию не ставятся и в обвязку не входят. -->
@@ -231,7 +244,7 @@
                хуже двух тумблеров. Хотя бы одно есть всегда: выключить
                последнее — значит выбрать другое. -->
           <div class="ol-grid ol-grid--mid">
-            <ToggleYesNo v-model="hasBasket" :hint="H.basket" label="Корзина" stacked class="fld--3" />
+            <ToggleYesNo v-model="hasBasket" :required="form.mvk" :hint="H.basket" label="Корзина" stacked class="fld--3" />
             <ToggleYesNo v-model="hasGrinder" :hint="H.grinder" label="Дробилка" stacked class="fld--3" />
             <ToggleYesNo v-model="form.vzryv" :hint="H.vzryv" label="Взрывозащита" stacked class="fld--3" />
           </div>
@@ -259,7 +272,7 @@
                 </label>
                 <label class="fld"><span v-hint="H.podvDn">DN, мм</span><input v-model.lazy="form.podvDn" class="num" list="nozzle-dn" @change="onDnChange('podvDn', $event)" /></label>
                 <label class="fld"><span v-hint="H.podvKol">Кол-во</span><input v-model="form.podvKol" class="num" /></label>
-                <label class="fld"><span v-hint="H.podvLotok">Глубина лотка, мм <b class="req">*</b></span>
+                <label class="fld"><span v-hint="H.podvLotok">Глубина лотка, мм</span>
                   <input v-model="form.podvLotok" class="num" :class="{ 'is-missing': !form.podvLotok }" />
                 </label>
               </div>
@@ -292,7 +305,7 @@
                часть; её размер от DN линии не зависит. Тумблера «Арматура на
                подводящем» нет: задвижка на подводящем есть всегда. -->
           <div class="ol-grid ol-grid--mid">
-            <ToggleYesNo v-model="form.emergency" :hint="H.emergency" label="Аварийный трубопровод" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.emergency" :required="form.mvk" :hint="H.emergency" label="Аварийный трубопровод" stacked class="fld--3" />
             <label v-if="form.emergency" class="fld fld--3"><span v-hint="H.muftaGm">Быстросъёмная муфта</span>
               <select v-model="form.muftaGm">
                 <option v-for="gm in COUPLING_SIZES" :key="gm" :value="String(gm)">ГМ{{ gm }}</option>
@@ -306,14 +319,13 @@
           <div class="ol-card">
             <div class="ol-card-h">
               <span v-hint="H.armatureCard">Арматура</span>
-              <span class="f-mark">ƒ</span>
             </div>
             <div class="ol-grade">{{ armatureSummary }}</div>
             <div class="ol-explain">{{ s.gatesExplain.value }} · {{ s.pressureGatesExplain.value }}</div>
 
             <label class="ol-chk">
               <input v-model="form.armaturaManual" type="checkbox" />
-              <span v-hint="H.armatureManual">изменить вручную</span>
+              <span v-hint="H.armatureManual">дополнительные параметры</span>
             </label>
 
             <div v-if="form.armaturaManual" class="ol-manual">
@@ -344,7 +356,7 @@
                 :overridden="s.checkValvesOverridden.value"
                 :explain="s.checkValvesExplain.value"
               />
-              <button class="ol-reset fld--12" @click="resetArmature">↺ вернуть расчётные</button>
+              <button class="ol-reset fld--12" @click="resetArmature">вернуть расчётные параметры</button>
             </div>
           </div>
         
@@ -357,21 +369,22 @@
                же вертикалям, а не свободным потоком, где «Расходомер» отрывался
                на вторую строку. Поля ШУ идут под своим тумблером. -->
           <div class="ol-grid">
-            <ToggleYesNo v-model="form.shu" :hint="H.shu" label="Шкаф управления" stacked class="fld--3" />
-            <ToggleYesNo v-model="form.datchikiDavl" :hint="H.datchikiDavl" label="Датчики давления" stacked class="fld--3" />
-            <ToggleYesNo v-model="form.datchikiUrov" :hint="H.datchikiUrov" label="Датчики уровня" stacked class="fld--3" />
-            <ToggleYesNo v-model="form.rashodomer" :hint="H.rashodomer" label="Расходомер" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.shu" :required="form.mvk" :hint="H.shu" label="Шкаф управления" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.datchikiDavl" :required="form.mvk" :hint="H.datchikiDavl" label="Датчики давления" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.datchikiUrov" :required="form.mvk" :hint="H.datchikiUrov" label="Датчики уровня" stacked class="fld--3" />
+            <ToggleYesNo v-model="form.rashodomer" :required="s.mvkFlowMeter.value" :unavailable="s.flowMeterNotNeeded.value" :hint="H.rashodomer" label="Расходомер" stacked class="fld--3" />
           </div>
           <div v-if="form.shu" class="ol-grid">
             <label class="fld fld--3"><span v-hint="H.shuTip">Тип ШУ</span>
               <select v-model="form.shuTip"><option>внутренний</option><option>уличный</option></select>
             </label>
             <label class="fld fld--3"><span v-hint="H.shuPusk">Пуск</span>
-              <select v-model="form.shuPusk"><option>стандартный</option><option>плавный</option><option>ЧП</option></select>
+              <select v-model="form.shuPusk" :disabled="form.mvk"><option>стандартный</option><option>плавный</option><option>ЧП</option></select>
             </label>
           </div>
           <!-- Расходомер меняет не только автоматику: под него в напорном узле
                появляются фланцы, поэтому признак виден и здесь, и в патрубках. -->
+          <div v-if="s.flowMeterNotNeeded.value" class="ol-explain">Расход меньше 200 м³/сут — расходомер не нужен и исключён из комплектации.</div>
           <div v-if="form.rashodomer" class="ol-explain">
             Расходомер: в напорном узле добавятся по два фланца на каждый отводящий патрубок.
           </div>
@@ -450,8 +463,9 @@
     </div>
 
     <!-- ── Модал-превью перед материализацией ── -->
-    <BaseModal :show="previewOpen" :title="s.title.value" :close-on-backdrop="true" @close="previewOpen = false">
+    <BaseModal :show="previewOpen" title="Чек-лист" :close-on-backdrop="true" @close="previewOpen = false">
       <template #default>
+        <p class="mo-sub">{{ s.title.value }}</p>
         <p class="mo-sub">
           {{ s.pipeGrade.value }} · подз. {{ s.depthMm.value != null ? fmtInt(s.depthMm.value) : '—' }} мм ·
           расход {{ form.rashod }} {{ unitLabel }} · {{ form.nRab }}+{{ form.nRez }} насоса
@@ -723,13 +737,16 @@ const blocks = computed(() => [
   { t: 'Корзина сороудерживающая', on: hasBasket.value },
   { t: 'Лестница', on: true },
   { t: 'Перекрытие, площадка, несущие балки', on: true },
-  { t: 'Вентиляционный стояк', on: true },
+  { t: form.value.mvk ? 'Приточно-вытяжная вентиляция из нержавеющей стали с механическим побуждением' : 'Вентиляционный стояк', on: true },
   { t: 'Напорный трубопровод', on: true },
   { t: 'Крепёж', on: true },
   { t: 'Оборудование и запорная арматура', on: true },
-  { t: 'МВК-комплект', on: form.value.mvk },
+  { t: 'МВК-комплект: площадка, откидные люки и перехватывающее устройство', on: form.value.mvk },
   { t: 'Шкаф управления', on: form.value.shu },
-  { t: 'Датчики и расходомер', on: form.value.datchikiDavl || form.value.datchikiUrov || form.value.rashodomer },
+  { t: 'Датчики давления', on: form.value.datchikiDavl },
+  { t: 'Датчик уровня в защитном футляре', on: form.value.datchikiUrov },
+  { t: 'Расходомер', on: form.value.rashodomer },
+  { t: 'Аварийный трубопровод с Рот-гайкой', on: form.value.emergency },
 ])
 
 const blocksOn = computed(() => blocks.value.filter((b) => b.on).length)
@@ -854,6 +871,7 @@ function surveyPayload() {
     kns: { ...form.value },
     form: { ...form.value },
     derived: {
+      capacityM3day: s.capacityM3day.value,
       npodzMm: s.depthMm.value,
       sn: s.sn.value,
       pn: s.pn.value,

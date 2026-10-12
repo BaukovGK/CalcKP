@@ -3,8 +3,7 @@
  *
  * Воспроизводит арифметику листа `ОЛ_НАСОСНАЯ_СТАНЦИЯ`, столбцы M–R (Vэф, Vмин,
  * Vраб=Vмин, hраб, hР, Нподз) — формулы сверены по трём реальным опросным листам
- * из «Работа/Примеры». Заданный набор входных параметров не включает количество
- * насосов, поэтому здесь `capacityM3h` считается производительностью ОДНОГО
+ * из «Работа/Примеры». Число насосов задаёт только минимальный диаметр МВК. Здесь `capacityM3h` считается производительностью ОДНОГО
  * рабочего насоса — при нескольких насосах в станции делите общий приток на их
  * число перед вызовом (как в оригинале: `Vэф = Q/(4·пусков·n)`, `n` = E55).
  *
@@ -42,11 +41,14 @@ export const CORPUS_DN_MIN_MM = 1800
 export const CORPUS_DN_MAX_MM = 3200
 
 /** Минимальный диаметр корпуса при требованиях по ТТ МВК, мм. */
-export const MVK_DN_MIN_MM = 2600
+export const MVK_DN_MIN_MM = 2500
+export function mvkMinDiameterMm(pumpsWorking = 1): number {
+  return pumpsWorking >= 2 ? 2800 : MVK_DN_MIN_MM
+}
 
 /** Типоряд номинальных диаметров корпуса, мм (шаг производства + макс. 3200). */
 export const STANDARD_DN_MM: readonly number[] = [
-  1800, 1900, 2000, 2200, 2400, 2500, 2600, 2700, 3000, 3200,
+  1800, 1900, 2000, 2200, 2400, 2500, 2600, 2700, 2800, 3000, 3200,
 ]
 
 /** Дефолты из шаблона опросного листа (совпадают с `survey-kns.ts` на фронтенде). */
@@ -70,7 +72,7 @@ export interface PumpStationInput {
 
   /** Высота (глубина залегания) подводящего патрубка, м. Ячейка E41/1000. */
   inletPipeHeightM: number
-  /** Требования по ТТ МВК — при true диаметр корпуса поднимается до ≥ 2,6 м. */
+  /** СТО МВК: 1+1 — от 2500 мм, 2+1 — от 2800 мм. */
   mvkRequired: boolean
   /** Производительность (максимальный приток), м³/ч. Ячейка E51. */
   capacityM3h: number
@@ -79,6 +81,8 @@ export interface PumpStationInput {
 
   /** Диаметр корпуса, мм. Если не задан — подбирается автоматически. Ячейка E20. */
   diameterMm?: number
+  /** Рабочие насосы для выбора минимального DN МВК; capacityM3h остаётся расходом на насос. */
+  pumpsWorking?: number
   /** Мин. уровень жидкости для работы насоса, м (из паспорта насоса). Ячейка N47. */
   minPumpLevelM?: number
   /** Поминутная работа, мин. Ячейка P41. */
@@ -139,15 +143,15 @@ export function roundUpTo(value: number, step: number): number {
  * Подбор/валидация номинального диаметра корпуса, мм.
  *
  * Правила: производство выпускает круглые корпуса 1800…3200 мм; при
- * требованиях по ТТ МВК — не менее 2600 мм. Если диаметр не задан, берётся
- * минимально допустимый стандартный DN (2600 при МВК, иначе 1800).
+ * требованиях по СТО МВК — 2500 мм (1+1) / 2800 мм (2+1).
  */
 export function resolveDiameterMm(
   mvkRequired: boolean,
   diameterMm: number | undefined,
   warnings: PumpStationWarning[],
+  pumpsWorking = 1,
 ): { diameterMm: number; assumed: boolean } {
-  const floorMm = mvkRequired ? MVK_DN_MIN_MM : CORPUS_DN_MIN_MM
+  const floorMm = mvkRequired ? mvkMinDiameterMm(pumpsWorking) : CORPUS_DN_MIN_MM
 
   if (diameterMm == null) {
     const picked = STANDARD_DN_MM.find((d) => d >= floorMm) ?? floorMm
@@ -155,18 +159,18 @@ export function resolveDiameterMm(
       code: 'DN_ASSUMED',
       message:
         `Диаметр не задан — принят минимально допустимый DN ${picked} мм` +
-        (mvkRequired ? ' (по требованиям МВК ≥ 2600 мм).' : '.'),
+        (mvkRequired ? ` (по требованиям МВК ≥ ${floorMm} мм).` : '.'),
     })
     return { diameterMm: picked, assumed: true }
   }
 
   let dn = diameterMm
-  if (mvkRequired && dn < MVK_DN_MIN_MM) {
+  if (mvkRequired && dn < floorMm) {
     warnings.push({
       code: 'DN_BELOW_MVK',
-      message: `Заданный DN ${diameterMm} мм меньше минимума по МВК — поднят до ${MVK_DN_MIN_MM} мм.`,
+      message: `Заданный DN ${diameterMm} мм меньше минимума по МВК — поднят до ${floorMm} мм.`,
     })
-    dn = MVK_DN_MIN_MM
+    dn = floorMm
   }
   if (dn < CORPUS_DN_MIN_MM) {
     warnings.push({
@@ -199,7 +203,7 @@ export function resolveDiameterMm(
  * Нподз = ROUNDUP((высота_патрубка + hР) · 1000; −2 )
  * ```
  * где `Q` — производительность, приведённая к м³/ч на один насос (здесь принят
- * один рабочий насос — количество насосов вне заданного набора параметров).
+ * один рабочий насос — количество насосов не делит расход повторно).
  *
  * Толщину стенки и годность/подбор SN эта функция не считает — см. заголовок
  * модуля.
@@ -217,10 +221,10 @@ export function calcPumpStationDimensions(input: PumpStationInput): PumpStationD
   }
 
   // — Диаметр —
-  const { diameterMm, assumed } = resolveDiameterMm(input.mvkRequired, input.diameterMm, warnings)
+  const { diameterMm, assumed } = resolveDiameterMm(input.mvkRequired, input.diameterMm, warnings, input.pumpsWorking)
   const dMeters = diameterMm / 1000
 
-  // — Объёмы рабочей зоны (один рабочий насос — количество насосов не входит в заданный набор параметров) —
+  // — Объёмы рабочей зоны (расход на один рабочий насос) —
   const startsPerHour = input.startsPerHour ?? DEFAULTS.startsPerHour
   const perMinuteRunMin = input.perMinuteRunMin ?? DEFAULTS.perMinuteRunMin
 

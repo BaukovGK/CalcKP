@@ -86,6 +86,8 @@ export interface KnsSurveyParams {
    * (та же труба плюс две нитки ровинга). На массу и габариты не влияет.
    */
   mvk?: boolean
+  /** Производительность всей станции, м³/сут (порог расходомера МВК). */
+  capacityM3day?: number
 
   /** Подводящие патрубки. */
   inletDn: number
@@ -1603,7 +1605,7 @@ export function buildPressurePipe(
         name: nut.name,
         unit: nut.unit,
         qtyCalc: 1,
-        note: 'ƒ одна на станцию · приваривается к трубопроводу, размер из ОЛ',
+        note: 'ƒ одна на станцию · Рот-гайка; приваривается к трубопроводу, размер из ОЛ',
       }),
       makeRow(ctx, {
         kind: 'МАТЕРИАЛ',
@@ -1881,7 +1883,7 @@ export function buildKnsValves(ctx: MaterializeContext, s: KnsSurveyParams): Cal
           unit: 'шт',
           qtyCalc: gates.qty,
           note:
-            gates.note +
+            gates.note + ' · удлинённый шток до отметки 0.000' +
             (s.inletTrayDepthMm
               ? ` · шток = лоток ${s.inletTrayDepthMm} − DN/2`
               : ' · длина штока = глубина лотка − DN/2: укажите в ОЛ глубину лотка подводящего'),
