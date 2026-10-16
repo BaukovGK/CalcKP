@@ -111,6 +111,15 @@ describe('какая учётка', () => {
     expect(resolveAccount(profile, null, null)).toEqual({ kind: 'denied', code: 'no_account' })
   })
 
+  it('портал не отдал почту — своя причина, а не «нет учётки»', () => {
+    // Права приложения user_brief: почты в user.current нет.
+    expect(resolveAccount({ ...profile, email: null }, null, null)).toEqual({ kind: 'denied', code: 'no_email' })
+  })
+
+  it('без почты привязанная учётка всё равно находится — по ID портала', () => {
+    expect(resolveAccount({ ...profile, email: null }, acc({ bitrixUserId: '17' }), null)).toMatchObject({ kind: 'linked' })
+  })
+
   it('почта совпала, но учётка привязана к другому сотруднику — отказ', () => {
     // Сменил почту в профиле портала на чужую — в чужую учётку не попадёт.
     expect(resolveAccount(profile, null, acc({ bitrixUserId: '99' }))).toEqual({ kind: 'denied', code: 'email_taken' })

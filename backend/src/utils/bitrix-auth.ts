@@ -62,6 +62,11 @@ export type BitrixDenial =
   | 'wrong_app'
   | 'portal_error'
   | 'portal_inactive'
+  /**
+   * Портал не отдал почту сотрудника — у приложения права «Пользователи
+   * (краткие)», `user_brief`: без почты привязать новую учётку не по чему.
+   */
+  | 'no_email'
   | 'no_account'
   | 'blocked'
   | 'email_taken'
@@ -143,7 +148,7 @@ export interface BitrixCandidate {
 export type BitrixResolution<U extends BitrixCandidate> =
   | { kind: 'linked'; user: U }
   | { kind: 'link'; user: U }
-  | { kind: 'denied'; code: Extract<BitrixDenial, 'portal_inactive' | 'no_account' | 'blocked' | 'email_taken'> }
+  | { kind: 'denied'; code: Extract<BitrixDenial, 'portal_inactive' | 'no_email' | 'no_account' | 'blocked' | 'email_taken'> }
 
 /**
  * Какая учётка у сотрудника портала.
@@ -162,6 +167,9 @@ export function resolveAccount<U extends BitrixCandidate>(
   if (byBitrixId) {
     return byBitrixId.isActive ? { kind: 'linked', user: byBitrixId } : { kind: 'denied', code: 'blocked' }
   }
+  // Без почты «нет учётки» было бы неправдой: учётка может и быть, просто
+  // сравнить не с чем — причина в правах приложения, а не у администратора.
+  if (!profile.email) return { kind: 'denied', code: 'no_email' }
   if (!byEmail) return { kind: 'denied', code: 'no_account' }
   if (byEmail.bitrixUserId && byEmail.bitrixUserId !== profile.id) return { kind: 'denied', code: 'email_taken' }
   if (!byEmail.isActive) return { kind: 'denied', code: 'blocked' }
