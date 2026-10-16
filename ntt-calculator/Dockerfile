@@ -28,4 +28,6 @@ COPY ntt-calculator/nginx/app.conf /etc/nginx/snippets/app.conf
 # из Windows-клона он теряется, а без него образ nginx скрипт пропустит.
 COPY ntt-calculator/nginx/https.conf /etc/nginx/ntt-https.conf
 COPY --chmod=755 ntt-calculator/nginx/40-tls.sh /docker-entrypoint.d/40-tls.sh
+# frame-ancestors из BITRIX_PORTAL — в security-headers.conf.
+COPY --chmod=755 ntt-calculator/nginx/35-csp.sh /docker-entrypoint.d/35-csp.sh
 EXPOSE 80 443
