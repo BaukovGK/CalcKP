@@ -1,0 +1,24 @@
+# HTTPS для web — дополнение к docker-compose.yml, включается из .env:
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.https.yml
+#   TLS_CERT_DIR=/etc/ssl/ntt.su      # fullchain.pem и privkey.pem
+#
+# После этого обычные `docker compose up -d` и deploy/update.sh поднимают стек
+# уже с HTTPS: Compose читает COMPOSE_FILE из .env сам. Без этих строк стек
+# работает по HTTP, как раньше, — разработке и CI сертификат не нужен.
+#
+# Сертификат и ключ живут на хосте и в git не попадают. Порядок включения и
+# замены сертификата — РАЗВЁРТЫВАНИЕ.md, «Перед интеграцией с Битрикс24 —
+# включить HTTPS».
+
+services:
+  web:
+    environment:
+      # nginx/40-tls.sh подменяет конфигурацию на nginx/https.conf.
+      NGINX_TLS: '1'
+    # Добавляется к '${HTTP_PORT}:80' из docker-compose.yml: 80 остаётся —
+    # он переводит на https и отвечает пробе /api/health.
+    ports:
+      - '${HTTPS_PORT:-443}:443'
+    volumes:
+      - ${TLS_CERT_DIR:?TLS_CERT_DIR обязателен с docker-compose.https.yml}:/etc/nginx/tls:ro
