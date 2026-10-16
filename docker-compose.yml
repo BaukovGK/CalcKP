@@ -114,6 +114,11 @@ services:
       KP_COMPANY_ADDRESS: ${KP_COMPANY_ADDRESS:-}
       KP_COMPANY_EMAIL: ${KP_COMPANY_EMAIL:-}
       KP_COMPANY_SITE: ${KP_COMPANY_SITE:-}
+      # Вход из вкладки Битрикс24 (ТЗ §10.3, routes/bitrix.routes.ts). Пусто —
+      # выключен. MEMBER_ID и CLIENT_ID необязательны, но заданные сверяются.
+      BITRIX_PORTAL: ${BITRIX_PORTAL:-}
+      BITRIX_MEMBER_ID: ${BITRIX_MEMBER_ID:-}
+      BITRIX_CLIENT_ID: ${BITRIX_CLIENT_ID:-}
     volumes:
       # Дампы лежат на хосте, а не в томе: их надо уметь забрать с машины,
       # а том исчезнет вместе с `docker compose down -v`.

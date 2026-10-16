@@ -59,6 +59,8 @@ const USER_SELECT = {
   role: true,
   isActive: true,
   mustChangePassword: true,
+  // Привязка к сотруднику Битрикс24: видна в списке, снимается здесь же.
+  bitrixUserId: true,
   createdAt: true,
 } as const
 
@@ -114,6 +116,10 @@ const patchUserSchema = z.object({
   phone:    z.string().trim().max(100).nullish(),
   role:     z.enum(ROLES).optional(),
   isActive: z.boolean().optional(),
+  // Только отвязать: привязывает сам вход из портала — по почте сотрудника.
+  // Отвязка нужна, когда учётку передают другому человеку или почта в портале
+  // досталась не тому.
+  bitrixUserId: z.null().optional(),
 })
 
 /**
@@ -134,7 +140,7 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
     const patch = req.body as z.infer<typeof patchUserSchema>
 
     // Без явной проверки обновление несуществующего id давало P2025 и 500.
-    const current = await prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true } })
+    const current = await prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true, bitrixUserId: true } })
     if (!current) { res.status(404).json({ message: 'Пользователь не найден' }); return }
 
     const losesAdmin =
@@ -171,7 +177,10 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
     }
     // Блокировка отзывает токены: иначе после разблокировки старые сессии
     // ожили бы снова (План_устранения 2.3).
-    const revoke = patch.isActive === false && current.isActive
+    // Отвязка от Битрикс24 тоже завершает сеансы: вошедший из портала не
+    // должен оставаться в учётке, которую от него отвязали.
+    const revoke = (patch.isActive === false && current.isActive) ||
+      (patch.bitrixUserId === null && current.bitrixUserId != null)
     const user = await prisma.user.update({
       where: { id },
       data:  revoke ? { ...data, tokenVersion: { increment: 1 } } : data,

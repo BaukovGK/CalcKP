@@ -60,6 +60,21 @@ export const useAuthStore = defineStore('auth', () => {
     if (data.refreshToken) localStorage.setItem(SESSION_KEYS.refresh, data.refreshToken)
   }
 
+  // ── Вход из Битрикс24 ──────────────────────────────────────────────────────
+  // Одноразовый код выдал сервер, проверив сотрудника у портала
+  // (routes/bitrix.routes.ts). Прежняя сессия — возможно, другого человека за
+  // тем же компьютером — стирается.
+  async function loginWithBitrix(code: string): Promise<void> {
+    const { data } = await api.post<{ accessToken: string; refreshToken: string; user: AuthUser }>(
+      '/auth/bitrix/exchange',
+      { code },
+      { skipAuthRefresh: true },
+    )
+    clearSession()
+    _persist(data.user, data.accessToken)
+    localStorage.setItem(SESSION_KEYS.refresh, data.refreshToken)
+  }
+
   // ── Demo login (без backend) ───────────────────────────────────────────────
   // TODO: удалить loginDemo() когда backend стабильно работает в dev-окружении.
   //       Пока оставляем для оффлайн-демонстраций. Кнопка видна только в LoginView.
@@ -161,5 +176,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, accessToken, isLoggedIn, role, mustChangePassword, login, loginDemo, logout, logoutAll, changePassword, updateProfile, refresh, checkAuth }
+  return { user, accessToken, isLoggedIn, role, mustChangePassword, login, loginWithBitrix, loginDemo, logout, logoutAll, changePassword, updateProfile, refresh, checkAuth }
 })

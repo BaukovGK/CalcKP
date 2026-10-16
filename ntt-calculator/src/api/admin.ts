@@ -14,6 +14,8 @@ export interface AdminUser {
   isActive:  boolean
   /** Пароль задан не им — сменит при входе (План_устранения 2.1). */
   mustChangePassword?: boolean
+  /** ID сотрудника в Битрикс24 — привязывается при первом входе из портала. */
+  bitrixUserId?: string | null
   createdAt: string
 }
 
@@ -96,7 +98,11 @@ export const adminApi = {
 
   patchUser(
     id: string,
-    dto: { role?: UserRole; isActive?: boolean; name?: string; position?: string | null; phone?: string | null },
+    dto: {
+      role?: UserRole; isActive?: boolean; name?: string; position?: string | null; phone?: string | null
+      /** Только null — отвязать от Битрикс24; сеансы учётки при этом завершаются. */
+      bitrixUserId?: null
+    },
   ): Promise<AdminUser> {
     return api.patch<AdminUser>(`/admin/users/${id}`, dto).then((r) => r.data)
   },

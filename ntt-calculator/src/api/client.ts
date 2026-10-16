@@ -26,8 +26,20 @@ export const api = axios.create({
  */
 export const sessionLost = {
   redirect: () => {
-    window.location.href = '/login'
+    // Во вкладке Битрикс24 пароль не нужен: новый вход даст сам портал, когда
+    // вкладку откроют заново, — экран /bitrix так и скажет.
+    window.location.href = insideFrame() ? '/bitrix?error=session' : '/login'
   },
+}
+
+/** Приложение открыто во фрейме — то есть во вкладке Битрикс24. */
+export function insideFrame(): boolean {
+  try {
+    return window.self !== window.top
+  } catch {
+    // Доступ к top чужого сайта запрещён — значит, фрейм.
+    return true
+  }
 }
 
 /**

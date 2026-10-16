@@ -133,6 +133,28 @@ describe('администрирование: сброс пароля', () => {
  * (`backend/utils/kp-terms.ts`), поэтому карточка должна их и хранить, и
  * позволять дополнить у давно заведённых учёток.
  */
+describe('администрирование: привязка к Битрикс24', () => {
+  it('у привязанной учётки — ID портала и «Отвязать», у прочих — прочерк', async () => {
+    listUsers.mockResolvedValue(USERS.map((u) => (u.id === 'u2' ? { ...u, bitrixUserId: '17' } : { ...u, bitrixUserId: null })))
+    const w = await mountView()
+
+    expect(rowOf(w, 'eng@ntt.local').find('.adm-bitrix').text()).toContain('ID 17')
+    expect(rowOf(w, 'admin@ntt.local').find('.adm-bitrix').text()).toBe('—')
+    expect(rowOf(w, 'admin@ntt.local').find('.adm-unlink').exists()).toBe(false)
+  })
+
+  it('«Отвязать» снимает привязку на сервере', async () => {
+    listUsers.mockResolvedValue(USERS.map((u) => ({ ...u, bitrixUserId: u.id === 'u2' ? '17' : null })))
+    const w = await mountView()
+
+    await rowOf(w, 'eng@ntt.local').find('.adm-unlink').trigger('click')
+    await flushPromises()
+
+    expect(patchUser).toHaveBeenCalledWith('u2', { bitrixUserId: null })
+    expect(rowOf(w, 'eng@ntt.local').find('.adm-bitrix').text()).toBe('—')
+  })
+})
+
 describe('администрирование: карточка сотрудника', () => {
   const inputs = (w: Awaited<ReturnType<typeof mountView>>, email: string) =>
     rowOf(w, email).findAll('input.adm-inline')

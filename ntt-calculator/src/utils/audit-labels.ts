@@ -32,6 +32,8 @@ export const AUDIT_LABELS: Readonly<Record<string, string>> = {
   'auth.login': 'Вход в систему',
   'auth.login_failed': 'Неудачный вход',
   'auth.logout': 'Выход',
+  'auth.bitrix_link': 'Привязка к Битрикс24',
+  'auth.bitrix_denied': 'Вход из Битрикс24 отклонён',
 
   'estimate.create': 'Создан расчёт',
   'estimate.survey': 'Правка опросного листа',
@@ -90,6 +92,7 @@ export const AUDIT_LABELS: Readonly<Record<string, string>> = {
 /** События, которые стоит замечать: неудачный вход, удаление, восстановление. */
 const ALARMING = new Set([
   'auth.login_failed',
+  'auth.bitrix_denied',
   'estimate.delete',
   'project.delete',
   'db.restore',
@@ -140,6 +143,9 @@ export function entityLabel(entityType: string | null): string | null {
 const META_LABELS: Readonly<Record<string, string>> = {
   email: 'почта',
   reason: 'причина',
+  via: 'вход через',
+  bitrixUserId: 'ID в Битрикс24',
+  detail: 'подробно',
   title: 'название',
   customer: 'заказчик',
   changed: 'изменения',

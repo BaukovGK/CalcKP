@@ -51,7 +51,9 @@
               <th v-hint="ACCOUNT_HINTS.name">ФИО</th>
               <th v-hint="ACCOUNT_HINTS.position">Должность</th>
               <th v-hint="ACCOUNT_HINTS.phone">Телефон</th>
-              <th>Email</th><th>Роль</th><th>Активен</th><th>Зарегистрирован</th><th></th>
+              <th>Email</th><th>Роль</th><th>Активен</th>
+              <th v-hint="ADMIN_PASSWORD_HINTS.bitrix">Битрикс24</th>
+              <th>Зарегистрирован</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -97,6 +99,17 @@
                   :class="u.isActive ? 'adm-toggle--on' : 'adm-toggle--off'"
                   @click="patchUser(u.id, { isActive: !u.isActive })"
                 >{{ u.isActive ? 'Да' : 'Нет' }}</button>
+              </td>
+              <td class="adm-bitrix">
+                <template v-if="u.bitrixUserId">
+                  <span class="adm-date">ID {{ u.bitrixUserId }}</span>
+                  <button
+                    v-hint="ADMIN_PASSWORD_HINTS.bitrixUnlink"
+                    class="btn btn-g adm-unlink"
+                    @click="patchUser(u.id, { bitrixUserId: null })"
+                  >Отвязать</button>
+                </template>
+                <span v-else class="adm-date">—</span>
               </td>
               <td class="adm-date">{{ fmtDate(u.createdAt) }}</td>
               <td>
@@ -847,6 +860,8 @@ onMounted(() => {
 .adm-badge { margin-left: 6px; font-size: 11.5px; padding: 1px 6px; border-radius: 10px; white-space: nowrap;
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .adm-reset { padding: 2px 8px; height: 24px; font-size: 12.5px; white-space: nowrap; }
+.adm-bitrix { white-space: nowrap; }
+.adm-unlink { margin-left: 6px; padding: 2px 8px; height: 24px; font-size: 12.5px; }
 .adm-p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: var(--tx2); }
 .adm-muted { color: var(--tx3); }
 .adm-temp { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }

@@ -31,6 +31,14 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      // Вход из вкладки Битрикс24: сервер, проверив сотрудника у портала,
+      // приводит сюда с одноразовым кодом или с причиной отказа.
+      path: '/bitrix',
+      name: 'bitrix',
+      component: () => import('@/views/BitrixView.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
       // Обязательная смена пароля, заданного не самим пользователем (2.1).
       path: '/password',
       name: 'password',
@@ -134,7 +142,9 @@ router.beforeEach(async (to, from) => {
 
   // Один раз за запуск — и при пользователе из кэша: роль в кэше могла
   // устареть, а сервер берёт её из БД на каждом запросе.
-  if (!sessionChecked && auth.accessToken) {
+  // Кроме входа из Битрикс24: там прежняя сессия заменяется новой, а её
+  // проверка при отказе увела бы с экрана вместе с одноразовым кодом.
+  if (!sessionChecked && auth.accessToken && to.name !== 'bitrix') {
     sessionChecked = true
     await auth.checkAuth()
   }
