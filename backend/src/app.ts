@@ -15,6 +15,7 @@ import { templatesRouter } from './routes/templates.routes'
 import { catalogRouter }   from './routes/catalog.routes'
 import { pumpStationRouter } from './routes/pump-station.routes'
 import { bugReportsRouter } from './routes/bug-reports.routes'
+import { cspRouter }       from './routes/csp.routes'
 
 /**
  * Проверка окружения на старте.
@@ -110,6 +111,8 @@ app.use('/api/pump-station', pumpStationRouter)
 // Отчёты об ошибках: отправляет любой сотрудник, читает администратор.
 // Хранятся в своём каталоге на диске, не в базе (utils/bug-reports.ts).
 app.use('/api/bug-reports', bugReportsRouter)
+// Нарушения CSP из браузеров (Report-Only) — в лог; входа не требует.
+app.use('/api/csp-report', cspRouter)
 
 // Версия и коммит сборки читаются один раз, при старте: за время работы
 // они не меняются (utils/app-version.ts, План_устранения 3.8).
