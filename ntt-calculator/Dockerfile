@@ -21,4 +21,11 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY ntt-calculator/nginx.conf /etc/nginx/conf.d/default.conf
 # Заголовки безопасности — подключаются из nginx.conf (План_устранения 2.4).
 COPY ntt-calculator/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
-EXPOSE 80
+# Общее тело сервера для HTTP и HTTPS.
+COPY ntt-calculator/nginx/app.conf /etc/nginx/snippets/app.conf
+# HTTPS — вне conf.d, чтобы nginx его не подхватил сам: включает 40-tls.sh
+# при NGINX_TLS=1 (docker-compose.https.yml). Бит исполнения задаётся здесь:
+# из Windows-клона он теряется, а без него образ nginx скрипт пропустит.
+COPY ntt-calculator/nginx/https.conf /etc/nginx/ntt-https.conf
+COPY --chmod=755 ntt-calculator/nginx/40-tls.sh /docker-entrypoint.d/40-tls.sh
+EXPOSE 80 443
