@@ -14,6 +14,7 @@ const shell = import.meta.glob('../components/survey/SurveyShell.vue', { query: 
 /** Экраны без своей кнопки — и почему. */
 const WITHOUT_BUTTON: Readonly<Record<string, string>> = {
   './LoginView.vue': 'вход — отчёт отправляет только вошедший сотрудник',
+  './BitrixView.vue': 'вход из Битрикс24 — сотрудник ещё не вошёл, отчёт отправить некому',
   './PasswordView.vue': 'обязательная смена пароля — карточка без оболочки, кнопка запасная, в углу',
   './SurveyView.vue': 'обёртка опросного листа: кнопка — в листе нужного изделия, у загрузки и ошибки — запасная',
   './SurveyEmkView.vue': 'лист ёмкости стоит в SurveyShell — кнопка в его шапке',
