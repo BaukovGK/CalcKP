@@ -39,8 +39,8 @@ export function surveyGate(to: Pick<RouteLocationNormalized, 'name' | 'params' |
 
 /**
  * Домашний экран роли: технолог живёт в «Шаблонах» — проекты ему бесполезны.
- * Снабженец — в прайсе, но только при входе: проекты он открывает сам, из
- * них ведёт заявки на закупку (План_устранения 3.7). `null` — пропустить.
+ * Снабженцу проекты закрыты: при входе — прайс, дальше вместо проектов —
+ * список заявок на закупку. `null` — пропустить.
  */
 export function homeRedirect(
   role: string | null,
@@ -49,6 +49,8 @@ export function homeRedirect(
 ): RouteLocationRaw | null {
   if (to.name !== 'dashboard') return null
   if (role === 'TECHNOLOG') return { name: 'templates' }
-  if (role === 'BUYER' && (from.name === 'login' || from.matched.length === 0)) return { name: 'prices' }
+  if (role === 'BUYER') {
+    return from.name === 'login' || from.matched.length === 0 ? { name: 'prices' } : { name: 'purchases' }
+  }
   return null
 }

@@ -1,22 +1,32 @@
 /**
- * Правила ролей (ТЗ §2). Держит решение Р8 (План_устранения 3.7): снабженец
- * читает любой расчёт и видит все проекты — заявка на закупку открывается по
- * чужому расчёту, — но править их не может.
+ * Правила ролей (ТЗ §2). Снабженец ведёт заявку на закупку по любому расчёту
+ * (решение Р8), но проекты и цены продажи ему закрыты.
  */
 import { describe, expect, it } from 'vitest'
-import { canAccessEstimate, canReadEstimate, seesAllEstimates, seesAllProjects } from './access'
+import {
+  canAccessEstimate, canReadEstimate, canReadForPurchase, canSeeProjects,
+  seesAllEstimates, seesAllProjects,
+} from './access'
 
 describe('доступ к расчётам и проектам', () => {
-  it('снабженец читает чужой расчёт, но не правит его', () => {
-    expect(canReadEstimate('BUYER', 'author', 'buyer')).toBe(true)
+  it('снабженец читает чужой расчёт только для заявки и не правит его', () => {
+    expect(canReadForPurchase('BUYER', 'author', 'buyer')).toBe(true)
+    expect(canReadEstimate('BUYER', 'author', 'buyer')).toBe(false)
     expect(canAccessEstimate('BUYER', 'author', 'buyer')).toBe(false)
   })
 
-  it('снабженец и наблюдатель видят все расчёты и проекты', () => {
-    for (const role of ['ADMIN', 'MANAGER', 'VIEWER', 'BUYER']) {
+  it('снабженцу проекты закрыты целиком', () => {
+    expect(canSeeProjects('BUYER')).toBe(false)
+    expect(seesAllProjects('BUYER')).toBe(false)
+    for (const role of ['ADMIN', 'MANAGER', 'ENGINEER', 'VIEWER']) expect(canSeeProjects(role)).toBe(true)
+  })
+
+  it('наблюдатель видит все расчёты и проекты', () => {
+    for (const role of ['ADMIN', 'MANAGER', 'VIEWER']) {
       expect(seesAllEstimates(role)).toBe(true)
       expect(seesAllProjects(role)).toBe(true)
     }
+    expect(seesAllEstimates('BUYER')).toBe(true)
     expect(seesAllEstimates('ENGINEER')).toBe(false)
     expect(seesAllProjects('TECHNOLOG')).toBe(false)
   })

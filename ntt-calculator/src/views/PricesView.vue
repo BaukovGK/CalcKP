@@ -2,7 +2,9 @@
   <div class="app-layout">
     <aside class="sidebar">
       <div class="sidebar-top">
-        <button class="back-link" @click="router.push('/')">← Проекты</button>
+        <!-- Снабженцу проекты закрыты — назад к его заявкам на закупку. -->
+        <button v-if="auth.role === 'BUYER'" class="back-link" @click="router.push('/purchases')">← Заявки на закупку</button>
+        <button v-else class="back-link" @click="router.push('/')">← Проекты</button>
         <div class="logo">Реестр цен</div>
       </div>
       <div class="sidebar-scroll">

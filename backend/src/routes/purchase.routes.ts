@@ -6,7 +6,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
-import { canReadEstimate } from '../utils/access'
+import { canReadForPurchase } from '../utils/access'
 import type { Response, NextFunction } from 'express'
 
 /**
@@ -65,7 +65,7 @@ purchaseRouter.post(
       })
       if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
       // BUYER ведёт закупку по чужим расчётам — доступ к Заявке ему нужен.
-      if (!canReadEstimate(auth.userRole, estimate.authorId, auth.userId)) { res.status(403).json({ message: 'Нет доступа' }); return }
+      if (!canReadForPurchase(auth.userRole, estimate.authorId, auth.userId)) { res.status(403).json({ message: 'Нет доступа' }); return }
 
       const rows = req.body.rows as z.infer<typeof rowSchema>[]
 
@@ -79,7 +79,10 @@ purchaseRouter.post(
       ws.getCell('A1').font = { bold: true, size: 13 }
 
       ws.mergeCells('A2:I2')
-      const meta = [estimate.project?.customer, estimate.project?.title].filter(Boolean).join(' · ')
+      // Снабженцу проекты закрыты — заказчик и объект в его выгрузку не идут.
+      const meta = auth.userRole === 'BUYER'
+        ? ''
+        : [estimate.project?.customer, estimate.project?.title].filter(Boolean).join(' · ')
       ws.getCell('A2').value = meta || '—'
       ws.getCell('A2').font = { size: 10 }
 
