@@ -2,8 +2,9 @@
   <div class="pr">
     <header class="topbar">
       <div class="tb-l">
-        <!-- Снабженцу расчёт закрыт — назад в проект (План_устранения 3.7). -->
-        <RouterLink v-if="id && !isBuyer" class="tb-lnk" :to="{ name: 'calculator', params: { id } }">← Расчёт</RouterLink>
+        <!-- Снабженцу расчёт и проекты закрыты — назад к списку заявок. -->
+        <RouterLink v-if="isBuyer" class="tb-lnk" :to="{ name: 'purchases' }">← Заявки</RouterLink>
+        <RouterLink v-else-if="id" class="tb-lnk" :to="{ name: 'calculator', params: { id } }">← Расчёт</RouterLink>
         <RouterLink v-else-if="projectId" class="tb-lnk" :to="{ name: 'project', params: { id: projectId } }">← Проект</RouterLink>
         <span class="tb-title">Заявка на закупку</span>
         <span class="tb-sub">{{ st.estimate?.title ?? '—' }}</span>
@@ -26,7 +27,7 @@
       <div v-if="missing.length" class="warn">
         ⚠ {{ missing.length }} закупаемых {{ plural(missing.length) }} без цены — их стоимость в заявке равна нулю.
         <RouterLink v-if="!isBuyer" :to="{ name: 'calculator', params: { id } }">Заполнить в расчёте →</RouterLink>
-        <span v-else>Цены заполняет инженер в расчёте или вы — в прайсе.</span>
+        <span v-else>Укажите цену позиции в прайсе.</span>
       </div>
 
       <div class="tbl">
@@ -90,7 +91,7 @@ const st = useCalcTreeStore()
 
 const busy = ref(false)
 const id = computed(() => (typeof route.params.id === 'string' ? route.params.id : null))
-/** Снабженцу расчёт закрыт: назад — в проект единицы (План_устранения 3.7). */
+/** Снабженцу расчёт и проекты закрыты: назад — к списку заявок. */
 const isBuyer = computed(() => useAuthStore().role === 'BUYER')
 const projectId = computed(() => st.estimate?.projectId ?? null)
 

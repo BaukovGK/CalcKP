@@ -25,6 +25,8 @@ export interface ProjectListItem {
   customer:  string | null
   updatedAt: string
   createdAt: string
+  /** Кто завёл проект — для «Свои» и фильтра по автору. */
+  authorId:  string
   author:    { name: string }
   estimates: Array<{ id: string; title: string; deviceType: DeviceType; status: EstimateStatus; totalRub: number | null }>
 }
@@ -63,8 +65,13 @@ export const projectsApi = {
     return api.post<ProjectEstimate>(`/projects/${projectId}/estimates`, dto).then(r => r.data)
   },
 
-  delete(id: string): Promise<void> {
-    return api.delete(`/projects/${id}`).then(() => undefined)
+  /**
+   * Удалить проект с единицами. Единица с выпущенным КП или зафиксированной
+   * версией — отказ 422 `PROJECT_UNITS_PROTECTED`; `force` — администратор
+   * удаляет всё равно, вместе со слепками КП.
+   */
+  delete(id: string, opts: { force?: boolean } = {}): Promise<void> {
+    return api.delete(`/projects/${id}`, { params: opts.force ? { force: 1 } : {} }).then(() => undefined)
   },
 
   /**

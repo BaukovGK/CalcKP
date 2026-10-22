@@ -5,7 +5,7 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit } from '../utils/audit'
-import { seesAllProjects } from '../utils/access'
+import { canSeeProjects, seesAllProjects } from '../utils/access'
 import { buildProjectKpDocument, documentFileName } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
@@ -22,6 +22,14 @@ const DELETION_BLOCKING_REASONS = (['CREATE', 'MANUAL', 'KP'] as SnapshotReason[
 
 export const projectsRouter = Router()
 projectsRouter.use('/', requireAuth)
+// Снабженцу проекты закрыты целиком: заказчики, состав и цены продажи.
+projectsRouter.use('/', (req, res, next) => {
+  if (!canSeeProjects((req as AuthRequest).userRole)) {
+    res.status(403).json({ message: 'Проекты снабженцу недоступны' })
+    return
+  }
+  next()
+})
 
 const createSchema = z.object({
   title:    z.string().min(1),
@@ -46,7 +54,7 @@ projectsRouter.get('/', async (req, res: Response, next: NextFunction) => {
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true, title: true, address: true, customer: true,
-        updatedAt: true, createdAt: true,
+        updatedAt: true, createdAt: true, authorId: true,
         author: { select: { name: true } },
         estimates: {
           select: { id: true, title: true, deviceType: true, status: true, totalRub: true },
@@ -144,6 +152,10 @@ projectsRouter.patch('/:id', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), valida
  * утверждённый расчёт и расчёт с выпущенным КП или зафиксированной версией не
  * удаляются. Хоть одна такая единица — 422 `PROJECT_UNITS_PROTECTED` со
  * списком, и не удаляется ничего: удалить полпроекта хуже, чем ничего.
+ *
+ * `?force=1` — администратор, увидев этот список, удаляет проект всё равно:
+ * вместе с единицами уходят и слепки выпущенных КП. Что именно было защищено,
+ * остаётся в журнале аудита (`project.delete`, `forced`, `protectedUnits`).
  */
 projectsRouter.delete('/:id', requireRole('ADMIN'), async (req, res: Response, next: NextFunction) => {
   try {
@@ -177,7 +189,8 @@ projectsRouter.delete('/:id', requireRole('ADMIN'), async (req, res: Response, n
         protectedSnapshots: e._count.snapshots,
       })),
     )
-    if (blocks.length > 0) {
+    const force = req.query.force === '1' || req.query.force === 'true'
+    if (blocks.length > 0 && !force) {
       res.status(422).json({
         message: projectDeletionMessage(blocks),
         code: 'PROJECT_UNITS_PROTECTED',
@@ -205,6 +218,9 @@ projectsRouter.delete('/:id', requireRole('ADMIN'), async (req, res: Response, n
     await audit(auth.userId, 'project.delete', 'Project', id, {
       title: project.title,
       units: project.estimates.length,
+      ...(blocks.length > 0
+        ? { forced: true, protectedUnits: blocks.map((b) => ({ id: b.id, title: b.title, reason: b.reason })) }
+        : {}),
     })
     res.status(204).send()
   } catch (e) { next(e) }

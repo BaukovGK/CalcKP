@@ -5,7 +5,8 @@ import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { requireRole } from '../middleware/rbac'
 import { validate } from '../middleware/validate'
 import { audit, auditRepeating } from '../utils/audit'
-import { canAccessEstimate, canReadEstimate, seesAllEstimates } from '../utils/access'
+import { canAccessEstimate, canReadEstimate, canReadForPurchase, seesAllEstimates } from '../utils/access'
+import { purchaseEstimateView } from '../utils/purchase-view'
 import { verifyKpTotal } from '../utils/estimate-economics'
 import { mvkIssues } from '../utils/mvk'
 import { ESTIMATE_CHANGED, isStaleTreeWrite, isSurveyRevRegression, isVersionConflict, SURVEY_CHANGED } from '../utils/survey-write'
@@ -55,6 +56,16 @@ estimatesRouter.get('/', async (req, res: Response, next: NextFunction) => {
     // ограничен своими для всех, кроме ADMIN.
     const seesAll = seesAllEstimates(auth.userRole)
     const where = seesAll ? {} : { authorId: auth.userId }
+    // Снабженцу — список заявок на закупку: без сумм, ОЛ и проекта.
+    if (auth.userRole === 'BUYER') {
+      const units = await prisma.estimate.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, title: true, deviceType: true, status: true, updatedAt: true, author: { select: { name: true } } },
+      })
+      res.json(units)
+      return
+    }
     const estimates = await prisma.estimate.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
@@ -94,10 +105,11 @@ estimatesRouter.get('/:id', async (req, res: Response, next: NextFunction) => {
       include: { snapshots: { orderBy: { version: 'desc' }, take: 1 } },
     })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
-    if (!canReadEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+    if (!canReadForPurchase(auth.userRole, estimate.authorId, auth.userId)) {
       res.status(403).json({ message: 'Нет доступа' }); return
     }
-    res.json(estimate)
+    // Снабженец читает расчёт только ради заявки на закупку — без цен продажи.
+    res.json(auth.userRole === 'BUYER' ? purchaseEstimateView(estimate) : estimate)
   } catch (e) { next(e) }
 })
 

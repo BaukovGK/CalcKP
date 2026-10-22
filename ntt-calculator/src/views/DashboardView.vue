@@ -23,14 +23,36 @@
       <div class="topbar">
         <div class="tb-title">Проекты</div>
         <div class="tb-spacer"></div>
+        <!-- «Все/Свои» — тем, кому виден весь список; инженер и так видит
+             только свои проекты. -->
+        <div v-if="canSeeAll" class="seg" role="group" aria-label="Чьи проекты показать">
+          <button class="chip-f" :class="{ on: filter.scope === 'all' }" @click="filter.scope = 'all'">Все</button>
+          <button class="chip-f" :class="{ on: filter.scope === 'mine' }" @click="filter.scope = 'mine'">Свои</button>
+        </div>
         <!-- Главное действие экрана — акцентной кнопкой, как «Добавить
              единицу» в проекте: серой она теряется среди служебных. -->
         <button v-if="canCreate" class="btn btn-am" @click="newOpen = true">＋ Новый проект</button>
       </div>
 
       <div class="dash-filters">
-        <input class="fi dash-search" v-model="search" placeholder="Поиск по объекту, заказчику, адресу…" />
-        <button class="btn btn-g" @click="search = ''">Сбросить</button>
+        <input class="fi dash-search" v-model="filter.search" placeholder="Поиск по объекту, заказчику, адресу…" />
+        <select class="fi dash-sel" v-model="filter.deviceType" aria-label="Тип оборудования">
+          <option value="">Любое оборудование</option>
+          <option v-for="(label, t) in DEVICE_LABELS" :key="t" :value="t">{{ label }}</option>
+        </select>
+        <select class="fi dash-sel" v-model="filter.status" aria-label="Статус единиц">
+          <option value="">Любой статус</option>
+          <option v-for="(label, st) in STATUS_LABELS" :key="st" :value="st">{{ label }}</option>
+        </select>
+        <select v-if="authors.length > 1" class="fi dash-sel" v-model="filter.authorId" aria-label="Автор">
+          <option value="">Все авторы</option>
+          <option v-for="a in authors" :key="a.id" :value="a.id">{{ a.name }}</option>
+        </select>
+        <button class="btn btn-g" :disabled="!hasActiveFilter(filter)" @click="resetFilter">Сбросить</button>
+        <div class="seg dash-view" role="group" aria-label="Вид списка">
+          <button class="chip-f" :class="{ on: view === 'cards' }" @click="view = 'cards'">Карточки</button>
+          <button class="chip-f" :class="{ on: view === 'table' }" @click="view = 'table'">Таблица</button>
+        </div>
       </div>
 
       <div class="calc-area">
@@ -45,6 +67,14 @@
           <div class="dash-state-txt">{{ projects.list.length === 0 ? 'Проектов пока нет. Создайте первый!' : 'Ничего не найдено.' }}</div>
           <button v-if="projects.list.length === 0 && canCreate" class="btn btn-am" @click="newOpen = true">＋ Создать проект</button>
         </div>
+        <ProjectsTable
+          v-else-if="view === 'table'"
+          :projects="filtered"
+          :can-delete="auth.role === 'ADMIN'"
+          show-totals
+          @open="router.push(`/projects/${$event}`)"
+          @delete="askDeleteProject($event, projects.list.find((p) => p.id === $event)?.title ?? '')"
+        />
         <div v-else class="dash-grid">
           <ProjectCard
             v-for="p in filtered" :key="p.id"
@@ -59,7 +89,7 @@
                В шапке кнопка теряется среди служебных, а в пустом состоянии
                исчезает после первого же проекта. При поиске плитки нет:
                там сетка показывает найденное, а не предлагает завести новое. -->
-          <button v-if="canCreate && !search.trim()" class="dash-add" @click="newOpen = true">
+          <button v-if="canCreate && !hasActiveFilter(filter)" class="dash-add" @click="newOpen = true">
             ＋ Новый проект
           </button>
         </div>
@@ -72,14 +102,21 @@
         Удалить <strong>{{ deleteProjectTitle }}</strong><template v-if="deleteUnits > 0">
         вместе с {{ deleteUnits }} {{ unitsWord(deleteUnits) }} оборудования</template>? Действие необратимо.
       </p>
-      <p v-if="deleteUnits > 0" class="mo-sub">
-        Единицу, по которой выпущено КП или зафиксирована версия, удалить нельзя: по ней заказчику
-        ушла цена. Если такая есть — проект останется целиком, и здесь будет сказано, какая.
+      <p v-if="deleteUnits > 0 && !deleteProtected" class="mo-sub">
+        Если по единице выпущено КП или зафиксирована версия, здесь будет сказано, какая, —
+        и проект можно будет удалить вместе с ними отдельным подтверждением.
       </p>
       <div v-if="deleteError" class="auth-err del-err">{{ deleteError }}</div>
+      <p v-if="deleteProtected" class="mo-sub del-force">
+        Вместе с проектом удалятся выпущенные КП и зафиксированные версии этих единиц.
+        Вернуть их будет нельзя; в журнале аудита останется запись, что и кем удалено.
+      </p>
       <template #footer>
         <button class="btn btn-g" @click="deleteProjectId = null">Отмена</button>
-        <button class="btn btn-danger" :disabled="deleting" @click="confirmDeleteProject">
+        <button v-if="deleteProtected" class="btn btn-danger" :disabled="deleting" @click="confirmDeleteProject(true)">
+          {{ deleting ? 'Удаление…' : 'Удалить вместе с КП' }}
+        </button>
+        <button v-else class="btn btn-danger" :disabled="deleting" @click="confirmDeleteProject(false)">
           {{ deleting ? 'Удаление…' : 'Удалить' }}
         </button>
       </template>
@@ -116,13 +153,19 @@
 
 <script setup lang="ts">
 import { apiErrorMessage } from '@/utils/api-error'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectsStore } from '@/stores/projects'
 import { projectsApi } from '@/api/projects'
 import { toast } from '@/composables/useToast'
+import type { DeviceType, EstimateStatus } from '@/api/estimates'
+import {
+  EMPTY_FILTER, filterProjects, hasActiveFilter, projectAuthors,
+  type ProjectFilter, type ProjectScope,
+} from '@/utils/project-filter'
 import ProjectCard  from '@/components/dashboard/ProjectCard.vue'
+import ProjectsTable from '@/components/dashboard/ProjectsTable.vue'
 import BaseModal    from '@/components/ui/BaseModal.vue'
 import ThemeToggle  from '@/components/ui/ThemeToggle.vue'
 import BugReportButton from '@/components/ui/BugReportButton.vue'
@@ -134,19 +177,42 @@ const auth     = useAuthStore()
 const canCreate = computed(() => auth.role !== 'VIEWER' && auth.role !== 'BUYER')
 const projects = useProjectsStore()
 
-const search  = ref('')
+/** «Все/Свои» — тем, кому сервер отдаёт весь список; инженеру — только свои. */
+const canSeeAll = computed(() => auth.role === 'ADMIN' || auth.role === 'MANAGER' || auth.role === 'VIEWER')
+
+const DEVICE_LABELS: Record<DeviceType, string> = { KNS: 'КНС', EMK: 'Ёмкость', KOL: 'Колодец' }
+const STATUS_LABELS: Record<EstimateStatus, string> = {
+  DRAFT: 'Черновик', CALC: 'Расчёт', REVIEW: 'Проверка', APPROVED: 'Утверждено', REJECTED: 'Отклонён',
+}
+
+// «Все/Свои» и вид списка — привычка сотрудника: помнятся между визитами.
+// Хранилище может быть недоступно (приватный режим) — тогда просто по умолчанию.
+const PREFS_KEY = 'ntt.dashboard'
+function readPrefs(): { scope?: ProjectScope; view?: 'cards' | 'table' } {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') ?? {} } catch { return {} }
+}
+const prefs = readPrefs()
+
+const filter = reactive<ProjectFilter>({ ...EMPTY_FILTER, scope: prefs.scope === 'mine' ? 'mine' : 'all' })
+const view = ref<'cards' | 'table'>(prefs.view === 'table' ? 'table' : 'cards')
+watch([() => filter.scope, view], ([scope, v]) => {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ scope, view: v })) } catch { /* без памяти */ }
+})
+
+function resetFilter() {
+  Object.assign(filter, { ...EMPTY_FILTER, scope: filter.scope })
+}
+
+const authors = computed(() => projectAuthors(projects.list))
+
 const newOpen = ref(false)
 const creating = ref(false)
 const formError = ref('')
 const form = reactive({ title: '', customer: '', address: '', notes: '' })
 
-const filtered = computed(() => {
-  const q = search.value.toLowerCase()
-  if (!q) return projects.list
-  return projects.list.filter(p =>
-    [p.title, p.customer ?? '', p.address ?? ''].join(' ').toLowerCase().includes(q)
-  )
-})
+const filtered = computed(() =>
+  filterProjects(projects.list, canSeeAll.value ? filter : { ...filter, scope: 'all' }, auth.user?.id),
+)
 
 function closeNew() {
   newOpen.value = false
@@ -186,19 +252,25 @@ function unitsWord(n: number): string {
 }
 const deleteError = ref('')
 const deleting    = ref(false)
+/**
+ * Сервер отказал: в проекте единицы с выпущенным КП. Администратор может
+ * удалить проект всё равно — вторым, явным подтверждением.
+ */
+const deleteProtected = ref(false)
 
 function askDeleteProject(id: string, title: string) {
   deleteProjectId.value    = id
   deleteProjectTitle.value = title
   deleteError.value = ''
+  deleteProtected.value = false
 }
 
-async function confirmDeleteProject() {
+async function confirmDeleteProject(force: boolean) {
   if (!deleteProjectId.value) return
   deleting.value = true; deleteError.value = ''
   try {
     const units = deleteUnits.value
-    await projectsApi.delete(deleteProjectId.value)
+    await projectsApi.delete(deleteProjectId.value, { force })
     projects.list = projects.list.filter(p => p.id !== deleteProjectId.value)
     toast(
       units > 0
@@ -209,6 +281,8 @@ async function confirmDeleteProject() {
     deleteProjectId.value = null
   } catch (e: unknown) {
     deleteError.value = apiErrorMessage(e, 'Ошибка удаления')
+    const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+    deleteProtected.value = code === 'PROJECT_UNITS_PROTECTED' && auth.role === 'ADMIN'
   } finally {
     deleting.value = false
   }
@@ -219,7 +293,12 @@ onMounted(() => projects.fetchAll())
 
 <style scoped>
 .dash-filters { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg1); flex-shrink: 0; }
-.dash-search  { flex: 1; min-width: 0; }
+.dash-filters { flex-wrap: wrap; align-items: center; }
+.dash-search  { flex: 1 1 220px; min-width: 0; }
+.dash-sel     { width: auto; flex: 0 0 auto; }
+.seg          { display: inline-flex; }
+.seg .chip-f + .chip-f { border-left: none; }
+.dash-view    { margin-left: auto; }
 .dash-grid    { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; padding: 12px; align-content: start; }
 /* Плитка «Новый проект» — тот же вид, что «Добавить оборудование» в проекте:
    пунктир акцентным цветом, высота карточки проекта. */
@@ -229,4 +308,5 @@ onMounted(() => projects.fetchAll())
 .dash-add:hover { background: var(--bg3); }
 .del-q { font-size: 14.5px; color: var(--tx2); line-height: 1.5; margin: 0 0 8px; }
 .del-err { margin: 10px 0 0; }
+.del-force { margin-top: 10px; color: var(--danger); }
 </style>

@@ -52,10 +52,19 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Снабженцу проекты закрыты: в них заказчики и цены продажи.
       path: '/projects/:id',
       name: 'project',
       component: ProjectView,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER', 'TECHNOLOG', 'VIEWER'] },
+    },
+    {
+      // Главный экран снабженца вместо проектов: единицы, по которым ведётся
+      // закупка, без сумм и заказчиков.
+      path: '/purchases',
+      name: 'purchases',
+      component: () => import('@/views/PurchasesView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'BUYER'] },
     },
     {
       // Единый опросный лист — вход в процесс: ОЛ → материализация →
@@ -93,7 +102,8 @@ const router = createRouter({
     },
     {
       // Заявка на закупку — отчёт поверх расчёта (ТЗ §9.6), поэтому вложена
-      // в его маршрут. BUYER ведёт закупку по чужим расчётам.
+      // в его маршрут. BUYER ведёт закупку по чужим расчётам; сам расчёт ему
+      // закрыт, сервер отдаёт его без цен продажи.
       path: '/calculator/:id/purchase',
       name: 'purchase-request',
       component: () => import('@/views/PurchaseRequestView.vue'),
