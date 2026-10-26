@@ -18,6 +18,9 @@
           <span v-hint="t.hint ?? null">{{ t.label }}</span>
           <span v-if="countOf(t.k) != null" class="nav-cnt">{{ countOf(t.k) }}</span>
         </button>
+        <!-- Технолога «Проекты» сразу возвращают сюда — инструкции открываются отсюда. -->
+        <div class="nav-section">Справка</div>
+        <button class="nav-link" @click="router.push('/help')">Инструкции</button>
       </div>
       <div class="sidebar-footer">
         <BugReportButton />
