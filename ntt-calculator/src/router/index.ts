@@ -132,6 +132,14 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      // Инструкции пользователя — всем ролям; без :doc открывается инструкция
+      // своей роли (utils/help-docs.ts).
+      path: '/help/:doc?',
+      name: 'help',
+      component: () => import('@/views/HelpView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: AdminView,

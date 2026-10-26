@@ -9,6 +9,7 @@
         <div class="nav-section">Навигация</div>
         <button class="nav-link nav-link--active">Заявки на закупку</button>
         <button class="nav-link" @click="router.push('/prices')">Прайс-лист</button>
+        <button class="nav-link" @click="router.push('/help')">Инструкции</button>
       </div>
       <div class="sidebar-footer">
         <BugReportButton />
