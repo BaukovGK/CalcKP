@@ -66,3 +66,14 @@ export const b24Api = {
     return api.post<{ id: string }>(`/b24/deals/${encodeURIComponent(id)}/projects`, body).then((r) => r.data)
   },
 }
+
+/** Привязка существующего проекта к сделке (этап 7). */
+export const b24ProjectApi = {
+  /** `deal` — номер сделки или адрес её карточки из портала. */
+  linkDeal(projectId: string, deal: string): Promise<DealSummary> {
+    return api.put<DealSummary>(`/b24/projects/${encodeURIComponent(projectId)}/deal`, { deal }).then((r) => r.data)
+  },
+  unlinkDeal(projectId: string): Promise<void> {
+    return api.delete(`/b24/projects/${encodeURIComponent(projectId)}/deal`).then(() => undefined)
+  },
+}

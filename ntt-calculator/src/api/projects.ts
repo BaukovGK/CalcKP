@@ -32,6 +32,8 @@ export interface ProjectListItem {
 }
 
 export interface ProjectDetail extends ProjectListItem {
+  /** Сделка Битрикс24, по которой ведётся проект; null — не привязан. */
+  b24DealId?: string | null
   estimates: ProjectEstimate[]
 }
 
