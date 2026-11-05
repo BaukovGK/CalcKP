@@ -43,7 +43,7 @@ import {
   type KpDocument,
   type KpPosition,
 } from './kp-document'
-import { termsItems } from './kp-terms'
+import { OUTGOING_LINE, termsItems } from './kp-terms'
 
 const FONT = 'Calibri'
 const MONEY_FMT = '# ##0.00'
@@ -123,7 +123,7 @@ export function renderKpXlsxWorkbook(doc: KpDocument): ExcelJS.Workbook {
 
   // ── Шапка ──
   wide('Коммерческое предложение', { bold: true, size: 18, height: 24 })
-  wide(`Исх. ${doc.number ?? '___'} от ${formatDate(doc.issuedAt)}`, { bold: true, size: 12, height: 18 })
+  wide(OUTGOING_LINE, { bold: true, size: 12, height: 18 })
   blank()
   if (doc.customer) wide(`Заказчик: ${doc.customer}`, { size: 12, height: 17 })
   if (doc.object) wide(`Объект: ${doc.object}`, { size: 12, height: 17 })

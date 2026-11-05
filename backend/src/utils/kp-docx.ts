@@ -2,7 +2,7 @@
  * Рендер печатной формы КП в .docx — на одну единицу и на проект целиком.
  *
  * Вёрстка повторяет рабочее КП коммерческого отдела
- * (`doc/Эталон_КП_разбор.md`): заголовок, «Исх. ⟨номер⟩ от ⟨дата⟩», заказчик
+ * (`doc/Эталон_КП_разбор.md`): заголовок, «Исх. № ___ от ___», заказчик
  * и объект, таблица «№ · Наименование номенклатуры · Кол-во · Ед. изм. ·
  * Цена · Сумма», общая сумма, девять пунктов условий, подпись, исполнитель и
  * реквизиты в подвале.
@@ -36,7 +36,7 @@ import {
   type KpDocument,
   type KpPosition,
 } from './kp-document'
-import { termsItems } from './kp-terms'
+import { OUTGOING_LINE, termsItems } from './kp-terms'
 
 const FONT = 'Times New Roman'
 /** Размеры docx — в полуточках: 20 = 10 пт. */
@@ -168,7 +168,7 @@ function signatureBlock(doc: KpDocument): Table {
 export async function renderKpDocx(doc: KpDocument): Promise<Buffer> {
   const children: Array<Paragraph | Table> = [
     para('Коммерческое предложение', { bold: true, size: SIZE.head, spacingAfter: 80 }),
-    para(`Исх. ${doc.number ?? '___'} от ${formatDate(doc.issuedAt)}`, {
+    para(OUTGOING_LINE, {
       bold: true,
       size: SIZE.sub,
       spacingAfter: 200,

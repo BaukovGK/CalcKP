@@ -26,7 +26,7 @@ import {
   type KpDocument,
   type KpPosition,
 } from './kp-document'
-import { termsItems } from './kp-terms'
+import { OUTGOING_LINE, termsItems } from './kp-terms'
 
 /** Дескрипторы начертаний: pdfkit принимает шрифт как Buffer. */
 interface FontFaces {
@@ -147,7 +147,7 @@ export function renderKpPdf(doc: KpDocument): Promise<Buffer> {
   const content: Content[] = [
     { text: 'Коммерческое предложение', fontSize: 16, bold: true, margin: [0, 0, 0, 4] },
     {
-      text: `Исх. ${doc.number ?? '___'} от ${formatDate(doc.issuedAt)}`,
+      text: OUTGOING_LINE,
       fontSize: 11,
       bold: true,
       margin: [0, 0, 0, 12],
@@ -220,7 +220,7 @@ export function renderKpPdf(doc: KpDocument): Promise<Buffer> {
 
   const definition: TDocumentDefinitions = {
     info: {
-      title: doc.number ? `Коммерческое предложение ${doc.number}` : 'Коммерческое предложение',
+      title: 'Коммерческое предложение',
       author: doc.company.name,
       subject: [doc.customer, doc.object].filter(Boolean).join(' · '),
     },
