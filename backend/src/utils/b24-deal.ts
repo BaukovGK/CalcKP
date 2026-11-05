@@ -16,6 +16,8 @@ export interface DealSummary {
   /** Заказчик: компания сделки, нет её — контакт. */
   customer: string | null
   assignedName: string | null
+  /** Адрес компании — черновик адреса объекта. */
+  address: string | null
   /** Ссылка на сделку в портале. */
   url: string
 }
@@ -45,6 +47,7 @@ export function dealSummary(
   company: Rec | null,
   contact: Rec | null,
   assigned: Rec | null,
+  address: string | null = null,
 ): DealSummary {
   const id = entityId(deal.ID) ?? ''
   const sum = Number(deal.OPPORTUNITY)
@@ -58,6 +61,24 @@ export function dealSummary(
     contactId: entityId(deal.CONTACT_ID),
     customer: str(company?.TITLE) ?? personName(contact),
     assignedName: personName(assigned),
+    address,
     url: `https://${portal}/crm/deal/details/${id}/`,
   }
+}
+
+/**
+ * Адрес компании из crm.address.list — черновик адреса объекта: менеджер
+ * поправит, если объект не там. Сначала фактический (TYPE_ID 1), потом
+ * юридический (6), потом любой.
+ */
+export function companyAddress(rows: unknown): string | null {
+  const list = Array.isArray(rows) ? (rows as Rec[]) : []
+  const pick = list.find(r => String(r.TYPE_ID) === '1') ?? list.find(r => String(r.TYPE_ID) === '6') ?? list[0]
+  if (!pick) return null
+  const parts = [pick.POSTAL_CODE, pick.PROVINCE, pick.REGION, pick.CITY, pick.ADDRESS_1, pick.ADDRESS_2]
+    .map(str)
+    .filter((p): p is string => p != null)
+  // Область и город часто совпадают («Москва, Москва») — без повторов.
+  const uniq = parts.filter((p, i) => parts.indexOf(p) === i)
+  return uniq.length ? uniq.join(', ') : null
 }

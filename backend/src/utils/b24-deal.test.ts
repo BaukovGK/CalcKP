@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dealSummary, entityId } from './b24-deal'
+import { companyAddress, dealSummary, entityId } from './b24-deal'
 import { launchDealId, launchTokens } from './bitrix-auth'
 
 describe('запуск из вкладки сделки', () => {
@@ -28,7 +28,7 @@ describe('шапка сделки', () => {
     const s = dealSummary('nttcrm.bitrix24.ru', deal, { TITLE: 'ООО «Вода»' }, null, { LAST_NAME: 'Иванов', NAME: 'Пётр' })
     expect(s).toEqual({
       id: '12', title: 'КНС Протвино', stageId: 'NEW', opportunity: 1500000, currency: 'RUB',
-      companyId: '3', contactId: null, customer: 'ООО «Вода»', assignedName: 'Иванов Пётр',
+      companyId: '3', contactId: null, customer: 'ООО «Вода»', assignedName: 'Иванов Пётр', address: null,
       url: 'https://nttcrm.bitrix24.ru/crm/deal/details/12/',
     })
     const byContact = dealSummary('p', { ID: '1', COMPANY_ID: '0', CONTACT_ID: '9', OPPORTUNITY: '' }, null, { NAME: 'Анна', LAST_NAME: 'Петрова' }, null)
@@ -39,5 +39,19 @@ describe('шапка сделки', () => {
     expect(entityId('0')).toBeNull()
     expect(entityId(' 7 ')).toBe('7')
     expect(entityId('7a')).toBeNull()
+  })
+})
+
+describe('адрес компании', () => {
+  it('фактический важнее юридического, без повторов и пустот', () => {
+    const rows = [
+      { TYPE_ID: '6', CITY: 'Москва', ADDRESS_1: 'ул. Юридическая, 1' },
+      { TYPE_ID: '1', POSTAL_CODE: '142281', PROVINCE: 'Московская обл.', CITY: 'Протвино', ADDRESS_1: 'ул. Победы, 2', ADDRESS_2: '' },
+    ]
+    expect(companyAddress(rows)).toBe('142281, Московская обл., Протвино, ул. Победы, 2')
+    expect(companyAddress([{ TYPE_ID: '6', PROVINCE: 'Москва', CITY: 'Москва', ADDRESS_1: 'ул. Ленина, 5' }])).toBe('Москва, ул. Ленина, 5')
+    expect(companyAddress([])).toBeNull()
+    expect(companyAddress(null)).toBeNull()
+    expect(companyAddress([{ TYPE_ID: '1' }])).toBeNull()
   })
 })
