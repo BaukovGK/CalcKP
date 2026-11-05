@@ -411,7 +411,7 @@
       <div v-else-if="!versions.length" class="ver-state">Версий пока нет</div>
       <table v-else class="ver-tbl">
         <thead>
-          <tr><th>Версия</th><th>Дата</th><th>Причина</th><th class="ver-thw"><span v-hint.plain="'Версия прайса, по которой посчитаны цены, и версия шаблона изделия, по которой собран состав'">Прайс / шаблон</span></th><th class="num">Итог ₽</th><th>КП</th></tr>
+          <tr><th>Версия</th><th>Дата</th><th>Причина</th><th class="ver-thw"><span v-hint.plain="'Версия прайса, по которой посчитаны цены, и версия шаблона изделия, по которой собран состав'">Прайс / шаблон</span></th><th class="num">Итог ₽</th><th>КП</th><th v-if="versionsDeal">Сделка Б24</th></tr>
         </thead>
         <tbody>
           <tr v-for="v in versions" :key="v.id">
@@ -446,6 +446,24 @@
                 :disabled="kpDownload === `${v.version}:xlsx`"
                 @click="downloadKp(v.version, 'xlsx')"
               >xlsx</button>
+            </td>
+            <!-- Проект привязан к сделке: выпущенное КП уходит в её ленту с PDF
+                 (doc/План_Б24_сделка.md, этап 6). Не ушло — повтор отсюда. -->
+            <td v-if="versionsDeal" class="ver-dl">
+              <template v-if="v.reason === 'KP'">
+                <span v-if="v.b24SentAt" v-hint.plain="'КП с PDF в ленте сделки Битрикс24'" class="ver-b24-ok">✓ {{ fmtDateTime(v.b24SentAt) }}</span>
+                <template v-else>
+                  <span v-if="v.b24Error" v-hint.plain="v.b24Error" class="ver-b24-err">не ушло</span>
+                  <button
+                    v-if="!readOnly"
+                    class="btn btn-xs"
+                    v-hint="'Отправить это КП с PDF комментарием в ленту сделки от вашего имени'"
+                    :disabled="b24Sending === v.version"
+                    @click="sendToB24(v.version)"
+                  >{{ b24Sending === v.version ? 'Отправляем…' : (v.b24Error ? 'Отправить повторно' : 'Отправить') }}</button>
+                </template>
+              </template>
+              <span v-else class="ver-dl--none">—</span>
             </td>
           </tr>
         </tbody>
@@ -1165,6 +1183,25 @@ onBeforeRouteLeave(async () => {
  *
  * Доступно и наблюдателю: чтение КП шире правки расчёта.
  */
+/** Проект привязан к сделке Битрикс24 — в «Версиях» колонка отправки КП. */
+const versionsDeal = computed(() => versions.value.some((v) => v.b24Deal))
+const b24Sending = ref<number | null>(null)
+
+/** Выпущенное КП — в ленту сделки ещё раз; список версий перечитывается. */
+async function sendToB24(version: number) {
+  if (!st.estimate) return
+  b24Sending.value = version
+  try {
+    await estimatesApi.sendKpToB24(st.estimate.id, version)
+    toast(`КП v${version} отправлено в ленту сделки`, 'success')
+  } catch (err) {
+    toast(apiErrorMessage(err, 'Не удалось отправить КП в сделку'), 'error')
+  } finally {
+    b24Sending.value = null
+  }
+  try { versions.value = await estimatesApi.snapshots(st.estimate.id) } catch { /* список обновится при следующем открытии */ }
+}
+
 async function downloadKp(version: number, format: 'docx' | 'pdf' | 'xlsx') {
   if (!st.estimate) return
   kpDownload.value = `${version}:${format}`
@@ -1315,6 +1352,8 @@ onMounted(() => {
 .ver-tbl th.ver-thw { white-space: normal; }
 .ver-dl { white-space: nowrap; }
 .ver-dl--none { color: var(--faint); text-align: center; }
+.ver-b24-ok  { color: var(--green); font-size: 12px; }
+.ver-b24-err { color: var(--danger); font-size: 12px; margin-right: 6px; }
 .ver-reason { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 
 .body { flex: 1; display: flex; min-height: 0; }

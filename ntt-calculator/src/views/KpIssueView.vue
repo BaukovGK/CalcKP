@@ -50,6 +50,13 @@
 
       <div v-else-if="issued" class="kpv-state">
         <strong>КП {{ issued.kp.number }} выпущено</strong>
+        <!-- Проект привязан к сделке Битрикс24 — КП ушло в её ленту с PDF.
+             Не ушло — выпуск всё равно состоялся, повтор — из «Версий». -->
+        <p v-if="issued.b24?.status === 'sent'" class="kpv-b24">Отправлено в ленту сделки Битрикс24 вместе с PDF.</p>
+        <p v-else-if="issued.b24?.status === 'failed'" class="kpv-state--err">
+          В ленту сделки Битрикс24 не отправлено: {{ issued.b24.error }}.
+          Отправить повторно можно из окна «Версии» расчёта.
+        </p>
         <p v-if="downloadError" class="kpv-state--err">{{ downloadError }}</p>
         <p>Нажмите «Скачать КП», чтобы скачать уже выпущенный документ в выбранном формате.</p>
       </div>
@@ -603,6 +610,7 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
 </script>
 
 <style scoped>
+.kpv-b24 { color: var(--green); }
 
 
 

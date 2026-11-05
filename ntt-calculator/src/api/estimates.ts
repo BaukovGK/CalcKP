@@ -55,6 +55,12 @@ export interface EstimateSnapshotInfo {
    * состав (engines/builtin-revisions.ts). `null` — слепок снят до учёта редакций.
    */
   builtinRevision?: number | null
+  /** Проект привязан к сделке Битрикс24 — у КП есть статус отправки в ленту. */
+  b24Deal?: boolean
+  /** КП ушло в ленту сделки; null — не уходило. */
+  b24SentAt?: string | null
+  /** Почему последняя отправка не прошла. */
+  b24Error?: string | null
 }
 
 export type SnapshotReason = 'CREATE' | 'MANUAL' | 'KP'
@@ -66,6 +72,8 @@ export interface KpResult {
   snapshot: { version: number; priceListVersion: number; createdAt: string }
   /** Исходящий номер, под которым КП ушло заказчику. */
   kp: { number: string }
+  /** Отправка в ленту сделки Битрикс24: skipped — проект без сделки. */
+  b24?: { status: 'sent'; sentAt: string } | { status: 'failed'; error: string } | { status: 'skipped' }
 }
 
 /** Узел состава изделия — строка списка «В комплекте». */
@@ -169,6 +177,11 @@ export const estimatesApi = {
 
   delete(id: string): Promise<void> {
     return api.delete(`/estimates/${id}`).then(() => undefined)
+  },
+
+  /** Выпущенное КП — в ленту сделки Битрикс24 ещё раз. */
+  sendKpToB24(id: string, version: number): Promise<{ status: 'sent'; sentAt: string }> {
+    return api.post(`/estimates/${id}/snapshots/${version}/b24`).then((r) => r.data)
   },
 
   /** История версий (без содержимого деревьев — они тяжёлые). */

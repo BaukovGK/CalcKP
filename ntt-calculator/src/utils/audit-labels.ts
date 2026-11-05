@@ -44,6 +44,7 @@ export const AUDIT_LABELS: Readonly<Record<string, string>> = {
   'estimate.snapshot': 'Зафиксирована версия',
   'estimate.kp': 'Выпущено КП',
   'estimate.kp.export': 'Выгружено КП',
+  'estimate.kp.b24': 'КП в ленту сделки Битрикс24',
 
   'project.create': 'Создан проект',
   'project.update': 'Изменён проект',

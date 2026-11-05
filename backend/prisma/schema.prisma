@@ -167,6 +167,12 @@ model EstimateSnapshot {
   /// описание изделия и состав (utils/kp-payload.ts). null — печатается по
   /// умолчаниям, собранным из опросного листа.
   kpJson           Json?
+  /// Отправка КП в ленту сделки Битрикс24 (doc/План_Б24_сделка.md, этап 6):
+  /// когда ушло и id комментария; b24Error — почему не ушло (последняя
+  /// попытка). Всё null — не отправлялось (проект без сделки).
+  b24SentAt        DateTime?
+  b24CommentId     String?
+  b24Error         String?
   createdAt        DateTime @default(now())
 
   @@unique([estimateId, version])
