@@ -8,8 +8,9 @@ import { randomBytes } from 'node:crypto'
  * не зависит от express и базы: проверка запуска, сопоставление с учёткой и
  * одноразовые коды обмена. Маршруты — `routes/bitrix.routes.ts`.
  *
- * Ключ портала используется один раз — узнать, кто пришёл, — и нигде не
- * хранится: дальше работают собственные токены приложения.
+ * Здесь ключ портала нужен узнать, кто пришёл; сессия в калькуляторе дальше
+ * идёт на собственных токенах приложения. Для вызовов REST от имени
+ * сотрудника (сделка, лента) ключ сохраняется в B24Token — utils/b24-client.ts.
  */
 
 /** Настройки из окружения. null — вход из Битрикс24 выключен. */
@@ -20,6 +21,11 @@ export interface BitrixConfig {
   memberId?: string
   /** `client_id` локального приложения; пусто — не сверяется. */
   clientId?: string
+  /**
+   * `client_secret` приложения — продлевать ключи сотрудников без открытой
+   * вкладки (utils/b24-client.ts). Пусто — ключ живёт час от открытия.
+   */
+  clientSecret?: string
 }
 
 export function bitrixConfig(env: NodeJS.ProcessEnv = process.env): BitrixConfig | null {
@@ -29,6 +35,7 @@ export function bitrixConfig(env: NodeJS.ProcessEnv = process.env): BitrixConfig
     portal,
     memberId: env.BITRIX_MEMBER_ID?.trim() || undefined,
     clientId: env.BITRIX_CLIENT_ID?.trim() || undefined,
+    clientSecret: env.BITRIX_CLIENT_SECRET?.trim() || undefined,
   }
 }
 
@@ -37,6 +44,46 @@ export interface BitrixLaunch {
   domain?: string
   authId?: string
   memberId?: string
+  /** Ключ продления (`REFRESH_ID`), 28 дней. */
+  refreshId?: string
+  /** Через сколько секунд истечёт `AUTH_ID` (`AUTH_EXPIRES`). */
+  authExpires?: string
+  /** Где открыто: `DEFAULT` — меню портала, `CRM_DEAL_DETAIL_TAB` — сделка. */
+  placement?: string
+  /** `PLACEMENT_OPTIONS` — JSON строкой, у вкладки сделки `{"ID":"123"}`. */
+  placementOptions?: string
+}
+
+/** Встройка вкладки в карточку сделки (placement.bind). */
+export const DEAL_TAB_PLACEMENT = 'CRM_DEAL_DETAIL_TAB'
+
+/**
+ * ID сделки, если приложение открыто во вкладке сделки, иначе null. Берётся
+ * только число: дальше оно попадает в адрес экрана и в запросы к порталу.
+ */
+export function launchDealId(launch: Pick<BitrixLaunch, 'placement' | 'placementOptions'>): string | null {
+  if (launch.placement !== DEAL_TAB_PLACEMENT || !launch.placementOptions) return null
+  let opts: unknown
+  try { opts = JSON.parse(launch.placementOptions) } catch { return null }
+  const id = (opts as { ID?: unknown } | null)?.ID
+  const s = typeof id === 'number' ? String(id) : typeof id === 'string' ? id.trim() : ''
+  return /^[1-9]\d{0,17}$/.test(s) ? s : null
+}
+
+/** Ключи сотрудника из запуска — для B24Token. null — портал ключ не прислал. */
+export interface LaunchTokens {
+  accessToken: string
+  refreshToken: string | null
+  expiresAt: Date
+}
+
+export function launchTokens(launch: BitrixLaunch, now = Date.now()): LaunchTokens | null {
+  const accessToken = launch.authId?.trim()
+  if (!accessToken) return null
+  const sec = Number(launch.authExpires)
+  // Портал обещает час; странное значение — считаем, что час.
+  const ttl = Number.isFinite(sec) && sec > 0 && sec <= 86_400 ? sec : 3600
+  return { accessToken, refreshToken: launch.refreshId?.trim() || null, expiresAt: new Date(now + ttl * 1000) }
 }
 
 /** Сотрудник портала, как его вернул `user.current`. */
@@ -52,7 +99,14 @@ export interface BitrixProfile {
  * Вызов метода REST портала с ключом сотрудника. Ответ — поле `result`;
  * ошибка портала или сети — исключение.
  */
-export type BitrixRest = (method: string, authId: string) => Promise<unknown>
+export type BitrixRest = (method: string, authId: string, params?: Record<string, unknown>) => Promise<unknown>
+
+/** Ошибка портала с его кодом (`expired_token`, `ACCESS_DENIED`, …). */
+export class BitrixRestError extends Error {
+  constructor(readonly method: string, readonly status: number, readonly code: string, description: string) {
+    super(`${method}: ${status} ${code} ${description}`.trim())
+  }
+}
 
 /** Причина отказа — код для журнала и экрана `/bitrix`. */
 export type BitrixDenial =
@@ -209,19 +263,20 @@ export function createOneTimeCodes(ttlMs = 60_000, maxCodes = 1000): OneTimeCode
 
 /**
  * REST портала через fetch. Ключ — в теле запроса, а не в адресе: адреса
- * оседают в журналах прокси.
+ * оседают в журналах прокси. Тело — JSON: в нём едут и вложенные параметры
+ * (фильтры, файлы base64).
  */
-export function fetchBitrixRest(portal: string, timeoutMs = 8000): BitrixRest {
-  return async (method, authId) => {
+export function fetchBitrixRest(portal: string, timeoutMs = 15000): BitrixRest {
+  return async (method, authId, params = {}) => {
     const res = await fetch(`https://${portal}/rest/${method}.json`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ auth: authId }).toString(),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...params, auth: authId }),
       signal: AbortSignal.timeout(timeoutMs),
     })
     const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string; error_description?: string }
     if (!res.ok || body.error) {
-      throw new Error(`${method}: ${res.status} ${body.error ?? ''} ${body.error_description ?? ''}`.trim())
+      throw new BitrixRestError(method, res.status, body.error ?? '', body.error_description ?? '')
     }
     return body.result
   }

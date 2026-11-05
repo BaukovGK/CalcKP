@@ -73,6 +73,8 @@ services:
       JWT_REFRESH_EXPIRES: 7d
       # Фронт отдаётся тем же nginx, поэтому запросы идут с его origin.
       CORS_ORIGIN: ${PUBLIC_URL:-http://localhost}
+      # Адрес калькулятора для портала: обработчик вкладки сделки (placement.bind).
+      PUBLIC_URL: ${PUBLIC_URL:-}
       # Дамп снимается ДО применения миграций: у `prisma migrate deploy`
       # обратного хода нет, и восстановление из дампа — единственный путь назад.
       # `require` (по умолчанию) означает «не снялся дамп — не стартуем».
@@ -119,6 +121,9 @@ services:
       BITRIX_PORTAL: ${BITRIX_PORTAL:-}
       BITRIX_MEMBER_ID: ${BITRIX_MEMBER_ID:-}
       BITRIX_CLIENT_ID: ${BITRIX_CLIENT_ID:-}
+      # Ключ приложения — продлевать ключи сотрудников для вызовов REST от их
+      # имени (сделка, лента; doc/План_Б24_сделка.md). Пусто — ключ живёт час.
+      BITRIX_CLIENT_SECRET: ${BITRIX_CLIENT_SECRET:-}
     volumes:
       # Дампы лежат на хосте, а не в томе: их надо уметь забрать с машины,
       # а том исчезнет вместе с `docker compose down -v`.

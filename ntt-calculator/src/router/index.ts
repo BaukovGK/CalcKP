@@ -59,6 +59,14 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER', 'TECHNOLOG', 'VIEWER'] },
     },
     {
+      // Вкладка «Калькулятор» в карточке сделки Битрикс24
+      // (doc/План_Б24_сделка.md). Снабженцу закрыта, как и проекты.
+      path: '/deals/:id',
+      name: 'deal',
+      component: () => import('@/views/DealView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'MANAGER', 'ENGINEER', 'TECHNOLOG', 'VIEWER'] },
+    },
+    {
       // Главный экран снабженца вместо проектов: единицы, по которым ведётся
       // закупка, без сумм и заказчиков.
       path: '/purchases',

@@ -34,6 +34,10 @@ export type AuditAction =
    * заблокирована, чужой портал или ключ. В записи — кто пришёл и почему.
    */
   | 'auth.bitrix_denied'
+  /** Вкладка «Калькулятор» добавлена в карточку сделки портала (placement.bind). */
+  | 'auth.bitrix_tab_bind'
+  /** Вкладка «Калькулятор» убрана из карточки сделки (placement.unbind). */
+  | 'auth.bitrix_tab_unbind'
   | 'estimate.create'
   /**
    * Правка опросного листа — какие ответы изменились.

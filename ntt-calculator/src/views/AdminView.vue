@@ -10,6 +10,7 @@
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'users' }"  @click="tab = 'users'">Пользователи</button>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'audit' }"  @click="tab = 'audit'; loadAudit()">Журнал действий</button>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'db' }"     @click="tab = 'db'; loadBackups()">База данных</button>
+        <button class="nav-link" :class="{ 'nav-link--active': tab === 'b24' }"    @click="tab = 'b24'">Битрикс24</button>
         <button class="nav-link" :class="{ 'nav-link--active': tab === 'bugs' }"   @click="tab = 'bugs'">
           Отчёты об ошибках<span v-if="bugsNew" v-hint.plain="'Новых, ещё не разобранных'" class="nav-cnt bugs-cnt">{{ bugsNew }}</span>
         </button>
@@ -265,6 +266,9 @@
         </div>
       </div>
 
+      <!-- ── Битрикс24: вкладка в сделках ── -->
+      <B24Panel v-if="tab === 'b24'" />
+
       <!-- ── Отчёты об ошибках ──
            Смонтирован сразу, а не при первом заходе: список нужен счётчику
            новых у пункта меню. -->
@@ -397,6 +401,7 @@ import {
 import { AUDIT_HINTS } from '@/hints/account'
 import BaseModal   from '@/components/ui/BaseModal.vue'
 import BugReportsPanel from '@/components/admin/BugReportsPanel.vue'
+import B24Panel from '@/components/admin/B24Panel.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import BugReportButton from '@/components/ui/BugReportButton.vue'
 import UserMenu from '@/components/ui/UserMenu.vue'
@@ -408,11 +413,12 @@ import { MIN_PASSWORD_LENGTH } from '@/utils/password-form'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-type AdminTab = 'users' | 'audit' | 'db' | 'bugs'
+type AdminTab = 'users' | 'audit' | 'db' | 'b24' | 'bugs'
 const TAB_TITLES: Record<AdminTab, string> = {
   users: 'Пользователи',
   audit: 'Журнал действий',
   db: 'База данных',
+  b24: 'Битрикс24',
   bugs: 'Отчёты об ошибках',
 }
 /** Раздел можно открыть ссылкой: `/admin?tab=bugs`. */

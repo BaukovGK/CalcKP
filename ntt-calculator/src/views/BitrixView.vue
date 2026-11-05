@@ -71,7 +71,9 @@ onMounted(async () => {
     busy.value = true
     try {
       await auth.loginWithBitrix(code)
-      await router.replace('/')
+      // Открыто во вкладке сделки — сразу экран этой сделки.
+      const deal = route.query.deal
+      await router.replace(typeof deal === 'string' && /^[1-9]\d*$/.test(deal) ? `/deals/${deal}` : '/')
       return
     } catch (e) {
       message.value = apiErrorMessage(e, 'Войти не удалось')

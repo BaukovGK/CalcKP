@@ -186,6 +186,8 @@ adminRouter.patch('/users/:id', validate(patchUserSchema), async (req, res: Resp
       data:  revoke ? { ...data, tokenVersion: { increment: 1 } } : data,
       select: USER_SELECT,
     })
+    // Отвязанная учётка ключами сотрудника к порталу больше не пользуется.
+    if (patch.bitrixUserId === null) await prisma.b24Token.deleteMany({ where: { userId: id } })
     await audit(auth.userId, 'user.update', 'User', id, patch)
     res.json(user)
   } catch (e) { next(e) }

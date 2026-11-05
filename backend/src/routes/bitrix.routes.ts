@@ -9,9 +9,10 @@ import { audit } from '../utils/audit'
 import { logger } from '../utils/logger'
 import { createLimiter, limitByIp } from '../utils/rate-limit'
 import {
-  bitrixConfig, BitrixAuthError, createOneTimeCodes, fetchBitrixRest, resolveAccount, verifyLaunch,
-  type BitrixDenial, type BitrixLaunch, type BitrixRest,
+  bitrixConfig, BitrixAuthError, createOneTimeCodes, fetchBitrixRest, launchDealId, launchTokens, resolveAccount,
+  verifyLaunch, type BitrixDenial, type BitrixLaunch, type BitrixRest,
 } from '../utils/bitrix-auth'
+import { saveLaunchTokens } from '../utils/b24-portal'
 
 /**
  * Вход из вкладки Битрикс24 (ТЗ §10.3), `/api/auth/bitrix`.
@@ -79,6 +80,10 @@ bitrixRouter.post('/launch', limitByIp(launchByIp, 'Слишком много з
     domain:   firstString(req.query.DOMAIN, body.DOMAIN),
     authId:   firstString(body.AUTH_ID, req.query.AUTH_ID),
     memberId: firstString(body.member_id, req.query.member_id),
+    refreshId: firstString(body.REFRESH_ID),
+    authExpires: firstString(body.AUTH_EXPIRES),
+    placement: firstString(body.PLACEMENT),
+    placementOptions: firstString(body.PLACEMENT_OPTIONS),
   }
 
   try {
@@ -123,7 +128,18 @@ bitrixRouter.post('/launch', limitByIp(launchByIp, 'Слишком много з
       await audit(user.id, 'auth.bitrix_link', 'User', user.id, { email: user.email, bitrixUserId: profile.id, name: profile.name })
     }
 
-    toScreen(res, { code: codes.issue(user.id) })
+    // Ключ сотрудника — для вызовов REST от его имени (сделка, лента). Не
+    // сохранился — вход всё равно состоится, не будет только данных сделки.
+    const tokens = launchTokens(launch)
+    if (tokens) {
+      await saveLaunchTokens(user.id, profile.id, tokens).catch((e: unknown) => {
+        logger.error(`Битрикс24: ключ сотрудника не сохранён: ${e instanceof Error ? e.message : String(e)}`)
+      })
+    }
+
+    // Открыто во вкладке сделки — экран сделки сразу после входа.
+    const deal = launchDealId(launch)
+    toScreen(res, { code: codes.issue(user.id), ...(deal ? { deal } : {}) })
   } catch (e) {
     if (e instanceof BitrixAuthError) {
       logger.warn(`Вход из Битрикс24 отклонён (${e.code}): ${e.message}`)
@@ -133,6 +149,13 @@ bitrixRouter.post('/launch', limitByIp(launchByIp, 'Слишком много з
     }
     next(e)
   }
+})
+
+// GET /api/auth/bitrix/launch — так обработчик не открывает портал, а браузер:
+// «назад», закладка, переустановка приложения. Ключа в GET нет — объяснить на
+// экране, а не отдавать 404.
+bitrixRouter.get('/launch', (_req, res) => {
+  toScreen(res, { error: bitrixConfig() ? 'bad_request' : 'disabled' })
 })
 
 const exchangeSchema = z.object({ code: z.string().min(1).max(200) })

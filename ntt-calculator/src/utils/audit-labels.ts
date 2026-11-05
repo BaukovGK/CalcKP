@@ -34,6 +34,8 @@ export const AUDIT_LABELS: Readonly<Record<string, string>> = {
   'auth.logout': 'Выход',
   'auth.bitrix_link': 'Привязка к Битрикс24',
   'auth.bitrix_denied': 'Вход из Битрикс24 отклонён',
+  'auth.bitrix_tab_bind': 'Вкладка в сделках Битрикс24 подключена',
+  'auth.bitrix_tab_unbind': 'Вкладка в сделках Битрикс24 отключена',
 
   'estimate.create': 'Создан расчёт',
   'estimate.survey': 'Правка опросного листа',

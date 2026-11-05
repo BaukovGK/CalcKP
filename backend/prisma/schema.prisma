@@ -69,6 +69,22 @@ model User {
   priceVersions    PriceListVersion[]
   nodeVersions     NodeDefVersion[]
   templateVersions ProductTemplateVersion[]
+  b24Token         B24Token?
+}
+
+// Ключи сотрудника к порталу Битрикс24 (doc/План_Б24_сделка.md): приходят при
+// каждом открытии приложения из портала, нужны для вызовов REST от его имени
+// (сделка, лента). accessToken живёт час, refreshToken — 28 дней и без
+// BITRIX_CLIENT_SECRET бесполезен. Одна запись на учётку.
+model B24Token {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// ID сотрудника в портале, которому выдан ключ: учётку могли перепривязать.
+  bitrixUserId String
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime
+  updatedAt    DateTime @updatedAt
 }
 
 // ── Projects ───────────────────────────────────────────────────────────────
