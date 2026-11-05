@@ -119,6 +119,9 @@ services:
       BITRIX_PORTAL: ${BITRIX_PORTAL:-}
       BITRIX_MEMBER_ID: ${BITRIX_MEMBER_ID:-}
       BITRIX_CLIENT_ID: ${BITRIX_CLIENT_ID:-}
+      # Ключ приложения — продлевать ключи сотрудников для вызовов REST от их
+      # имени (сделка, лента; doc/План_Б24_сделка.md). Пусто — ключ живёт час.
+      BITRIX_CLIENT_SECRET: ${BITRIX_CLIENT_SECRET:-}
     volumes:
       # Дампы лежат на хосте, а не в томе: их надо уметь забрать с машины,
       # а том исчезнет вместе с `docker compose down -v`.

@@ -5,6 +5,7 @@ import { readAppVersion } from './utils/app-version'
 import { errorHandler } from './middleware/errorHandler'
 import { authRouter }      from './routes/auth.routes'
 import { bitrixRouter }    from './routes/bitrix.routes'
+import { b24Router }       from './routes/b24.routes'
 import { adminRouter }     from './routes/admin.routes'
 import { projectsRouter }  from './routes/projects.routes'
 import { estimatesRouter } from './routes/estimates.routes'
@@ -93,6 +94,8 @@ app.use((req, res, next) => {
 // Вход из вкладки Битрикс24 — раньше authRouter: тот ничего не знает о /bitrix.
 app.use('/api/auth/bitrix', bitrixRouter)
 app.use('/api/auth',      authRouter)
+// Данные портала Битрикс24 (сделка) ключом вошедшего сотрудника.
+app.use('/api/b24',       b24Router)
 app.use('/api/admin',     adminRouter)
 app.use('/api/projects',  projectsRouter)
 app.use('/api/estimates', estimatesRouter)

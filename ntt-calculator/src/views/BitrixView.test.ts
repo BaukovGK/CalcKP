@@ -48,6 +48,22 @@ describe('вход из Битрикс24', () => {
     expect(replace).toHaveBeenCalledWith('/')
   })
 
+  it('из вкладки сделки — на экран сделки', async () => {
+    query.value = { code: 'c1', deal: '123' }
+    post.mockResolvedValue({ data: { accessToken: 'a1', refreshToken: 'r1', user: USER } })
+    mount(BitrixView)
+    await flushPromises()
+    expect(replace).toHaveBeenCalledWith('/deals/123')
+  })
+
+  it('кривой номер сделки — на главный экран', async () => {
+    query.value = { code: 'c1', deal: '1/../admin' }
+    post.mockResolvedValue({ data: { accessToken: 'a1', refreshToken: 'r1', user: USER } })
+    mount(BitrixView)
+    await flushPromises()
+    expect(replace).toHaveBeenCalledWith('/')
+  })
+
   it('код устарел — текст сервера и совет обновить вкладку', async () => {
     query.value = { code: 'old' }
     post.mockRejectedValue({ isAxiosError: true, response: { status: 401, data: { message: 'Код входа устарел — откройте вкладку в Битрикс24 заново' } } })
