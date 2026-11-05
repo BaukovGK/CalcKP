@@ -22,14 +22,16 @@ import {
   tirageOf,
 } from '../utils/estimate-tree'
 import { changeText, surveyChanges, SURVEY_CHANGES_MAX } from '../utils/survey-diff'
-import { buildKpDocument, documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
+import { documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
 import { renderKpXlsx } from '../utils/kp-xlsx'
 import { buildProductDraft } from '../utils/kp-kit'
 import { shellWallMm } from '../utils/kp-lookup'
+import { estimateKpDocument } from '../utils/kp-estimate-doc'
+import { sendKpToDeal } from '../utils/b24-kp'
 import { productDescription } from '../utils/kp-product'
-import { formatKpNumber, headerToJson, isSuggestedNumber, kpIssueSchema, parseKpHeader, type KpStoredHeader } from '../utils/kp-payload'
+import { formatKpNumber, headerToJson, isSuggestedNumber, kpIssueSchema, type KpStoredHeader } from '../utils/kp-payload'
 import { defaultSignature, defaultTerms } from '../utils/kp-terms'
 import { blocksDeletion, isPrintable, PRINTABLE_REASONS, REASON_LABEL } from '../utils/snapshot-reason'
 import type { SnapshotReason } from '@prisma/client'
@@ -520,7 +522,18 @@ estimatesRouter.post(
         totalCheck: 'skipped' in totalCheck ? totalCheck.skipped : 'ok',
       })
 
+      // Проект привязан к сделке — КП комментарием с PDF в её ленту. КП уже
+      // выпущено: сбой отправки его не отменяет, причина — в версии и в ответе.
+      const b24 = await sendKpToDeal(auth.userId!, id, snapshot.version)
+      if (b24.status !== 'skipped') {
+        await audit(auth.userId, 'estimate.kp.b24', 'Estimate', id, {
+          snapshotVersion: snapshot.version, kpNumber: number, status: b24.status,
+          ...(b24.status === 'failed' ? { error: b24.error } : {}),
+        })
+      }
+
       res.status(201).json({
+        b24,
         estimate: {
           id: estimate.id,
           title: estimate.title,
@@ -687,29 +700,7 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
       })
       return
     }
-
-    // Шапка — та, что сохранена выпуском; её нет (старый слепок или ручная
-    // фиксация) — печатаются умолчания, собранные из опросного листа.
-    const header = parseKpHeader(snapshot.kpJson)
-    const doc = buildKpDocument({
-      estimateId: estimate.id,
-      estimateTitle: estimate.title,
-      deviceType: estimate.deviceType,
-      project: estimate.project,
-      wallMm: await shellWallMm(snapshot.bundlesJson),
-      number: snapshot.kpNumber,
-      kp: header.position ?? null,
-      terms: header.terms ?? null,
-      signature: header.signature ?? null,
-      executor: estimate.author ?? {},
-      snapshot: {
-        version: snapshot.version,
-        priceListVersion: snapshot.priceListVersion,
-        totalRub: snapshot.totalRub,
-        createdAt: snapshot.createdAt,
-        bundlesJson: snapshot.bundlesJson,
-      },
-    })
+    const doc = await estimateKpDocument(estimate, snapshot)
 
     const body =
       format === 'pdf'
@@ -741,13 +732,61 @@ estimatesRouter.get('/:id/kp/export', async (req, res: Response, next: NextFunct
   } catch (e) { next(e) }
 })
 
+/**
+ * POST /api/estimates/:id/snapshots/:version/b24 — отправить выпущенное КП в
+ * ленту сделки Битрикс24 ещё раз (первая попытка при выпуске не прошла или
+ * проект привязали к сделке позже). Ключом нажавшего — комментарий от его имени.
+ */
+estimatesRouter.post('/:id/snapshots/:version/b24', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), async (req, res: Response, next: NextFunction) => {
+  try {
+    const auth = req as AuthRequest
+    const id = String(req.params.id)
+    const version = Number(req.params.version)
+    if (!Number.isInteger(version) || version < 1) { res.status(400).json({ message: 'Неверная версия' }); return }
+
+    const estimate = await prisma.estimate.findUnique({
+      where: { id },
+      select: { authorId: true, project: { select: { b24DealId: true } } },
+    })
+    if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+    if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+      res.status(403).json({ message: 'Нет доступа' }); return
+    }
+    if (!estimate.project?.b24DealId) {
+      res.status(422).json({ message: 'Проект не привязан к сделке Битрикс24 — отправлять некуда', code: 'B24_NO_DEAL' })
+      return
+    }
+    const snapshot = await prisma.estimateSnapshot.findUnique({
+      where: { estimateId_version: { estimateId: id, version } },
+      select: { reason: true, kpNumber: true },
+    })
+    if (!snapshot) { res.status(404).json({ message: `Версия ${version} не найдена` }); return }
+    if (snapshot.reason !== 'KP') {
+      res.status(422).json({ message: 'В сделку отправляются только выпущенные КП', code: 'B24_NOT_KP' })
+      return
+    }
+
+    const b24 = await sendKpToDeal(auth.userId!, id, version)
+    await audit(auth.userId, 'estimate.kp.b24', 'Estimate', id, {
+      snapshotVersion: version, kpNumber: snapshot.kpNumber, status: b24.status, repeat: true,
+      ...(b24.status === 'failed' ? { error: b24.error } : {}),
+    })
+    if (b24.status === 'failed') { res.status(502).json({ message: b24.error, code: 'B24_SEND_FAILED' }); return }
+    if (b24.status === 'skipped') { res.status(503).json({ message: 'Битрикс24 на сервере не настроен', code: 'B24_DISABLED' }); return }
+    res.json(b24)
+  } catch (e) { next(e) }
+})
+
 // GET /api/estimates/:id/snapshots — история версий (ТЗ §7).
 estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunction) => {
   try {
     const auth = req as AuthRequest
     const id = String(req.params.id)
 
-    const estimate = await prisma.estimate.findUnique({ where: { id }, select: { authorId: true } })
+    const estimate = await prisma.estimate.findUnique({
+      where: { id },
+      select: { authorId: true, project: { select: { b24DealId: true } } },
+    })
     if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
     if (!canReadEstimate(auth.userRole, estimate.authorId, auth.userId)) {
       res.status(403).json({ message: 'Нет доступа' }); return
@@ -761,9 +800,12 @@ estimatesRouter.get('/:id/snapshots', async (req, res: Response, next: NextFunct
       select: {
         id: true, version: true, priceListVersion: true, templateVersion: true, builtinRevision: true,
         totalRub: true, createdAt: true, reason: true,
+        b24SentAt: true, b24Error: true,
       },
     })
-    res.json(snapshots)
+    // Проект привязан к сделке — у выпусков КП виден статус отправки в ленту.
+    const b24Deal = estimate.project?.b24DealId != null
+    res.json(snapshots.map((s) => ({ ...s, b24Deal })))
   } catch (e) { next(e) }
 })
 

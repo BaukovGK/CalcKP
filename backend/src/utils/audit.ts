@@ -56,6 +56,8 @@ export type AuditAction =
   | 'estimate.kp'
   /** Выгрузка печатной формы КП (docx/pdf) — документ уходит заказчику. */
   | 'estimate.kp.export'
+  /** КП отправлено (или не отправилось) в ленту сделки Битрикс24 — со статусом. */
+  | 'estimate.kp.b24'
   | 'prices.update'
   | 'prices.import'
   /** Выгрузка прайса в xlsx (лист «НН» + «Проверка»). */
