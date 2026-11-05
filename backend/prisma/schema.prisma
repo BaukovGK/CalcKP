@@ -98,8 +98,15 @@ model Project {
   authorId  String
   author    User       @relation(fields: [authorId], references: [id])
   estimates Estimate[]
+  /// Сделка Битрикс24, по которой ведётся проект (doc/План_Б24_сделка.md).
+  /// У сделки проектов сколько угодно, у проекта сделка одна или никакой.
+  b24DealId    String?
+  /// Компания сделки на момент привязки — заказчик в портале.
+  b24CompanyId String?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+
+  @@index([b24DealId])
 }
 
 // ── Estimates ──────────────────────────────────────────────────────────────
