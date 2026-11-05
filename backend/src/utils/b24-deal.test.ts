@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { companyAddress, dealSummary, entityId } from './b24-deal'
+import { companyAddress, dealSummary, entityId, parseDealRef } from './b24-deal'
 import { launchDealId, launchTokens } from './bitrix-auth'
 
 describe('запуск из вкладки сделки', () => {
@@ -53,5 +53,17 @@ describe('адрес компании', () => {
     expect(companyAddress([])).toBeNull()
     expect(companyAddress(null)).toBeNull()
     expect(companyAddress([{ TYPE_ID: '1' }])).toBeNull()
+  })
+})
+
+describe('сделка, вписанная руками', () => {
+  it('номер или адрес карточки', () => {
+    expect(parseDealRef(' 5950 ')).toBe('5950')
+    expect(parseDealRef('№ 5950')).toBe('5950')
+    expect(parseDealRef('https://nttcrm.bitrix24.ru/crm/deal/details/5950/')).toBe('5950')
+    expect(parseDealRef('https://nttcrm.bitrix24.ru/crm/deal/details/5950/?IFRAME=Y')).toBe('5950')
+    expect(parseDealRef('https://nttcrm.bitrix24.ru/crm/deal/details/0/')).toBeNull()
+    expect(parseDealRef('сделка')).toBeNull()
+    expect(parseDealRef(5950)).toBeNull()
   })
 })

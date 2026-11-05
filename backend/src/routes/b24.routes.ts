@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { canSeeProjects, seesAllProjects } from '../utils/access'
 import { requireRole } from '../middleware/rbac'
@@ -7,7 +7,7 @@ import { bitrixConfig, DEAL_TAB_PLACEMENT } from '../utils/bitrix-auth'
 import { dealTabState, DEAL_TAB_DESCRIPTION, DEAL_TAB_TITLE, launchHandlerUrl } from '../utils/b24-placement'
 import { B24ClientError, type B24Client, type B24ClientErrorCode } from '../utils/b24-client'
 import { b24Client } from '../utils/b24-portal'
-import { companyAddress, dealSummary, entityId, type DealSummary } from '../utils/b24-deal'
+import { companyAddress, dealSummary, entityId, parseDealRef, type DealSummary } from '../utils/b24-deal'
 import { prisma } from '../utils/prisma'
 import { validate } from '../middleware/validate'
 import { z } from 'zod'
@@ -247,4 +247,67 @@ b24Router.post('/deals/:id/projects', requireRole('ADMIN', 'MANAGER', 'ENGINEER'
     if (portalFailure(res, e)) return
     next(e)
   }
+})
+
+// ── Привязка существующего проекта к сделке (этап 7) ───────────────────────
+// Право — как на правку карточки проекта: администратор или автор.
+
+async function editableProject(req: Request, res: Response) {
+  const auth = req as AuthRequest
+  const project = await prisma.project.findUnique({
+    where: { id: String(req.params.id) },
+    select: { id: true, title: true, authorId: true, b24DealId: true },
+  })
+  if (!project) { res.status(404).json({ message: 'Проект не найден' }); return null }
+  if (auth.userRole !== 'ADMIN' && project.authorId !== auth.userId) {
+    res.status(403).json({ message: 'Нет доступа' }); return null
+  }
+  return project
+}
+
+const linkDealSchema = z.object({ deal: z.string().trim().min(1).max(500) })
+
+/**
+ * PUT /api/b24/projects/:id/deal — привязать проект к сделке: номер или
+ * адрес карточки. Сделка проверяется у портала ключом сотрудника — к сделке,
+ * которой он не видит, проект не привяжется.
+ */
+b24Router.put('/projects/:id/deal', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), validate(linkDealSchema), async (req, res, next) => {
+  const dealId = parseDealRef((req.body as z.infer<typeof linkDealSchema>).deal)
+  if (!dealId) {
+    res.status(400).json({ message: 'Укажите номер сделки или вставьте адрес её карточки из Битрикс24', code: 'B24_BAD_DEAL' })
+    return
+  }
+  const c = client(res)
+  if (!c) return
+  const userId = (req as AuthRequest).userId!
+  try {
+    const project = await editableProject(req, res)
+    if (!project) return
+    const deal = await loadDeal(c, userId, dealId)
+    await prisma.project.update({ where: { id: project.id }, data: { b24DealId: deal.id, b24CompanyId: deal.companyId } })
+    await audit(userId, 'project.update', 'Project', project.id, {
+      title: project.title, changed: ['b24DealId'], b24DealId: deal.id, dealTitle: deal.title, previous: project.b24DealId,
+    })
+    res.json(deal)
+  } catch (e) {
+    if (portalFailure(res, e)) return
+    next(e)
+  }
+})
+
+// DELETE /api/b24/projects/:id/deal — отвязать проект от сделки. Комментарии
+// с КП в ленте сделки остаются: это уже история сделки.
+b24Router.delete('/projects/:id/deal', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), async (req, res, next) => {
+  try {
+    const project = await editableProject(req, res)
+    if (!project) return
+    if (project.b24DealId) {
+      await prisma.project.update({ where: { id: project.id }, data: { b24DealId: null, b24CompanyId: null } })
+      await audit((req as AuthRequest).userId, 'project.update', 'Project', project.id, {
+        title: project.title, changed: ['b24DealId'], b24DealId: null, previous: project.b24DealId,
+      })
+    }
+    res.status(204).end()
+  } catch (e) { next(e) }
 })

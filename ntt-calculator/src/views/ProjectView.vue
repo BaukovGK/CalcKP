@@ -80,6 +80,24 @@
               <span class="pv-meta-lbl">Обновлено</span>
               <span class="pv-meta-val">{{ fmtDate(projects.current.updatedAt) }}</span>
             </div>
+            <!-- Сделка Битрикс24 (doc/План_Б24_сделка.md, этап 7): выпущенные
+                 КП проекта уходят в её ленту. Ссылка — на экран сделки здесь
+                 же, а не на портал: во фрейме портал уже вокруг. -->
+            <div class="pv-meta-row">
+              <span class="pv-meta-lbl">Сделка Б24</span>
+              <span class="pv-meta-val">
+                <template v-if="projects.current.b24DealId">
+                  <a href="#" @click.prevent="router.push(`/deals/${projects.current.b24DealId}`)">
+                    №{{ projects.current.b24DealId }}<template v-if="dealTitle"> — {{ dealTitle }}</template>
+                  </a>
+                  <button v-if="canEdit" class="btn btn-xs pv-deal-btn" @click="unlinkOpen = true">отвязать</button>
+                </template>
+                <template v-else>
+                  <span class="pv-deal-none">не привязан</span>
+                  <button v-if="canEdit" class="btn btn-xs pv-deal-btn" @click="openLink">привязать</button>
+                </template>
+              </span>
+            </div>
           </div>
 
           <!-- Estimates list -->
@@ -133,6 +151,36 @@
     </div>
 
     <!-- Редактирование проекта -->
+    <BaseModal :show="linkOpen" title="Привязать к сделке Битрикс24" @close="linkOpen = false">
+      <p class="pv-deal-note">
+        Выпущенные после привязки КП проекта будут уходить в ленту сделки вместе с PDF;
+        уже выпущенные можно отправить из окна «Версии» расчёта.
+      </p>
+      <div class="ff">
+        <label class="fl">Номер сделки или адрес её карточки</label>
+        <input class="fi" v-model="linkInput" placeholder="5950 или https://nttcrm.bitrix24.ru/crm/deal/details/5950/" @keyup.enter="linkDeal" />
+      </div>
+      <div v-if="linkError" class="auth-err" style="margin-top:8px">{{ linkError }}</div>
+      <template #footer>
+        <button class="btn btn-g" @click="linkOpen = false">Отмена</button>
+        <button class="btn btn-am" :disabled="dealBusy || !linkInput.trim()" @click="linkDeal">
+          {{ dealBusy ? 'Проверяем сделку…' : 'Привязать' }}
+        </button>
+      </template>
+    </BaseModal>
+
+    <BaseModal :show="unlinkOpen" title="Отвязать от сделки?" @close="unlinkOpen = false">
+      <p class="pv-deal-note">
+        Новые КП проекта перестанут уходить в ленту сделки №{{ projects.current?.b24DealId }}.
+        Уже отправленные комментарии с КП в сделке останутся.
+      </p>
+      <div v-if="linkError" class="auth-err" style="margin-top:8px">{{ linkError }}</div>
+      <template #footer>
+        <button class="btn btn-g" @click="unlinkOpen = false">Отмена</button>
+        <button class="btn btn-am" :disabled="dealBusy" @click="unlinkDeal">Отвязать</button>
+      </template>
+    </BaseModal>
+
     <BaseModal :show="editOpen" title="Редактировать проект" @close="editOpen = false">
       <div class="ff">
         <label class="fl">Объект <span style="color:var(--danger)">*</span></label>
@@ -226,11 +274,12 @@
 
 <script setup lang="ts">
 import { apiErrorMessage } from '@/utils/api-error'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/stores/projects'
 import { useAuthStore } from '@/stores/auth'
 import { projectsApi } from '@/api/projects'
+import { b24Api, b24ProjectApi } from '@/api/b24'
 import { estimatesApi, type EstimateStatus } from '@/api/estimates'
 import type { ProjectEstimate } from '@/api/projects'
 import BaseModal    from '@/components/ui/BaseModal.vue'
@@ -253,6 +302,57 @@ const canEdit = computed(() => auth.role !== 'VIEWER' && auth.role !== 'BUYER')
 const isBuyer = computed(() => auth.role === 'BUYER')
 
 const projectId = String(route.params.id)
+
+// ── Сделка Битрикс24 (этап 7) ─────────────────────────────────────────────
+const dealTitle = ref<string | null>(null)
+const linkOpen = ref(false)
+const unlinkOpen = ref(false)
+const linkInput = ref('')
+const linkError = ref('')
+const dealBusy = ref(false)
+
+/** Название сделки — из портала, если получится; нет ключа — только номер. */
+watch(() => projects.current?.b24DealId, async (id) => {
+  dealTitle.value = null
+  if (!id) return
+  try { dealTitle.value = (await b24Api.deal(id)).title } catch { /* номера достаточно */ }
+}, { immediate: true })
+
+function openLink() {
+  linkInput.value = ''
+  linkError.value = ''
+  linkOpen.value = true
+}
+
+async function linkDeal() {
+  if (dealBusy.value || !linkInput.value.trim()) return
+  dealBusy.value = true
+  linkError.value = ''
+  try {
+    const deal = await b24ProjectApi.linkDeal(projectId, linkInput.value.trim())
+    linkOpen.value = false
+    await projects.fetchOne(projectId)
+    dealTitle.value = deal.title
+  } catch (e) {
+    linkError.value = apiErrorMessage(e, 'Не удалось привязать проект к сделке')
+  } finally {
+    dealBusy.value = false
+  }
+}
+
+async function unlinkDeal() {
+  dealBusy.value = true
+  linkError.value = ''
+  try {
+    await b24ProjectApi.unlinkDeal(projectId)
+    unlinkOpen.value = false
+    await projects.fetchOne(projectId)
+  } catch (e) {
+    linkError.value = apiErrorMessage(e, 'Не удалось отвязать проект от сделки')
+  } finally {
+    dealBusy.value = false
+  }
+}
 
 /**
  * Новая единица создаётся через ЕДИНЫЙ опросный лист (/survey?project=…):
@@ -478,6 +578,9 @@ onMounted(() => projects.fetchOne(projectId))
 .pv-meta-row   { display: flex; gap: 6px; align-items: baseline; }
 .pv-meta-lbl   { font-size: 11px; color: var(--tx3); font-family: Archivo, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 .pv-meta-val   { font-size: 13.5px; color: var(--tx1); }
+.pv-deal-btn   { margin-left: 8px; }
+.pv-deal-none  { color: var(--tx3); }
+.pv-deal-note  { font-size: 13px; color: var(--tx3); line-height: 1.5; margin: 0 0 10px; }
 
 .pv-units-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

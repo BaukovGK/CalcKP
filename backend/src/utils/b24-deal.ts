@@ -82,3 +82,16 @@ export function companyAddress(rows: unknown): string | null {
   const uniq = parts.filter((p, i) => parts.indexOf(p) === i)
   return uniq.length ? uniq.join(', ') : null
 }
+
+/**
+ * Сделка, которую сотрудник вписал руками: номер («5950») или адрес карточки
+ * из портала (…/crm/deal/details/5950/). null — не похоже ни на то, ни на другое.
+ */
+export function parseDealRef(input: unknown): string | null {
+  if (typeof input !== 'string') return null
+  const s = input.trim()
+  const direct = entityId(s.replace(/^№\s*/, ''))
+  if (direct) return direct
+  const m = /\/crm\/deal\/details\/(\d+)(?:[/?#]|$)/.exec(s)
+  return m ? entityId(m[1]) : null
+}
