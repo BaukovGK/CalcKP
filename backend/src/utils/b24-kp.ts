@@ -23,31 +23,25 @@ export interface KpCommentInput {
   projectTitle: string | null
   totalRub: number
   authorName: string | null
-  /** Ссылка на расчёт в калькуляторе; null — PUBLIC_URL не задан. */
-  url: string | null
 }
 
 function rub(v: number): string {
   return `${Math.round(v).toLocaleString('ru-RU')} ₽`
 }
 
-/** Текст комментария: BB-коды ленты Битрикс24 ([b], [url]). */
+/**
+ * Текст комментария (BB-код [b] ленты Битрикс24). Ссылки на калькулятор нет:
+ * отдельной вкладкой он откроется без сессии — вход из портала живёт только
+ * во фрейме, а сам калькулятор и так рядом, вкладкой этой же сделки.
+ */
 export function kpCommentText(k: KpCommentInput): string {
   const lines = [
     `[b]КП № ${k.number ?? 'б/н'}[/b] (версия ${k.version}) — ${k.estimateTitle}`,
     k.projectTitle ? `Проект: ${k.projectTitle}` : null,
     `Сумма: ${rub(k.totalRub)}`,
     k.authorName ? `Выпустил: ${k.authorName}` : null,
-    k.url ? `[url=${k.url}]Открыть расчёт в калькуляторе[/url]` : null,
   ]
   return lines.filter((l): l is string => l != null).join('\n')
-}
-
-/** Ссылка на расчёт: адрес калькулятора из PUBLIC_URL. */
-export function estimateUrl(publicUrl: string | undefined, estimateId: string): string | null {
-  const base = publicUrl?.trim().replace(/\/+$/, '')
-  if (!base || !/^https?:\/\//.test(base)) return null
-  return `${base}/calculator/${encodeURIComponent(estimateId)}`
 }
 
 export type KpSendResult =
@@ -105,7 +99,6 @@ export async function sendKpToDeal(userId: string, estimateId: string, version: 
       projectTitle: estimate.project?.title ?? null,
       totalRub: snapshot.totalRub,
       authorName: sender?.name ?? null,
-      url: estimateUrl(process.env.PUBLIC_URL, estimate.id),
     })
     const commentId = await client.call<unknown>(userId, 'crm.timeline.comment.add', {
       fields: {
