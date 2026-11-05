@@ -167,3 +167,28 @@ export const adminApi = {
       .then((r) => r.data)
   },
 }
+
+// ── Битрикс24: вкладка «Калькулятор» в карточке сделки ─────────────────────
+// (doc/План_Б24_сделка.md, этап 2; backend routes/b24.routes.ts)
+
+export interface DealTabState {
+  /** Куда должна вести вкладка — адрес этого сервера; null — не задан PUBLIC_URL. */
+  handler: string | null
+  /** Вкладка есть в карточке сделки. */
+  bound: boolean
+  /** Есть и ведёт сюда; false при bound — старый адрес, переподключить. */
+  current: boolean
+  handlers: string[]
+}
+
+export const b24AdminApi = {
+  dealTab(): Promise<DealTabState> {
+    return api.get<DealTabState>('/b24/deal-tab').then((r) => r.data)
+  },
+  bindDealTab(): Promise<DealTabState> {
+    return api.post<DealTabState>('/b24/deal-tab').then((r) => r.data)
+  },
+  unbindDealTab(): Promise<DealTabState> {
+    return api.delete<DealTabState>('/b24/deal-tab').then((r) => r.data)
+  },
+}

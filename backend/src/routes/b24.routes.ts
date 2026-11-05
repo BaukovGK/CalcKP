@@ -1,7 +1,10 @@
 import { Router, type Response } from 'express'
 import { requireAuth, type AuthRequest } from '../middleware/auth'
 import { canSeeProjects } from '../utils/access'
-import { bitrixConfig } from '../utils/bitrix-auth'
+import { requireRole } from '../middleware/rbac'
+import { audit } from '../utils/audit'
+import { bitrixConfig, DEAL_TAB_PLACEMENT } from '../utils/bitrix-auth'
+import { dealTabState, DEAL_TAB_DESCRIPTION, DEAL_TAB_TITLE, launchHandlerUrl } from '../utils/b24-placement'
 import { B24ClientError, type B24Client, type B24ClientErrorCode } from '../utils/b24-client'
 import { b24Client } from '../utils/b24-portal'
 import { dealSummary, entityId } from '../utils/b24-deal'
@@ -44,6 +47,86 @@ function client(res: Response): B24Client | null {
   if (!c) res.status(503).json({ message: 'Битрикс24 на сервере не настроен', code: 'B24_DISABLED' })
   return c
 }
+
+// ── Вкладка в карточке сделки (этап 2) ─────────────────────────────────────
+// Подключает администратор калькулятора, который заодно администратор
+// портала: placement.bind портал принимает только с ключом администратора.
+
+const adminOnly = requireRole('ADMIN')
+const handlerUrl = () => launchHandlerUrl(process.env.PUBLIC_URL || process.env.CORS_ORIGIN)
+
+/** Отказ портала здесь почти всегда значит «не администратор портала». */
+function placementFailure(res: Response, e: unknown): boolean {
+  if (e instanceof B24ClientError && e.code === 'access_denied') {
+    res.status(403).json({
+      message: 'Битрикс24 отказал: подключать вкладку может только администратор портала, '
+        + 'и у приложения должно быть право «Встраивание приложений» (placement).',
+      code: 'B24_ACCESS_DENIED',
+    })
+    return true
+  }
+  return portalFailure(res, e)
+}
+
+async function readDealTab(c: B24Client, userId: string) {
+  return dealTabState(await c.call(userId, 'placement.get'), handlerUrl())
+}
+
+// GET /api/b24/deal-tab — подключена ли вкладка и куда ведёт.
+b24Router.get('/deal-tab', adminOnly, async (req, res, next) => {
+  const c = client(res)
+  if (!c) return
+  try {
+    res.json(await readDealTab(c, (req as AuthRequest).userId!))
+  } catch (e) {
+    if (placementFailure(res, e)) return
+    next(e)
+  }
+})
+
+// POST /api/b24/deal-tab — подключить; ведёт на старый адрес — переподключить.
+b24Router.post('/deal-tab', adminOnly, async (req, res, next) => {
+  const c = client(res)
+  if (!c) return
+  const handler = handlerUrl()
+  if (!handler) {
+    res.status(503).json({ message: 'На сервере не задан адрес https (PUBLIC_URL) — портал откроет вкладку только по https', code: 'B24_NO_PUBLIC_URL' })
+    return
+  }
+  const userId = (req as AuthRequest).userId!
+  try {
+    const before = await readDealTab(c, userId)
+    if (!before.current) {
+      if (before.bound) await c.call(userId, 'placement.unbind', { PLACEMENT: DEAL_TAB_PLACEMENT })
+      await c.call(userId, 'placement.bind', {
+        PLACEMENT: DEAL_TAB_PLACEMENT, HANDLER: handler, TITLE: DEAL_TAB_TITLE, DESCRIPTION: DEAL_TAB_DESCRIPTION,
+      })
+      await audit(userId, 'auth.bitrix_tab_bind', undefined, undefined, { handler, replaced: before.handlers })
+    }
+    res.json(await readDealTab(c, userId))
+  } catch (e) {
+    if (placementFailure(res, e)) return
+    next(e)
+  }
+})
+
+// DELETE /api/b24/deal-tab — убрать вкладку из карточки сделки.
+b24Router.delete('/deal-tab', adminOnly, async (req, res, next) => {
+  const c = client(res)
+  if (!c) return
+  const userId = (req as AuthRequest).userId!
+  try {
+    const before = await readDealTab(c, userId)
+    if (before.bound) {
+      await c.call(userId, 'placement.unbind', { PLACEMENT: DEAL_TAB_PLACEMENT })
+      await audit(userId, 'auth.bitrix_tab_unbind', undefined, undefined, { handlers: before.handlers })
+    }
+    res.json(await readDealTab(c, userId))
+  } catch (e) {
+    if (placementFailure(res, e)) return
+    next(e)
+  }
+})
 
 // GET /api/b24/deals/:id — шапка сделки: название, заказчик, ответственный.
 b24Router.get('/deals/:id', async (req, res, next) => {
