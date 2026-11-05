@@ -111,6 +111,15 @@ describe('печать КП', () => {
     expect(ws.getColumn(3).width).toBeGreaterThan(50) // наименование — самая широкая
   })
 
+  it('исходящий номер и дата — пустые поля, внутренний номер не печатается', async () => {
+    const ws = await sheetOf(doc)
+    const texts: string[] = []
+    ws.eachRow((r) => r.eachCell((c) => { if (typeof c.value === 'string') texts.push(c.value) }))
+
+    expect(texts).toContain('Исх. № ____________ от ____________')
+    expect(texts.some((t) => t.includes('КП-0042'))).toBe(false)
+  })
+
   it('шапка таблицы — подписи колонок образца', async () => {
     const ws = await sheetOf(doc)
     const head = headRow(ws)
