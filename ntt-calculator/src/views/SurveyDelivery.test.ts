@@ -56,6 +56,11 @@ async function mountKns(initial: Record<string, unknown>) {
 
 const section = (w: Awaited<ReturnType<typeof mountKns>>) => w.find('[data-testid="delivery-section"]')
 const citySelect = (w: Awaited<ReturnType<typeof mountKns>>) => section(w).find('select')
+/** Поле «Стоимость доставки, ₽» — последнее поле раздела. */
+const costInput = (w: Awaited<ReturnType<typeof mountKns>>) => {
+  const inputs = section(w).findAll('input')
+  return inputs[inputs.length - 1]!
+}
 
 describe('ОЛ КНС: доставка', () => {
   it('города — из тарифов закупок', async () => {
@@ -72,7 +77,7 @@ describe('ОЛ КНС: доставка', () => {
     const card = section(w).find('[data-testid="delivery-breakdown"]')
     expect(card.text()).toContain('Машин: 2')
     expect(card.text()).toContain('негабарит')
-    const input = section(w).findAll('input').at(-1)!.element as HTMLInputElement
+    const input = costInput(w).element as HTMLInputElement
     expect(input.placeholder).toBe((2 * 105500 + 185000 + 175000).toLocaleString('ru-RU'))
     w.unmount()
   })
@@ -87,7 +92,7 @@ describe('ОЛ КНС: доставка', () => {
   it('нет ставки — просит ввести вручную; своя стоимость принимается', async () => {
     const w = await mountKns({ deliveryRateId: 'tmn', deliveryCity: 'Тюмень' })
     expect(section(w).text()).toContain('по маршруту нет ставки')
-    const input = section(w).findAll('input').at(-1)!
+    const input = costInput(w)
     await input.setValue('700000')
     expect(section(w).text()).toContain('своя стоимость')
     w.unmount()
