@@ -62,24 +62,25 @@ describe('правила доставки', () => {
     expect(knsDelivery(2500, 8000, MOSCOW).plan.oversize).toBe(true)
   })
 
-  it('негабарит без разрешения: корпус — сопровождение, комплектующие — габарит', () => {
-    const r = knsDelivery(3000, 11900, MOSCOW)
+  it('негабарит без разрешения: корпус — габарит + сопровождение, комплектующие — габарит', () => {
+    // Пример заказчика: КНС Ø2,6 м, L 11 м, Москва = 2 × 65 450 + 157 000.
+    const r = knsDelivery(2600, 11000, MOSCOW)
     expect(r.permitRequired).toBe(false)
-    expect(r.lines.map((l) => [l.column, l.trucks])).toEqual([['gabaritRub', 1], ['escortRub', 1]])
-    expect(r.totalRub).toBe(65450 + 157000)
+    expect(r.lines.map((l) => [l.column, l.trucks])).toEqual([['gabaritRub', 2], ['escortRub', 1]])
+    expect(r.totalRub).toBe(287900)
   })
 
   it('«только с Разрешением» добавляет ставку разрешения к негабариту', () => {
     const r = knsDelivery(3000, 11900, RYAZAN)
     expect(r.permitRequired).toBe(true)
-    expect(r.lines.map((l) => [l.column, l.trucks])).toEqual([['gabaritRub', 1], ['escortRub', 1], ['permitRub', 1]])
-    expect(r.totalRub).toBe(105500 + 185000 + 175000)
+    expect(r.lines.map((l) => [l.column, l.trucks])).toEqual([['gabaritRub', 2], ['escortRub', 1], ['permitRub', 1]])
+    expect(r.totalRub).toBe(2 * 105500 + 185000 + 175000)
   })
 
   it('КНС длиннее 12 м — ещё одна машина того же класса', () => {
     const big = knsDelivery(3000, 13500, RYAZAN)
     expect(big.plan).toMatchObject({ productTrucks: 1, extraLengthTrucks: 1, componentsTrucks: 1, total: 3 })
-    expect(big.totalRub).toBe(105500 + 2 * 185000 + 2 * 175000)
+    expect(big.totalRub).toBe(3 * 105500 + 2 * 185000 + 2 * 175000)
 
     const small = knsDelivery(2000, 12500, MOSCOW)
     expect(small.lines).toEqual([

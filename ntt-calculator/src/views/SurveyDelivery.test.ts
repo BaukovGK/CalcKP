@@ -66,14 +66,14 @@ describe('ОЛ КНС: доставка', () => {
     w.unmount()
   })
 
-  it('негабарит «только с разрешением»: сопровождение + разрешение + машина комплектующих', async () => {
+  it('негабарит «только с разрешением»: габарит + сопровождение + разрешение, и машина комплектующих', async () => {
     const w = await mountKns({})
     await citySelect(w).setValue('rzn')
     const card = section(w).find('[data-testid="delivery-breakdown"]')
     expect(card.text()).toContain('Машин: 2')
     expect(card.text()).toContain('негабарит')
     const input = section(w).findAll('input').at(-1)!.element as HTMLInputElement
-    expect(input.placeholder).toBe((105500 + 185000 + 175000).toLocaleString('ru-RU'))
+    expect(input.placeholder).toBe((2 * 105500 + 185000 + 175000).toLocaleString('ru-RU'))
     w.unmount()
   })
 
