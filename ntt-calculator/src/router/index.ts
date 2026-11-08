@@ -124,6 +124,14 @@ const router = createRouter({
       meta: { requiresAuth: true, roles: ['ADMIN', 'BUYER'] },
     },
     {
+      // Тарифы доставки — книга отдела закупок: ставки по маршрутам, по
+      // которым опросный лист считает доставку (engines/delivery.ts).
+      path: '/delivery-rates',
+      name: 'delivery-rates',
+      component: () => import('@/views/DeliveryRatesView.vue'),
+      meta: { requiresAuth: true, roles: ['ADMIN', 'BUYER'] },
+    },
+    {
       // Редактор шаблонов (ТЗ §2): технолог правит справочники, из которых
       // материализуются шаблоны — нормы патрубков, веса труб, матрицы.
       path: '/templates',

@@ -65,6 +65,8 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
 
   pipePrice: 'цена трубы', pumpPrice: 'цена насоса', servicePipePrice: 'цена трубы шахты',
   tiManual: 'глубина утепления вручную',
+
+  deliveryCity: 'город доставки', deliveryCost: 'стоимость доставки вручную',
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {

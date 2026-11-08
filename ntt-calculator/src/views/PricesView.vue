@@ -6,6 +6,7 @@
         <button v-if="auth.role === 'BUYER'" class="back-link" @click="router.push('/purchases')">← Заявки на закупку</button>
         <button v-else class="back-link" @click="router.push('/')">← Проекты</button>
         <div class="logo">Реестр цен</div>
+        <button v-if="canEdit" class="back-link" @click="router.push('/delivery-rates')">Тарифы доставки →</button>
       </div>
       <div class="sidebar-scroll">
         <div class="nav-section pr-cats-h">

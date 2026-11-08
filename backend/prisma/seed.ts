@@ -360,6 +360,29 @@ async function seedJointLayers() {
   )
 }
 
+// ─── Тарифы доставки (книга отдела закупок) ──────────────────────────────────
+
+interface DeliveryRateSeed {
+  num: number | null
+  city: string
+  gabaritRub: number | null
+  permitRub: number | null
+  escortRub: number | null
+  note: string | null
+  sortOrder: number
+}
+
+/**
+ * Ставки доставки по маршрутам — «Книга 8 3 кв. 2026г.». Заливаются только в
+ * пустую таблицу: дальше тарифы ведёт закупка на экране «Тарифы доставки».
+ */
+async function seedDeliveryRates() {
+  const rows = load<DeliveryRateSeed[]>('delivery-rates.json')
+  await seedReference('тарифы доставки', rows, () => prisma.deliveryRate.count(), (data) =>
+    prisma.deliveryRate.createMany({ data }),
+  )
+}
+
 // ─── Каталог насосов (utils/pump-selection.ts) ────────────────────────────────
 
 /** Паспортная характеристика Q–H (выгрузка VJ Select). */
@@ -547,6 +570,7 @@ async function main() {
   await seedEngineering()
   await seedJointLayers()
   await seedPumps()
+  await seedDeliveryRates()
   await verify()
 
   if (warnings.length) {

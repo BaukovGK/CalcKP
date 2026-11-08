@@ -9,6 +9,7 @@
         <div class="nav-section">Навигация</div>
         <button class="nav-link nav-link--active">Проекты</button>
         <button class="nav-link" v-if="auth.role === 'ADMIN' || auth.role === 'BUYER'" @click="router.push('/prices')">Прайс-лист</button>
+        <button class="nav-link" v-if="auth.role === 'ADMIN' || auth.role === 'BUYER'" @click="router.push('/delivery-rates')">Тарифы доставки</button>
         <button class="nav-link" v-if="auth.role === 'ADMIN' || auth.role === 'TECHNOLOG'" @click="router.push('/templates')">Шаблоны</button>
         <button class="nav-link" v-if="auth.role === 'ADMIN'" @click="router.push('/admin')">Администрирование</button>
         <button class="nav-link" @click="router.push('/help')">Инструкции</button>
