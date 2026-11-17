@@ -41,7 +41,8 @@ import {
   formatDate,
   formatMoney,
   type KpDocument,
-  type KpPosition,
+  tableLines,
+  type KpLine,
 } from './kp-document'
 import { OUTGOING_LINE, termsItems } from './kp-terms'
 
@@ -144,7 +145,7 @@ export function renderKpXlsxWorkbook(doc: KpDocument): ExcelJS.Workbook {
   row += 1
 
   const firstPos = row
-  doc.positions.forEach((position) => {
+  tableLines(doc).forEach((position) => {
     row += positionRows(ws, row, position)
   })
   const lastPos = row - 1
@@ -160,7 +161,7 @@ export function renderKpXlsxWorkbook(doc: KpDocument): ExcelJS.Workbook {
   label.alignment = { horizontal: 'right', vertical: 'middle' }
   const totalCell = totalRow.getCell(7)
   totalCell.value =
-    doc.positions.length > 0
+    tableLines(doc).length > 0
       ? { formula: `SUM(${LAST}${firstPos}:${LAST}${lastPos})`, result: doc.totalRub }
       : doc.totalRub
   totalCell.font = { name: FONT, bold: true, size: 11 }
@@ -246,7 +247,7 @@ export function renderKpXlsxWorkbook(doc: KpDocument): ExcelJS.Workbook {
  * Оценка грубая (шрифт пропорциональный), поэтому в ней заложена запасная
  * строка.
  */
-function positionRows(ws: ExcelJS.Worksheet, at: number, position: KpPosition): number {
+function positionRows(ws: ExcelJS.Worksheet, at: number, position: KpLine): number {
   const needed = wrappedHeight(position.description, NAME_CHARS, 1)
   const count = rowsFor(needed)
   const last = at + count - 1

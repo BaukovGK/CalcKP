@@ -136,6 +136,8 @@ export interface KpDraft {
   customer: string | null
   object: string | null
   position: KpDraftPosition
+  /** Сумма доставки из опросного листа, ₽ — строка «2.1» КП; null — не посчитана. */
+  deliveryRub?: number | null
   terms: KpTerms
   signature: KpSignature
 }

@@ -23,7 +23,8 @@
       <div class="sidebar-footer">
         <div v-if="draft" class="kpv-sum">
           <div class="kpv-sum-l">Сумма КП</div>
-          <div class="kpv-sum-v">{{ fmtMoney(draft.position.totalRub) }} ₽</div>
+          <div class="kpv-sum-v" data-testid="kp-sum">{{ fmtMoney(kpTotal) }} ₽</div>
+          <div v-if="deliveryInKp != null" class="kpv-sum-d" data-testid="kp-sum-delivery">в т.ч. доставка {{ fmtMoney(deliveryInKp) }} ₽</div>
           <div class="kpv-sum-n">{{ number || 'без номера' }}</div>
         </div>
         <BugReportButton />
@@ -224,6 +225,12 @@
               <input v-model="shipmentFrom" />
             </label>
             <div class="fld fld--12 kpv-term1" data-testid="kp-delivery-term">Пункт 1: {{ deliveryTermPreview }}</div>
+            <div v-if="deliveryInKp != null" class="fld fld--12 kpv-term1" data-testid="kp-delivery-line">
+              Строка 2.1 таблицы: «Доставка со склада поставщика до {{ deliveryTo.trim() || 'объекта' }}» — 1 усл. × {{ fmtMoney(deliveryInKp) }} ₽
+            </div>
+            <div v-else-if="deliveryIncluded === true" class="fld fld--12 kpv-term1 kpv-warn">
+              Сумма доставки в опросном листе не посчитана — строки доставки в КП не будет. Введите стоимость в разделе «Доставка» опросного листа.
+            </div>
             <label class="fld fld--3">
               <span v-hint="H.lead">Срок поставки, раб. дней</span>
               <input v-model="terms.leadTimeDays" />
@@ -511,6 +518,16 @@ function addItem() {
 
 const clean = (v: string) => (v.trim() === '' ? null : v.trim())
 
+/**
+ * Доставка строкой «2.1» КП: есть, пока она отмечена «включена в стоимость»
+ * и её сумма посчитана в опросном листе (backend/utils/kp-document.ts, deliveryLine).
+ */
+const deliveryInKp = computed(() =>
+  deliveryIncluded.value === true && draft.value?.deliveryRub != null ? draft.value.deliveryRub : null,
+)
+/** Сумма КП — изделие и строка доставки. */
+const kpTotal = computed(() => (draft.value?.position.totalRub ?? 0) + (deliveryInKp.value ?? 0))
+
 /** Пункт 1 так, как его напечатает сервер (backend/utils/kp-terms.ts, priceTerm). */
 const deliveryTermPreview = computed(() => {
   const vat = `Цены приведены с учётом НДС ${terms.vatRatePct} %.`
@@ -685,6 +702,8 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
 .kpv-sum-l { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--tx3); }
 .kpv-sum-v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .kpv-sum-n { font-size: 12px; color: var(--tx2); }
+.kpv-sum-d { font-size: 12px; color: var(--tx2); font-variant-numeric: tabular-nums; }
+.kpv-warn { color: var(--amber); }
 
 .kpv-block { border: 1px solid var(--acc); background: var(--bg2); padding: 12px 14px;
   margin-bottom: 16px; max-width: 720px; }

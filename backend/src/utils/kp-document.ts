@@ -165,6 +165,15 @@ export interface KpPosition {
   priceListVersion: number
 }
 
+/**
+ * Строка таблицы КП — то, что печатают все три формата: номер,
+ * наименование, количество, единица, цена и сумма.
+ */
+export type KpLine = Pick<KpPosition, 'number' | 'description' | 'qty' | 'unit' | 'priceRub' | 'totalRub'>
+
+/** Единица измерения строки доставки. */
+export const DELIVERY_UNIT = 'усл.'
+
 /** Реквизиты и содержание печатной формы. */
 export interface KpDocument {
   /** Внутренний номер калькулятора; в документ не печатается (см. OUTGOING_LINE). */
@@ -180,7 +189,13 @@ export interface KpDocument {
   /** Объект и адрес — одной строкой, как в эталоне. */
   object: string | null
   positions: KpPosition[]
-  /** Общая сумма по позициям, ₽, с НДС. */
+  /**
+   * Доставка отдельными строками раздела «2» (раздел «Доставка» опросного
+   * листа, решение заказчика 17.11.2026): по строке на единицу, у которой
+   * доставка включена и посчитана. Пусто — доставки в документе нет.
+   */
+  delivery: KpLine[]
+  /** Общая сумма по позициям и доставке, ₽, с НДС. */
   totalRub: number
   /** Справочно: НДС в составе цены, ₽. */
   vatRub: number
@@ -206,6 +221,48 @@ function round2(v: number): number {
 function objectLine(project: { title: string; address: string | null } | null): string | null {
   if (!project) return null
   return [project.title, project.address].filter((v) => v && v.trim() !== '').join(', ') || null
+}
+
+/** Строки таблицы в порядке печати: изделия, затем доставка. */
+export function tableLines(doc: Pick<KpDocument, 'positions' | 'delivery'>): KpLine[] {
+  return [...doc.positions, ...doc.delivery]
+}
+
+/** Стоимость доставки из опросного листа, ₽; null — не посчитана. */
+export function deliveryCostOf(survey: unknown): number | null {
+  if (typeof survey !== 'object' || survey === null) return null
+  const d = (survey as { delivery?: unknown }).delivery
+  if (typeof d !== 'object' || d === null) return null
+  const cost = (d as { costRub?: unknown }).costRub
+  return typeof cost === 'number' && Number.isFinite(cost) && cost > 0 ? cost : null
+}
+
+/**
+ * Строка доставки для единицы: «Доставка со склада поставщика до г. Москва».
+ *
+ * Есть только когда пункт условий говорит «стоимость включает доставку» и
+ * сумма доставки в опросном листе посчитана или введена. «Куда» — из
+ * условий: менеджер мог поправить его в окне выпуска.
+ */
+export function deliveryLine(
+  terms: Pick<KpTerms, 'deliveryIncluded' | 'deliveryTo'>,
+  survey: unknown,
+  number: string,
+  unitTitle?: string | null,
+): KpLine | null {
+  if (terms.deliveryIncluded !== true) return null
+  const cost = deliveryCostOf(survey)
+  if (cost == null) return null
+  const to = terms.deliveryTo?.trim() || 'объекта'
+  const what = unitTitle ? ` (${unitTitle})` : ''
+  return {
+    number,
+    description: `Доставка${what} со склада поставщика до ${to}`,
+    qty: 1,
+    unit: DELIVERY_UNIT,
+    priceRub: round2(cost),
+    totalRub: round2(cost),
+  }
 }
 
 /** Описание и состав позиции: правки менеджера поверх черновика из ОЛ. */
@@ -277,9 +334,14 @@ function assemble(
   issuedAt: Date,
   project: { title: string; customer: string | null; address: string | null } | null,
   survey: unknown,
+  deliverySurveys: Array<{ survey: unknown; title: string | null }>,
 ): KpDocument {
-  const totalRub = round2(positions.reduce((sum, p) => sum + p.totalRub, 0))
   const parts = headerParts(input, issuedAt, project, survey)
+  const delivery = deliverySurveys
+    .map((u, i) => deliveryLine(parts.terms, u.survey, `2.${i + 1}`, u.title))
+    .filter((l): l is KpLine => l != null)
+    .map((l, i) => ({ ...l, number: `2.${i + 1}` }))
+  const totalRub = round2(tableLines({ positions, delivery }).reduce((sum, p) => sum + p.totalRub, 0))
 
   return {
     number: input.number?.trim() || null,
@@ -288,6 +350,7 @@ function assemble(
     customer: project?.customer ?? null,
     object: objectLine(project),
     positions,
+    delivery,
     totalRub,
     vatRub: vatIncludedIn(totalRub, parts.vatRatePct),
     ...parts,
@@ -308,7 +371,8 @@ function assemble(
  */
 export function buildKpDocument(input: KpDocumentInput): KpDocument {
   const position = buildPosition(input, 1)
-  return assemble('unit', input, [position], input.snapshot.createdAt, input.project, input.snapshot.bundlesJson)
+  const survey = input.snapshot.bundlesJson
+  return assemble('unit', input, [position], input.snapshot.createdAt, input.project, survey, [{ survey, title: null }])
 }
 
 /**
@@ -332,7 +396,14 @@ export function buildProjectKpDocument(input: KpProjectDocumentInput): KpDocumen
   // Доставка на проект — по первой единице, у которой есть раздел «Доставка»:
   // пункт условий в документе один.
   const survey = input.units.find((u) => deliveryFromSurvey(u.snapshot.bundlesJson))?.snapshot.bundlesJson ?? null
-  return assemble('project', input, positions, issuedAt, input.project, survey)
+  // Строк доставки — по единице: у каждой своя сумма. Название единицы в
+  // строке нужно, только если единиц с доставкой больше одной.
+  const withDelivery = input.units.filter((u) => deliveryCostOf(u.snapshot.bundlesJson) != null)
+  const deliverySurveys = withDelivery.map((u) => ({
+    survey: u.snapshot.bundlesJson,
+    title: withDelivery.length > 1 ? u.estimateTitle : null,
+  }))
+  return assemble('project', input, positions, issuedAt, input.project, survey, deliverySurveys)
 }
 
 /**

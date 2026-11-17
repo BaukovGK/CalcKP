@@ -22,7 +22,7 @@ import {
   tirageOf,
 } from '../utils/estimate-tree'
 import { changeText, surveyChanges, SURVEY_CHANGES_MAX } from '../utils/survey-diff'
-import { documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
+import { deliveryCostOf, documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
 import { renderKpXlsx } from '../utils/kp-xlsx'
@@ -614,6 +614,9 @@ estimatesRouter.get(
         },
         // Пункт о доставке — по разделу «Доставка» опросного листа.
         terms: defaultTerms(issuedAt, { deliveryTo: object, delivery: deliveryFromSurvey(survey) }),
+        // Сумма доставки для строки «2.1» — окно выпуска прибавляет её к
+        // сумме КП, пока доставка отмечена «включена в стоимость».
+        deliveryRub: deliveryCostOf(survey),
         signature: defaultSignature(estimate.author ?? {}),
       })
     } catch (e) { next(e) }
