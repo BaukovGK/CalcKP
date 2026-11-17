@@ -211,3 +211,17 @@ export function knsDelivery(dnMm: number, fullHeightMm: number, rate: DeliveryRa
 export function findRate<T extends DeliveryRate>(rates: readonly T[], id: string, city: string): T | null {
   return rates.find((r) => r.id && r.id === id) ?? (city ? rates.find((r) => r.city === city) : undefined) ?? null
 }
+
+/** Признаки, что маршрут книги тарифов — не просто город (как в backend/utils/kp-terms.ts). */
+const NOT_A_CITY = /обл\.?|област|кра[йя]|республик|р-н|район|(^|\s)ст\.|станц|ГРЭС|ТЭС|ТКО|ТБО|МПК|порт|,|\s-\s|\(|\d/i
+
+/**
+ * Пункт назначения для КП: «Москва» → «г. Москва»; «Пермский край»,
+ * «Солнечногорск, МО» — как есть. Та же функция, что на сервере.
+ */
+export function deliveryPlace(city: string): string {
+  const c = city.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim()
+  if (!c) return c
+  if (/^(г\.|город\s)/i.test(c) || NOT_A_CITY.test(c)) return c
+  return `г. ${c}`
+}

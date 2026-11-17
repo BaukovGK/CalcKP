@@ -45,6 +45,7 @@ import {
   companyFromEnv,
   defaultSignature,
   defaultTerms,
+  deliveryFromSurvey,
   type KpCompany,
   type KpSignature,
   type KpTerms,
@@ -248,11 +249,15 @@ function headerParts(
   input: KpHeaderInput,
   issuedAt: Date,
   project: { address: string | null; title: string } | null,
+  survey: unknown,
 ): Pick<KpDocument, 'terms' | 'signature' | 'company' | 'vatRatePct'> {
   const terms: KpTerms = {
-    ...defaultTerms(issuedAt, { deliveryTo: objectLine(project) }),
+    ...defaultTerms(issuedAt, { deliveryTo: objectLine(project), delivery: deliveryFromSurvey(survey) }),
     ...(input.terms ?? {}),
   }
+  // Шапка выпущенного КП без признака доставки — выпуск до раздела
+  // «Доставка»: печатаем прежней формулировкой, слово в слово.
+  if (input.terms && input.terms.deliveryIncluded === undefined) terms.deliveryIncluded = null
   const signature: KpSignature = {
     ...defaultSignature(input.executor ?? {}),
     ...(input.signature ?? {}),
@@ -271,9 +276,10 @@ function assemble(
   positions: KpPosition[],
   issuedAt: Date,
   project: { title: string; customer: string | null; address: string | null } | null,
+  survey: unknown,
 ): KpDocument {
   const totalRub = round2(positions.reduce((sum, p) => sum + p.totalRub, 0))
-  const parts = headerParts(input, issuedAt, project)
+  const parts = headerParts(input, issuedAt, project, survey)
 
   return {
     number: input.number?.trim() || null,
@@ -302,7 +308,7 @@ function assemble(
  */
 export function buildKpDocument(input: KpDocumentInput): KpDocument {
   const position = buildPosition(input, 1)
-  return assemble('unit', input, [position], input.snapshot.createdAt, input.project)
+  return assemble('unit', input, [position], input.snapshot.createdAt, input.project, input.snapshot.bundlesJson)
 }
 
 /**
@@ -323,7 +329,10 @@ export function buildProjectKpDocument(input: KpProjectDocumentInput): KpDocumen
   const issuedAt = new Date(
     Math.max(...input.units.map((u) => u.snapshot.createdAt.getTime()), 0),
   )
-  return assemble('project', input, positions, issuedAt, input.project)
+  // Доставка на проект — по первой единице, у которой есть раздел «Доставка»:
+  // пункт условий в документе один.
+  const survey = input.units.find((u) => deliveryFromSurvey(u.snapshot.bundlesJson))?.snapshot.bundlesJson ?? null
+  return assemble('project', input, positions, issuedAt, input.project, survey)
 }
 
 /**

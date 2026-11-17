@@ -423,6 +423,18 @@
               <span class="ol-pick" :class="{ 'ol-pick--warn': deliveryWarn }">{{ deliveryHint }}</span>
             </label>
           </div>
+          <!-- Своя стоимость — значит, и адрес свой: поле активно только при
+               ней. В КП доставка пишется «до <адрес>», без него — до города. -->
+          <div class="ol-grid">
+            <label class="fld fld--12"><span v-hint="H.deliveryAddress">Адрес доставки</span>
+              <input
+                v-model="form.deliveryAddress"
+                :disabled="d.manualRub.value == null"
+                :placeholder="d.manualRub.value == null ? 'доступен при своей стоимости доставки' : 'введите адрес доставки — он пойдёт в КП'"
+              />
+            </label>
+          </div>
+          <div class="ol-explain" data-testid="delivery-kp-line">В КП: {{ deliveryKpLine }}</div>
           <div v-if="d.error.value" class="ol-pick ol-pick--warn">{{ d.error.value }}</div>
           <div v-if="d.lostCity.value" class="ol-pick ol-pick--warn">
             Маршрута «{{ d.lostCity.value }}» больше нет в тарифах — выберите город заново.
@@ -567,6 +579,7 @@ import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { legacySnManual, snManualLabel, snManualOptions } from '@/composables/usePipeOverride'
 import { usePumpSelection } from '@/composables/usePumpSelection'
 import { useDelivery } from '@/composables/useDelivery'
+import { deliveryPlace } from '@/engines/delivery'
 import { useSurveySync } from '@/composables/useSurveySync'
 import { useCalcTreeStore } from '@/stores/calcTree'
 import { pipeLengthM } from '@/engines/formulas'
@@ -650,6 +663,18 @@ const deliveryHint = computed(() => {
     ? `по маршруту нет ставки «${missing.join('», «')}» — введите стоимость вручную`
     : 'введите стоимость вручную'
 })
+/**
+ * Как доставка прозвучит в пункте 1 условий КП — та же логика, что у
+ * сервера (backend/utils/kp-terms.ts, deliveryFromSurvey).
+ */
+const deliveryKpLine = computed(() => {
+  const address = form.value.deliveryAddress.trim()
+  const city = form.value.deliveryCity ? deliveryPlace(form.value.deliveryCity) : ''
+  if (d.manualRub.value != null) return `стоимость включает доставку со склада до ${address || city || 'объекта'}`
+  if (city && d.calcRub.value != null) return `стоимость включает доставку со склада до ${city}`
+  return 'доставка в стоимость не входит — рассчитывается отдельно по запросу'
+})
+
 const deliveryExplain = computed(() => {
   const r = d.result.value
   if (!r) return ''
@@ -999,6 +1024,8 @@ function surveyPayload() {
       calcRub: d.calcRub.value,
       manualRub: d.manualRub.value,
       costRub: d.costRub.value,
+      // Адрес — только при своей стоимости: иначе в КП доставка до города.
+      address: d.manualRub.value != null ? form.value.deliveryAddress.trim() || null : null,
     },
   }
 }

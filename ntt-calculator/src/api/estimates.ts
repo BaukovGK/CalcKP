@@ -87,6 +87,8 @@ export interface KpKitItem {
 export interface KpTerms {
   vatRatePct: number
   deliveryTo: string | null
+  /** Доставка в стоимости: true — включена, false — не входит, null — прежняя формулировка. */
+  deliveryIncluded?: boolean | null
   shipmentFrom: string | null
   /** ISO-дата; null — пункт о сроке действия не печатается. */
   validUntil: string | null

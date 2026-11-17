@@ -12,6 +12,8 @@ export interface DeliveryFormFields {
   deliveryCity: string
   /** Стоимость доставки вручную, ₽; пусто — расчётная по тарифам. */
   deliveryCost: string
+  /** Адрес доставки для КП — при своей стоимости. */
+  deliveryAddress: string
 }
 
 /** Длиннее — подпись в списке обрезается многоточием (полное название — в тарифах). */

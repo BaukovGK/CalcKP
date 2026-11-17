@@ -32,7 +32,7 @@ import { estimateKpDocument } from '../utils/kp-estimate-doc'
 import { sendKpToDeal } from '../utils/b24-kp'
 import { productDescription } from '../utils/kp-product'
 import { formatKpNumber, headerToJson, isSuggestedNumber, kpIssueSchema, type KpStoredHeader } from '../utils/kp-payload'
-import { defaultSignature, defaultTerms } from '../utils/kp-terms'
+import { defaultSignature, defaultTerms, deliveryFromSurvey } from '../utils/kp-terms'
 import { blocksDeletion, isPrintable, PRINTABLE_REASONS, REASON_LABEL } from '../utils/snapshot-reason'
 import type { SnapshotReason } from '@prisma/client'
 
@@ -612,7 +612,8 @@ estimatesRouter.get(
           priceRub: Math.round((totalRub / qty) * 100) / 100,
           totalRub,
         },
-        terms: defaultTerms(issuedAt, { deliveryTo: object }),
+        // Пункт о доставке — по разделу «Доставка» опросного листа.
+        terms: defaultTerms(issuedAt, { deliveryTo: object, delivery: deliveryFromSurvey(survey) }),
         signature: defaultSignature(estimate.author ?? {}),
       })
     } catch (e) { next(e) }

@@ -56,11 +56,12 @@ async function mountKns(initial: Record<string, unknown>) {
 
 const section = (w: Awaited<ReturnType<typeof mountKns>>) => w.find('[data-testid="delivery-section"]')
 const citySelect = (w: Awaited<ReturnType<typeof mountKns>>) => section(w).find('select')
-/** Поле «Стоимость доставки, ₽» — последнее поле раздела. */
-const costInput = (w: Awaited<ReturnType<typeof mountKns>>) => {
-  const inputs = section(w).findAll('input')
-  return inputs[inputs.length - 1]!
-}
+/** Поле раздела по подписи. */
+const fieldInput = (w: Awaited<ReturnType<typeof mountKns>>, label: string) =>
+  section(w).findAll('label').find((l) => l.text().startsWith(label))!.find('input')
+const costInput = (w: Awaited<ReturnType<typeof mountKns>>) => fieldInput(w, 'Стоимость доставки')
+const addressInput = (w: Awaited<ReturnType<typeof mountKns>>) => fieldInput(w, 'Адрес доставки')
+const kpLine = (w: Awaited<ReturnType<typeof mountKns>>) => section(w).find('[data-testid="delivery-kp-line"]').text()
 
 describe('ОЛ КНС: доставка', () => {
   it('города — из тарифов закупок', async () => {
@@ -101,6 +102,23 @@ describe('ОЛ КНС: доставка', () => {
   it('город сохранённого листа находится по названию, если id сменился импортом', async () => {
     const w = await mountKns({ deliveryRateId: 'old-id', deliveryCity: 'Москва' })
     expect((citySelect(w).element as HTMLSelectElement).value).toBe('msk')
+    w.unmount()
+  })
+
+  it('адрес доставки активен только при своей стоимости; в КП — до адреса', async () => {
+    const w = await mountKns({ deliveryRateId: 'msk', deliveryCity: 'Москва' })
+    expect(addressInput(w).attributes('disabled')).toBeDefined()
+    expect(kpLine(w)).toBe('В КП: стоимость включает доставку со склада до г. Москва')
+    await costInput(w).setValue('300000')
+    expect(addressInput(w).attributes('disabled')).toBeUndefined()
+    await addressInput(w).setValue('г. Химки, ул. Заводская, 1')
+    expect(kpLine(w)).toBe('В КП: стоимость включает доставку со склада до г. Химки, ул. Заводская, 1')
+    w.unmount()
+  })
+
+  it('город не выбран — в КП «доставка в стоимость не входит»', async () => {
+    const w = await mountKns({})
+    expect(kpLine(w)).toContain('доставка в стоимость не входит')
     w.unmount()
   })
 })

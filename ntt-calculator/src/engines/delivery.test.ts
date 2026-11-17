@@ -120,3 +120,12 @@ describe('вспомогательное', () => {
     expect(findRate(rates, '', '')).toBeNull()
   })
 })
+
+describe('пункт назначения для КП', () => {
+  it('«г.» — только к городу', async () => {
+    const { deliveryPlace } = await import('./delivery')
+    expect(deliveryPlace('Москва')).toBe('г. Москва')
+    expect(deliveryPlace('Пермский край')).toBe('Пермский край')
+    expect(deliveryPlace('Солнечногорск, МО')).toBe('Солнечногорск, МО')
+  })
+})

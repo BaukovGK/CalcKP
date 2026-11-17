@@ -207,14 +207,23 @@
               <span v-hint="H.payDays">Оплата, раб. дней</span>
               <input v-model.number="terms.paymentDays" type="number" min="0" />
             </label>
-            <label class="fld fld--6">
-              <span v-hint="H.delivery">Доставка на объект</span>
-              <input v-model="deliveryTo" />
+            <label class="fld fld--4">
+              <span v-hint="H.deliveryIncluded">Доставка</span>
+              <select v-model="deliveryIncluded" data-testid="kp-delivery-included">
+                <option :value="true">включена в стоимость</option>
+                <option :value="false">не входит в стоимость</option>
+                <option v-if="deliveryIncludedFromDraft === null" :value="null">прежняя формулировка</option>
+              </select>
             </label>
-            <label class="fld fld--6">
+            <label class="fld fld--4">
+              <span v-hint="H.delivery">{{ deliveryIncluded === null ? 'Доставка на объект' : 'Доставка до' }}</span>
+              <input v-model="deliveryTo" :disabled="deliveryIncluded === false" />
+            </label>
+            <label class="fld fld--4">
               <span v-hint="H.warehouse">Склад отгрузки</span>
               <input v-model="shipmentFrom" />
             </label>
+            <div class="fld fld--12 kpv-term1" data-testid="kp-delivery-term">Пункт 1: {{ deliveryTermPreview }}</div>
             <label class="fld fld--3">
               <span v-hint="H.lead">Срок поставки, раб. дней</span>
               <input v-model="terms.leadTimeDays" />
@@ -345,8 +354,9 @@ const H = {
   valid: 'До какой даты предложение действительно. По умолчанию — две недели от выпуска',
   prepay: 'Доля предоплаты; остаток печатается автоматически',
   payDays: 'Сколько рабочих дней даётся на каждый платёж',
-  delivery: 'Адрес доставки для пункта 1. Пусто — про доставку в условиях не пишем',
-  warehouse: 'Склад, с которого идёт самовывоз: про него пункт 1 говорит, что в цену он не входит',
+  deliveryIncluded: 'Подставлено из раздела «Доставка» опросного листа: город выбран и стоимость есть — доставка включена, иначе не входит',
+  delivery: 'Куда доставляем — город из тарифов или адрес, введённый в опросном листе при своей стоимости',
+  warehouse: 'Склад поставщика, откуда идёт доставка или самовывоз',
   lead: 'Срок поставки, рабочих дней — можно диапазоном: 40-50',
   euro: 'Порог изменения курса евро по ЦБ, после которого стоимость уточняется',
   excluded: 'Что не входит в стоимость: каждая строка станет отдельным пунктом условий',
@@ -406,6 +416,9 @@ const headline = computed(() => {
 })
 const validUntil = ref('')
 const deliveryTo = ref('')
+/** Входит ли доставка в стоимость; null — прежняя формулировка (изделие без раздела «Доставка»). */
+const deliveryIncluded = ref<boolean | null>(null)
+const deliveryIncludedFromDraft = ref<boolean | null>(null)
 const shipmentFrom = ref('')
 const excluded = ref('')
 const signerName = ref('')
@@ -473,6 +486,8 @@ async function load() {
     terms.euroThresholdPct = d.terms.euroThresholdPct
     validUntil.value = toDateInput(d.terms.validUntil)
     deliveryTo.value = d.terms.deliveryTo ?? ''
+    deliveryIncluded.value = d.terms.deliveryIncluded ?? null
+    deliveryIncludedFromDraft.value = d.terms.deliveryIncluded ?? null
     shipmentFrom.value = d.terms.shipmentFrom ?? ''
     excluded.value = d.terms.excluded.join('\n')
     signature.signerTitle = d.signature.signerTitle
@@ -495,6 +510,19 @@ function addItem() {
 
 
 const clean = (v: string) => (v.trim() === '' ? null : v.trim())
+
+/** Пункт 1 так, как его напечатает сервер (backend/utils/kp-terms.ts, priceTerm). */
+const deliveryTermPreview = computed(() => {
+  const vat = `Цены приведены с учётом НДС ${terms.vatRatePct} %.`
+  const from = shipmentFrom.value.trim() ? ` (${shipmentFrom.value.trim()})` : ''
+  const to = deliveryTo.value.trim()
+  if (deliveryIncluded.value === true) return `${vat} Стоимость включает доставку со склада поставщика${from} до ${to || 'объекта'}.`
+  if (deliveryIncluded.value === false) {
+    return `${vat} Доставка в стоимость не входит: отгрузка со склада поставщика${from}, стоимость доставки до объекта рассчитывается отдельно по запросу.`
+  }
+  return `Цены приведены с учётом НДС ${terms.vatRatePct} %${to ? ` и доставкой на объект: ${to}` : ''}.` +
+    (from ? ` Стоимость самовывоза со склада поставщика${from} в цену не входит.` : '')
+})
 
 /** Шапка документа в том виде, в каком её принимает сервер. */
 function payload(): KpIssuePayload {
@@ -522,7 +550,8 @@ function payload(): KpIssuePayload {
       leadTimeDays: terms.leadTimeDays,
       euroThresholdPct: terms.euroThresholdPct,
       validUntil: fromDateInput(validUntil.value),
-      deliveryTo: clean(deliveryTo.value),
+      deliveryTo: deliveryIncluded.value === false ? null : clean(deliveryTo.value),
+      deliveryIncluded: deliveryIncluded.value,
       shipmentFrom: clean(shipmentFrom.value),
       excluded: excluded.value.split('\n').map((s) => s.trim()).filter(Boolean),
     },
@@ -644,6 +673,8 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
   border: 1px solid var(--bd); max-width: 560px; }
 
 .kpv-text { width: 100%; font: inherit; font-size: 12.5px; resize: vertical; }
+/* Пункт 1 условий — так, как он уйдёт в документ */
+.kpv-term1 { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 /* Состав — во весь экран: строк два десятка, и прокручивать их в полосе нельзя. */
 .kpv-prev { margin: 0; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--bd);
   font: inherit; font-size: 12.5px; white-space: pre-wrap; max-height: 420px; overflow: auto; }

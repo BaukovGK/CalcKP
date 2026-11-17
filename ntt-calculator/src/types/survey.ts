@@ -178,6 +178,11 @@ export interface KnsSurveyForm extends SurveyCommonForm {
   deliveryCity: string
   /** Стоимость доставки вручную, ₽; пусто — расчётная по тарифам. */
   deliveryCost: string
+  /**
+   * Адрес доставки — активен при своей стоимости: тогда в КП «доставка до
+   * <адрес>», а не до города из тарифов. Пусто — до города.
+   */
+  deliveryAddress: string
 }
 
 /**
@@ -250,5 +255,6 @@ export function makeDefaultKnsSurvey(): KnsSurveyForm {
     deliveryRateId: '',
     deliveryCity: '',
     deliveryCost: '',
+    deliveryAddress: '',
   }
 }
