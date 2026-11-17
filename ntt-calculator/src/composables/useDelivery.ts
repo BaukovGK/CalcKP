@@ -14,6 +14,18 @@ export interface DeliveryFormFields {
   deliveryCost: string
 }
 
+/** Длиннее — подпись в списке обрезается многоточием (полное название — в тарифах). */
+const OPTION_MAX = 70
+
+/**
+ * Подпись маршрута в списке: без ссылок (в книге встречается ссылка на
+ * Яндекс.Навигатор) и не длиннее {@link OPTION_MAX} знаков.
+ */
+export function optionCity(city: string): string {
+  const s = city.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim()
+  return s.length > OPTION_MAX ? `${s.slice(0, OPTION_MAX - 1).trimEnd()}…` : s
+}
+
 /**
  * Раздел «Доставка» опросного листа КНС: тарифы, выбранный маршрут, расчёт
  * по таблице ограничений (engines/delivery.ts) и итог с учётом ручного ввода.
@@ -45,10 +57,10 @@ export function useDelivery(
   const options = computed(() => {
     const seen = new Map<string, number>()
     for (const r of rates.value) seen.set(r.city, (seen.get(r.city) ?? 0) + 1)
-    return rates.value.map((r) => ({
-      id: r.id,
-      label: (seen.get(r.city) ?? 0) > 1 && r.num != null ? `${r.city} (№${r.num})` : r.city,
-    }))
+    return rates.value.map((r) => {
+      const city = optionCity(r.city)
+      return { id: r.id, label: (seen.get(r.city) ?? 0) > 1 && r.num != null ? `${city} (№${r.num})` : city }
+    })
   })
 
   const rate = computed(() => findRate(rates.value, form.value.deliveryRateId, form.value.deliveryCity))

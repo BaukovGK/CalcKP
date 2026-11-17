@@ -408,7 +408,7 @@
         <section :id="'sec-6'" class="ol-sec" data-testid="delivery-section">
           <h2 class="ol-h">6 · Доставка</h2>
           <div class="ol-grid">
-            <label class="fld fld--6"><span v-hint="H.deliveryCity">Город доставки</span>
+            <label class="fld fld--6 dl-city"><span v-hint="H.deliveryCity">Город доставки</span>
               <select :value="d.rate.value?.id ?? ''" :disabled="d.loading.value" @change="d.selectRate(($event.target as HTMLSelectElement).value)">
                 <option value="">{{ d.loading.value ? 'загрузка тарифов…' : '— не выбран —' }}</option>
                 <option v-for="o in d.options.value" :key="o.id" :value="o.id">{{ o.label }}</option>
@@ -1120,6 +1120,10 @@ async function createEstimate() {
 .ol-live-price { display: flex; justify-content: space-between; align-items: baseline;
   border-top: 1px solid var(--line); padding-top: 8px; }
 .ol-live-price strong { font-size: 18px; }
+
+/* Доставка: список маршрутов не растягивает сетку по самому длинному названию */
+.dl-city { min-width: 0; }
+.dl-city select { width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
 
 /* Доставка: расклад по столбцам тарифа */
 .dl-t { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 4px 0 6px; }
