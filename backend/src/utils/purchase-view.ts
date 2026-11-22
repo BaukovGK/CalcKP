@@ -11,7 +11,8 @@
  *  - параметры ОЛ (в них цены трубы, насоса и т. п.) — дерево отдаётся как
  *    сохранено, без пересборки;
  *  - ставки экономики дерева и потерянные правки;
- *  - у строк — ручные цены инженера, а у незакупаемых (собственное
+ *  - у строк — коэффициенты наценки строк (`markupK`: по ним видна наценка),
+ *    ручные цены инженера, а у незакупаемых (собственное
  *    производство, работы, ФОТ) и операций — любые цены.
  *
  * @module utils/purchase-view
@@ -31,6 +32,7 @@ function purchaseRow(row: unknown): unknown {
   const out: Json = { ...row, priceManual: null }
   delete out.priceBinding
   delete out.priceCatalogPrev
+  delete out.markupK
   if (!purchase) out.priceCatalog = null
   return out
 }
