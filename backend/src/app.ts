@@ -10,6 +10,7 @@ import { adminRouter }     from './routes/admin.routes'
 import { projectsRouter }  from './routes/projects.routes'
 import { estimatesRouter } from './routes/estimates.routes'
 import { pricesRouter }    from './routes/prices.routes'
+import { deliveryRatesRouter } from './routes/delivery-rates.routes'
 import { refsRouter }      from './routes/refs.routes'
 import { purchaseRouter }  from './routes/purchase.routes'
 import { templatesRouter } from './routes/templates.routes'
@@ -103,6 +104,8 @@ app.use('/api/estimates', estimatesRouter)
 // /api/estimates, а не на своём ресурсе: своей сущности у неё нет.
 app.use('/api/estimates', purchaseRouter)
 app.use('/api/prices',    pricesRouter)
+// Тарифы доставки: читает менеджер (город в ОЛ), правит закупка.
+app.use('/api/delivery-rates', deliveryRatesRouter)
 app.use('/api/refs',      refsRouter)
 // Редактор шаблонов (TECHNOLOG): запись в справочники, из которых
 // материализуются шаблоны; чтение — через /api/refs.

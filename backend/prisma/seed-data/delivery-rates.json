@@ -1,0 +1,1721 @@
+[
+  {
+    "num": 1,
+    "city": "Москва",
+    "gabaritRub": 65450.0,
+    "permitRub": 150000.0,
+    "escortRub": 157000.0,
+    "note": "негабарит 3,5*4,5 (всё что шире и выше - по согласованию)!!!",
+    "sortOrder": 1
+  },
+  {
+    "num": 2,
+    "city": "Новая Москва",
+    "gabaritRub": 68500.0,
+    "permitRub": 157000.0,
+    "escortRub": 165000.0,
+    "note": null,
+    "sortOrder": 2
+  },
+  {
+    "num": 3,
+    "city": "Рязань",
+    "gabaritRub": 105500.0,
+    "permitRub": 175000.0,
+    "escortRub": 185000.0,
+    "note": null,
+    "sortOrder": 3
+  },
+  {
+    "num": 4,
+    "city": "Тюмень",
+    "gabaritRub": 535000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 4
+  },
+  {
+    "num": 5,
+    "city": "Санкт-Петербург",
+    "gabaritRub": 175500.0,
+    "permitRub": 295000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 5
+  },
+  {
+    "num": 6,
+    "city": "Тула",
+    "gabaritRub": 115000.0,
+    "permitRub": 165500.0,
+    "escortRub": 185000.0,
+    "note": null,
+    "sortOrder": 6
+  },
+  {
+    "num": 7,
+    "city": "Махачкала, Дагестан",
+    "gabaritRub": 315000.0,
+    "permitRub": 320000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 7
+  },
+  {
+    "num": 8,
+    "city": "Уфа",
+    "gabaritRub": 153000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 8
+  },
+  {
+    "num": 9,
+    "city": "Братск",
+    "gabaritRub": 1070000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 9
+  },
+  {
+    "num": 10,
+    "city": "Якутск",
+    "gabaritRub": 935000.0,
+    "permitRub": 990000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 10
+  },
+  {
+    "num": 11,
+    "city": "Феодосия",
+    "gabaritRub": 380000.0,
+    "permitRub": 395000.0,
+    "escortRub": null,
+    "note": "октябрь",
+    "sortOrder": 11
+  },
+  {
+    "num": 12,
+    "city": "Севастополь",
+    "gabaritRub": 370000.0,
+    "permitRub": 420000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 12
+  },
+  {
+    "num": 13,
+    "city": "Солнечногорск, МО",
+    "gabaritRub": 75000.0,
+    "permitRub": 110000.0,
+    "escortRub": 150000.0,
+    "note": null,
+    "sortOrder": 13
+  },
+  {
+    "num": 14,
+    "city": "Улан-Удэ",
+    "gabaritRub": 920500.0,
+    "permitRub": 920500.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 14
+  },
+  {
+    "num": 15,
+    "city": "Калининград",
+    "gabaritRub": 730000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 15
+  },
+  {
+    "num": 16,
+    "city": "Волгоград",
+    "gabaritRub": 285000.0,
+    "permitRub": 225000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 16
+  },
+  {
+    "num": 17,
+    "city": "Калмыкия",
+    "gabaritRub": 168000.0,
+    "permitRub": 218000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 17
+  },
+  {
+    "num": 18,
+    "city": "Воронеж",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 18
+  },
+  {
+    "num": 19,
+    "city": "Пятигорск",
+    "gabaritRub": 295000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 19
+  },
+  {
+    "num": 20,
+    "city": "Элиста, Калмыкия",
+    "gabaritRub": 165500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 20
+  },
+  {
+    "num": 21,
+    "city": "Туран, Тыва",
+    "gabaritRub": 456500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 21
+  },
+  {
+    "num": 22,
+    "city": "Красноярск",
+    "gabaritRub": 825000.0,
+    "permitRub": 715000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 22
+  },
+  {
+    "num": 23,
+    "city": "Верхняя Тура",
+    "gabaritRub": 650000.0,
+    "permitRub": 699000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 23
+  },
+  {
+    "num": 24,
+    "city": "Санкт-Петербург - Пересвет",
+    "gabaritRub": 155000.0,
+    "permitRub": 290000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 24
+  },
+  {
+    "num": 25,
+    "city": "Полоцк (Беларусь) -г. Новороссийск",
+    "gabaritRub": 430000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 25
+  },
+  {
+    "num": 26,
+    "city": "Пермский край",
+    "gabaritRub": 395000.0,
+    "permitRub": 395000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 26
+  },
+  {
+    "num": 27,
+    "city": "Серпухов",
+    "gabaritRub": 85000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 27
+  },
+  {
+    "num": 28,
+    "city": "Смоленск",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 28
+  },
+  {
+    "num": 29,
+    "city": "Кемерово",
+    "gabaritRub": 536000.0,
+    "permitRub": 550000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 29
+  },
+  {
+    "num": 30,
+    "city": "Стерлитамак",
+    "gabaritRub": 370000.0,
+    "permitRub": 390000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 30
+  },
+  {
+    "num": 31,
+    "city": "Усть - Кут",
+    "gabaritRub": 860500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 31
+  },
+  {
+    "num": 32,
+    "city": "Йошкар - Ола",
+    "gabaritRub": 245000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 32
+  },
+  {
+    "num": 33,
+    "city": "Воронеж, область",
+    "gabaritRub": 165000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "сентябрь",
+    "sortOrder": 33
+  },
+  {
+    "num": 34,
+    "city": "Озёрск, Челябинская обл.",
+    "gabaritRub": 340000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 34
+  },
+  {
+    "num": 35,
+    "city": "Новокуйбышевск",
+    "gabaritRub": 185500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 35
+  },
+  {
+    "num": 36,
+    "city": "Суоярви, Карелия",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 36
+  },
+  {
+    "num": 37,
+    "city": "Екатеринбург",
+    "gabaritRub": 365000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 37
+  },
+  {
+    "num": 38,
+    "city": "Пудож, Карелия",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 38
+  },
+  {
+    "num": 39,
+    "city": "Красноармейск, Саратовская обл.",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 39
+  },
+  {
+    "num": 40,
+    "city": "Свободный, Амурская обл.",
+    "gabaritRub": 1050000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 40
+  },
+  {
+    "num": 41,
+    "city": "Казань",
+    "gabaritRub": 195800.0,
+    "permitRub": 310000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 41
+  },
+  {
+    "num": 42,
+    "city": "Белгород",
+    "gabaritRub": 236500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 42
+  },
+  {
+    "num": 43,
+    "city": "Тольятти",
+    "gabaritRub": 169000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 43
+  },
+  {
+    "num": 44,
+    "city": "Петрозаводск",
+    "gabaritRub": 180000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 44
+  },
+  {
+    "num": 45,
+    "city": "Магнитогорск",
+    "gabaritRub": 287500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 45
+  },
+  {
+    "num": 46,
+    "city": "Пермь",
+    "gabaritRub": 395000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 46
+  },
+  {
+    "num": 48,
+    "city": "Алматы, Казахстан",
+    "gabaritRub": 690000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 47
+  },
+  {
+    "num": 49,
+    "city": "Череповец",
+    "gabaritRub": 145000.0,
+    "permitRub": 155000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 48
+  },
+  {
+    "num": 50,
+    "city": "Майкоп",
+    "gabaritRub": 255000.0,
+    "permitRub": 365000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 49
+  },
+  {
+    "num": 51,
+    "city": "Лабытнанги",
+    "gabaritRub": 845000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 50
+  },
+  {
+    "num": 52,
+    "city": "Салехард",
+    "gabaritRub": 870000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 51
+  },
+  {
+    "num": 53,
+    "city": "Среднеуральск",
+    "gabaritRub": 320000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 52
+  },
+  {
+    "num": 54,
+    "city": "Новокузнецк, Кемеровской обл.",
+    "gabaritRub": 460000.0,
+    "permitRub": 555000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 53
+  },
+  {
+    "num": 55,
+    "city": "Кемь, Карелия",
+    "gabaritRub": 180000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 54
+  },
+  {
+    "num": 56,
+    "city": "Ростов на Дону",
+    "gabaritRub": 320000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 55
+  },
+  {
+    "num": 57,
+    "city": "Красноярский край, Красноярск",
+    "gabaritRub": 825000.0,
+    "permitRub": 715000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 56
+  },
+  {
+    "num": 58,
+    "city": "Кемеровская обл.",
+    "gabaritRub": 585000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 57
+  },
+  {
+    "num": 59,
+    "city": "Иркутская обл.",
+    "gabaritRub": 950000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 58
+  },
+  {
+    "num": 60,
+    "city": "Светогорск, Ленинградская обл.",
+    "gabaritRub": 159000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 59
+  },
+  {
+    "num": 61,
+    "city": "Каспийск, Астраханская обл.",
+    "gabaritRub": 257000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 60
+  },
+  {
+    "num": 62,
+    "city": "Улан-Удэ, Бурятия",
+    "gabaritRub": 970000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 61
+  },
+  {
+    "num": 63,
+    "city": "Оренбург",
+    "gabaritRub": 385000.0,
+    "permitRub": 345000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 62
+  },
+  {
+    "num": 64,
+    "city": "Забайкальский Край",
+    "gabaritRub": 880000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 63
+  },
+  {
+    "num": 65,
+    "city": "Тюмень, область",
+    "gabaritRub": 395000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 64
+  },
+  {
+    "num": 66,
+    "city": "Красноярский Край, ст. Ужур",
+    "gabaritRub": 825000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 65
+  },
+  {
+    "num": 67,
+    "city": "Саянск",
+    "gabaritRub": 830000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 66
+  },
+  {
+    "num": 68,
+    "city": "Нижний Новгород",
+    "gabaritRub": 185000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 67
+  },
+  {
+    "num": 69,
+    "city": "Норильск",
+    "gabaritRub": 1250000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 68
+  },
+  {
+    "num": 70,
+    "city": "Пермь - г.Тверь",
+    "gabaritRub": 435000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 69
+  },
+  {
+    "num": 71,
+    "city": "Тульская обл.",
+    "gabaritRub": 165000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 70
+  },
+  {
+    "num": 72,
+    "city": "Темрюк",
+    "gabaritRub": 295000.0,
+    "permitRub": 390000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 71
+  },
+  {
+    "num": 73,
+    "city": "Челябинская обл.",
+    "gabaritRub": 380000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 72
+  },
+  {
+    "num": 74,
+    "city": "Керчь, Крым",
+    "gabaritRub": 310000.0,
+    "permitRub": 350000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 73
+  },
+  {
+    "num": 75,
+    "city": "Мурманск",
+    "gabaritRub": 410000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 74
+  },
+  {
+    "num": 76,
+    "city": "Алматы, Кульжинский тракт",
+    "gabaritRub": 525000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 75
+  },
+  {
+    "num": 77,
+    "city": "Курчатов, Курская обл.",
+    "gabaritRub": 185000.0,
+    "permitRub": 150000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 76
+  },
+  {
+    "num": 78,
+    "city": "Наро-Фоминск",
+    "gabaritRub": 75000.0,
+    "permitRub": 93500.0,
+    "escortRub": 139000.0,
+    "note": null,
+    "sortOrder": 77
+  },
+  {
+    "num": 79,
+    "city": "Солигорск, Рес. Беларусь",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 78
+  },
+  {
+    "num": 80,
+    "city": "Солигорск, Рес. Беларусь - г. Пересвет",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 79
+  },
+  {
+    "num": 81,
+    "city": "Печёрская ГРЭС, р. Коми",
+    "gabaritRub": 395000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 80
+  },
+  {
+    "num": 82,
+    "city": "Красный Сулин",
+    "gabaritRub": 215000.0,
+    "permitRub": 255000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 81
+  },
+  {
+    "num": 83,
+    "city": "Красноярский Край, Лесосибирск",
+    "gabaritRub": 825000.0,
+    "permitRub": 595000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 82
+  },
+  {
+    "num": 84,
+    "city": "Можайск",
+    "gabaritRub": 95000.0,
+    "permitRub": null,
+    "escortRub": 165000.0,
+    "note": null,
+    "sortOrder": 83
+  },
+  {
+    "num": 85,
+    "city": "Егорьевск",
+    "gabaritRub": 85000.0,
+    "permitRub": 110000.0,
+    "escortRub": 145000.0,
+    "note": null,
+    "sortOrder": 84
+  },
+  {
+    "num": 86,
+    "city": "Краснодар",
+    "gabaritRub": 320000.0,
+    "permitRub": 390000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 85
+  },
+  {
+    "num": 87,
+    "city": "Магадан",
+    "gabaritRub": 1850000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 86
+  },
+  {
+    "num": 88,
+    "city": "Богатые Сабы, Республика Татарстан",
+    "gabaritRub": 215000.0,
+    "permitRub": 225000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 87
+  },
+  {
+    "num": 89,
+    "city": "Губкин, Белгородская обл.",
+    "gabaritRub": 205000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 88
+  },
+  {
+    "num": 90,
+    "city": "Брянск",
+    "gabaritRub": 205000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 89
+  },
+  {
+    "num": 91,
+    "city": "Калуга",
+    "gabaritRub": 115000.0,
+    "permitRub": null,
+    "escortRub": 150000.0,
+    "note": null,
+    "sortOrder": 90
+  },
+  {
+    "num": 92,
+    "city": "Липецк",
+    "gabaritRub": 163000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 91
+  },
+  {
+    "num": 93,
+    "city": "Гродно (Беларусь)",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 92
+  },
+  {
+    "num": 94,
+    "city": "Донское, Ставропольский край",
+    "gabaritRub": 195000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 93
+  },
+  {
+    "num": 95,
+    "city": "Новочебоксарск,Чувашия",
+    "gabaritRub": 175000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 94
+  },
+  {
+    "num": 96,
+    "city": "Кемеровская обл. д. Дмитриевка",
+    "gabaritRub": 480000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 95
+  },
+  {
+    "num": 97,
+    "city": "Кемеровская обл. Калтан",
+    "gabaritRub": 480000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 96
+  },
+  {
+    "num": 98,
+    "city": "Сортавала, Карелия",
+    "gabaritRub": 180000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 97
+  },
+  {
+    "num": 99,
+    "city": "Ставропольский край, Горько-Балковская МГЭС",
+    "gabaritRub": 270000.0,
+    "permitRub": 340000.0,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 98
+  },
+  {
+    "num": 100,
+    "city": "Ульяновск",
+    "gabaritRub": 175000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "только с Разрешением",
+    "sortOrder": 99
+  },
+  {
+    "num": 101,
+    "city": "Казань, обл.",
+    "gabaritRub": 185000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 100
+  },
+  {
+    "num": 102,
+    "city": "Удмуртия, д. Сыга, Юкаменский район",
+    "gabaritRub": 145000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 101
+  },
+  {
+    "num": 103,
+    "city": "Чувашия, ст. Вунары - Канаш",
+    "gabaritRub": 105000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 102
+  },
+  {
+    "num": 104,
+    "city": "Нижегородская обл. г. Дзержинск",
+    "gabaritRub": 145000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 103
+  },
+  {
+    "num": 105,
+    "city": "Саратов",
+    "gabaritRub": 185000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 104
+  },
+  {
+    "num": 106,
+    "city": "Обнинск",
+    "gabaritRub": 75500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 105
+  },
+  {
+    "num": 107,
+    "city": "Зеленоград, МО",
+    "gabaritRub": 65000.0,
+    "permitRub": 110000.0,
+    "escortRub": 135000.0,
+    "note": null,
+    "sortOrder": 106
+  },
+  {
+    "num": 108,
+    "city": "Новороссийск",
+    "gabaritRub": 313500.0,
+    "permitRub": 390000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 107
+  },
+  {
+    "num": 109,
+    "city": "Анапа",
+    "gabaritRub": 290000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 108
+  },
+  {
+    "num": 110,
+    "city": "Чебоксары, Чувашия",
+    "gabaritRub": 155000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 109
+  },
+  {
+    "num": 111,
+    "city": "Троицк, Новая Москва",
+    "gabaritRub": 59500.0,
+    "permitRub": 95000.0,
+    "escortRub": 132000.0,
+    "note": null,
+    "sortOrder": 110
+  },
+  {
+    "num": 112,
+    "city": "Владимирская обл.",
+    "gabaritRub": 105000.0,
+    "permitRub": 127000.0,
+    "escortRub": 155000.0,
+    "note": null,
+    "sortOrder": 111
+  },
+  {
+    "num": 113,
+    "city": "Ханты-Мансийск",
+    "gabaritRub": 830000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 112
+  },
+  {
+    "num": 114,
+    "city": "Мосальск, Калужская обл.",
+    "gabaritRub": 115000.0,
+    "permitRub": 120000.0,
+    "escortRub": 155000.0,
+    "note": null,
+    "sortOrder": 113
+  },
+  {
+    "num": 115,
+    "city": "Печора",
+    "gabaritRub": 410000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 114
+  },
+  {
+    "num": 116,
+    "city": "Майкоп",
+    "gabaritRub": null,
+    "permitRub": 390000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 115
+  },
+  {
+    "num": 117,
+    "city": "Ириклинская ГРЭС",
+    "gabaritRub": 395000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 116
+  },
+  {
+    "num": 118,
+    "city": "Покровское - Стрешнево, Москва, МО",
+    "gabaritRub": null,
+    "permitRub": 210000.0,
+    "escortRub": null,
+    "note": "КНС, ширина - 4750 мм, до 1.09.2022г.",
+    "sortOrder": 117
+  },
+  {
+    "num": 120,
+    "city": "Февральск, Амурская обл.",
+    "gabaritRub": 1450000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "г. Пересвет - ст. Февральск, Амурская обл.",
+    "sortOrder": 118
+  },
+  {
+    "num": 121,
+    "city": "Комсомольск на Амуре",
+    "gabaritRub": 1700000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 119
+  },
+  {
+    "num": 122,
+    "city": "Новый Уренгой",
+    "gabaritRub": 850000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "сентябрь-октябрь 2022г.",
+    "sortOrder": 120
+  },
+  {
+    "num": 123,
+    "city": "МПК Сергиево-Посадский",
+    "gabaritRub": null,
+    "permitRub": 110000.0,
+    "escortRub": null,
+    "note": "сентябрь-октябрь 2022г.",
+    "sortOrder": 121
+  },
+  {
+    "num": 124,
+    "city": "МПК Коломенский",
+    "gabaritRub": null,
+    "permitRub": 143000.0,
+    "escortRub": null,
+    "note": "сентябрь-октябрь 2022г.",
+    "sortOrder": 122
+  },
+  {
+    "num": 125,
+    "city": "МПК Каширский",
+    "gabaritRub": null,
+    "permitRub": 153000.0,
+    "escortRub": null,
+    "note": "сентябрь-октябрь 2022г.",
+    "sortOrder": 123
+  },
+  {
+    "num": 126,
+    "city": "Тында (Беленькая - Ефремов)",
+    "gabaritRub": 1210000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "октябрь 2022г.",
+    "sortOrder": 124
+  },
+  {
+    "num": 127,
+    "city": "Елесеевка, Ирбейский р-н, Красноярский край",
+    "gabaritRub": 825000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "сентябрь 2022г.",
+    "sortOrder": 125
+  },
+  {
+    "num": 128,
+    "city": "Селихин - Эльдиган",
+    "gabaritRub": 1430000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "сентябрь 2022г.",
+    "sortOrder": 126
+  },
+  {
+    "num": 129,
+    "city": "ТАГУЛ (жд станция)",
+    "gabaritRub": 870000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "октябрь 2022г.",
+    "sortOrder": 127
+  },
+  {
+    "num": 130,
+    "city": "Новодвинск, Архангельская обл.",
+    "gabaritRub": 295000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "октябрь 2022г.",
+    "sortOrder": 128
+  },
+  {
+    "num": 131,
+    "city": "Кострома (см. приложение)",
+    "gabaritRub": 170000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "октябрь - ноябрь 2022г., доставка конус-отходов DN 3000 на низком трале в габарите",
+    "sortOrder": 129
+  },
+  {
+    "num": 133,
+    "city": "Сальск, Ростовская обл.",
+    "gabaritRub": 225000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "октябрь - ноябрь 2022г.",
+    "sortOrder": 130
+  },
+  {
+    "num": 134,
+    "city": "Кошурниково второй путь на перегоне Разъезд 557 км - Кошурниково Красноярской железной дороги",
+    "gabaritRub": 890000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "актуально на ноябрь 2022г., 14 дней - срок доставки; необходимость подачи заявки на доставку за 2 недели до отгрузки, на обратном рейсе",
+    "sortOrder": 131
+  },
+  {
+    "num": 135,
+    "city": "Чемчуко - Мугуле, Хабаровский край, (вставка на перегоне)",
+    "gabaritRub": 1350000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 132
+  },
+  {
+    "num": 136,
+    "city": "Удоми - Оунэ, Хабаровский край, (второй главный путь на перегоне)",
+    "gabaritRub": 1150000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 133
+  },
+  {
+    "num": 137,
+    "city": "Шатура (ТКО) - N 55.552593 E 39.512668. (ТКО Шатурский) https://yandex.ru/navi/?whatshere%5Bpoint%5D=39.512668%2C55.552593&whatshere%5Bzoom%5D=18&lang=ru&from=navi",
+    "gabaritRub": 75000.0,
+    "permitRub": 145000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 134
+  },
+  {
+    "num": 138,
+    "city": "Киров, ТБО Костино",
+    "gabaritRub": 195500.0,
+    "permitRub": 308000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 135
+  },
+  {
+    "num": 139,
+    "city": "Коломна, д. Воловичи",
+    "gabaritRub": 65000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 136
+  },
+  {
+    "num": 140,
+    "city": "Рыбинск",
+    "gabaritRub": 83500.0,
+    "permitRub": 148000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 137
+  },
+  {
+    "num": 141,
+    "city": "Шатурский ТКО",
+    "gabaritRub": 65000.0,
+    "permitRub": 145000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 138
+  },
+  {
+    "num": 142,
+    "city": "Тамбов",
+    "gabaritRub": 145000.0,
+    "permitRub": 175000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 139
+  },
+  {
+    "num": 143,
+    "city": "Омск",
+    "gabaritRub": 410000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 140
+  },
+  {
+    "num": 144,
+    "city": "Тура, Свердловская обл.",
+    "gabaritRub": 360000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 141
+  },
+  {
+    "num": 145,
+    "city": "Чита",
+    "gabaritRub": 1210000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 142
+  },
+  {
+    "num": 146,
+    "city": "Яшкино, Кемеровская обл.",
+    "gabaritRub": 430000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 143
+  },
+  {
+    "num": 147,
+    "city": "Хабаровск",
+    "gabaritRub": 1150000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 144
+  },
+  {
+    "num": 148,
+    "city": "Верхнее, Дагестан",
+    "gabaritRub": 490000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 145
+  },
+  {
+    "num": 149,
+    "city": "Бирюсинск (Тайшет)",
+    "gabaritRub": 650000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 146
+  },
+  {
+    "num": 150,
+    "city": "Кемерово",
+    "gabaritRub": 510000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 147
+  },
+  {
+    "num": 151,
+    "city": "Ириклинская ГРЭС",
+    "gabaritRub": 360000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 148
+  },
+  {
+    "num": 152,
+    "city": "Сочи",
+    "gabaritRub": 325000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 149
+  },
+  {
+    "num": 153,
+    "city": "Бирюсинск (Тайшет)",
+    "gabaritRub": 630000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 150
+  },
+  {
+    "num": 154,
+    "city": "Кемерово",
+    "gabaritRub": 595000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 151
+  },
+  {
+    "num": 155,
+    "city": "Белово, ст. в Кемеровской обл.",
+    "gabaritRub": 780000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 152
+  },
+  {
+    "num": 156,
+    "city": "Агул-Береж, Красноярский край, Иланский район",
+    "gabaritRub": 1250000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "нет дороги, перегруз на тягачи",
+    "sortOrder": 153
+  },
+  {
+    "num": 157,
+    "city": "Новоленская ТЭС, Республика Саха-Якутия",
+    "gabaritRub": 2420000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 154
+  },
+  {
+    "num": 158,
+    "city": "Нижнекамск или Набережные Челны",
+    "gabaritRub": 210000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 155
+  },
+  {
+    "num": 159,
+    "city": "Тамань, Краснодарский край",
+    "gabaritRub": 265000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 156
+  },
+  {
+    "num": 160,
+    "city": "Воронеж",
+    "gabaritRub": null,
+    "permitRub": 198000.0,
+    "escortRub": null,
+    "note": "на 21.05.2024г. негабарит DN 3500",
+    "sortOrder": 157
+  },
+  {
+    "num": 161,
+    "city": "Новосибирск",
+    "gabaritRub": 561000.0,
+    "permitRub": 900000.0,
+    "escortRub": null,
+    "note": "на 21.05.2024г. негабарит DN 3500",
+    "sortOrder": 158
+  },
+  {
+    "num": 162,
+    "city": "Архангельск",
+    "gabaritRub": 330000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 159
+  },
+  {
+    "num": 163,
+    "city": "Усть-Кут (порт)",
+    "gabaritRub": 1350000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "3 кв. 2025г. (14-17 дней)",
+    "sortOrder": 160
+  },
+  {
+    "num": 164,
+    "city": "Белгород (ЛГОК)",
+    "gabaritRub": 205000.0,
+    "permitRub": 245000.0,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 161
+  },
+  {
+    "num": 165,
+    "city": "Нижнекамск или Набережные Челны, Татарстан",
+    "gabaritRub": 185000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "4 кв. 2024г.",
+    "sortOrder": 162
+  },
+  {
+    "num": 166,
+    "city": "Сковородино. Амурская обл.",
+    "gabaritRub": 1450000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 163
+  },
+  {
+    "num": 167,
+    "city": "Саха, Якутия, Нерюнгринский р-н, Серебряный Бор, ГРЭС",
+    "gabaritRub": null,
+    "permitRub": 1740000.0,
+    "escortRub": null,
+    "note": "2025г. (негабарит DN 3500)",
+    "sortOrder": 164
+  },
+  {
+    "num": 168,
+    "city": "Алонка ст., ДВЖД, Хабаровский Край",
+    "gabaritRub": 1320000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 165
+  },
+  {
+    "num": 169,
+    "city": "Демченко, Амурская обл.",
+    "gabaritRub": 1470000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 166
+  },
+  {
+    "num": 170,
+    "city": "Кычыранкы, Хабаровский Край",
+    "gabaritRub": 1250000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 167
+  },
+  {
+    "num": 171,
+    "city": "Инскакя - Сокур, ст. в Кемеровской обл.",
+    "gabaritRub": 980000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 168
+  },
+  {
+    "num": 172,
+    "city": "Амган ст., ДВЖД, Хабаровский Край",
+    "gabaritRub": 1350000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 169
+  },
+  {
+    "num": 173,
+    "city": "Туюн ст., ДВЖД, Хабаровский Край",
+    "gabaritRub": 1350000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 170
+  },
+  {
+    "num": 174,
+    "city": "Ожерелье - Мордвес, Тульская обл.",
+    "gabaritRub": 115000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 171
+  },
+  {
+    "num": 175,
+    "city": "Мордвес - Венев, Тульская обл.",
+    "gabaritRub": 115000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 172
+  },
+  {
+    "num": 176,
+    "city": "Новороссийск",
+    "gabaritRub": 370500.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 173
+  },
+  {
+    "num": 177,
+    "city": "Альметьевск",
+    "gabaritRub": 180000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 174
+  },
+  {
+    "num": 178,
+    "city": "Стерлитамак",
+    "gabaritRub": 310000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "ИнСпецКом - Форвард, доставка и выгрузка на объекте",
+    "sortOrder": 175
+  },
+  {
+    "num": 179,
+    "city": "Махачкала",
+    "gabaritRub": 295000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 176
+  },
+  {
+    "num": 180,
+    "city": "Баку",
+    "gabaritRub": 380000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 177
+  },
+  {
+    "num": 181,
+    "city": "Чегдомын",
+    "gabaritRub": 1860000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "доставка до Февральска, выгрузка, перегруз на вездеходы и по бездорожью, дороги нет вообще, до Чегдомына",
+    "sortOrder": 178
+  },
+  {
+    "num": 182,
+    "city": "Луганск",
+    "gabaritRub": 285000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 179
+  },
+  {
+    "num": 183,
+    "city": "Бишкек (Кыргыстан)",
+    "gabaritRub": 550000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "(зависимость от курса доллара и времени доставки)",
+    "sortOrder": 180
+  },
+  {
+    "num": 184,
+    "city": "Владивосток",
+    "gabaritRub": 1950000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 181
+  },
+  {
+    "num": 185,
+    "city": "Новокузнецк, Кемеровская обл.",
+    "gabaritRub": 720000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 182
+  },
+  {
+    "num": 186,
+    "city": "Горелый ст., Амурская обл., Сковородинский р-н.",
+    "gabaritRub": 1450000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "2025г. 3-й кв. и далее, нет дороги",
+    "sortOrder": 183
+  },
+  {
+    "num": 187,
+    "city": "Азербайджан (г. Шуша, Н.Карабах)",
+    "gabaritRub": 380000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 184
+  },
+  {
+    "num": 188,
+    "city": "Азербайджан, Баку",
+    "gabaritRub": 350000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "(зависимость от курса доллара и времени доставки)",
+    "sortOrder": 185
+  },
+  {
+    "num": 189,
+    "city": "Красноярский Край",
+    "gabaritRub": 825000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "не везде есть дорога",
+    "sortOrder": 186
+  },
+  {
+    "num": 190,
+    "city": "Иркутская обл., Тайшетский р-н, Промплощадка ТаАЗ",
+    "gabaritRub": null,
+    "permitRub": 1200000.0,
+    "escortRub": null,
+    "note": "негабаритная ёмкость DN 3200, L= 15 м., нет дороги, с перегрузом",
+    "sortOrder": 187
+  },
+  {
+    "num": 191,
+    "city": "Копейск, Челябинская обл.",
+    "gabaritRub": 340000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 188
+  },
+  {
+    "num": 192,
+    "city": "Дубна",
+    "gabaritRub": 75000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": null,
+    "sortOrder": 189
+  },
+  {
+    "num": 193,
+    "city": "с.Озёрное, Майминский район, Республика Алтай",
+    "gabaritRub": 875000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "на конечном участке нет дороги",
+    "sortOrder": 190
+  },
+  {
+    "num": 194,
+    "city": "Дербент",
+    "gabaritRub": 355000.0,
+    "permitRub": null,
+    "escortRub": null,
+    "note": "май 2026г. Включительно",
+    "sortOrder": 191
+  }
+]

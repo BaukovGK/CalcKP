@@ -34,7 +34,8 @@ import {
   formatMoney,
   formatQty,
   type KpDocument,
-  type KpPosition,
+  tableLines,
+  type KpLine,
 } from './kp-document'
 import { OUTGOING_LINE, termsItems } from './kp-terms'
 
@@ -83,7 +84,7 @@ function cell(
 }
 
 /** Абзацы ячейки наименования: описание изделия приходит многострочным. */
-function descriptionParagraphs(position: KpPosition): Paragraph[] {
+function descriptionParagraphs(position: KpLine): Paragraph[] {
   return position.description.split('\n').map(
     (line, i) =>
       new Paragraph({
@@ -108,7 +109,7 @@ function headerRow(): TableRow {
   })
 }
 
-function positionRow(position: KpPosition): TableRow {
+function positionRow(position: KpLine): TableRow {
   return new TableRow({
     children: [
       cell(position.number, { width: COLS.num, align: AlignmentType.CENTER }),
@@ -195,7 +196,7 @@ export async function renderKpDocx(doc: KpDocument): Promise<Buffer> {
   children.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [headerRow(), ...doc.positions.map(positionRow), totalRow(doc)],
+      rows: [headerRow(), ...tableLines(doc).map(positionRow), totalRow(doc)],
     }),
   )
 

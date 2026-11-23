@@ -24,7 +24,8 @@ import {
   formatMoney,
   formatQty,
   type KpDocument,
-  type KpPosition,
+  tableLines,
+  type KpLine,
 } from './kp-document'
 import { OUTGOING_LINE, termsItems } from './kp-terms'
 
@@ -83,7 +84,7 @@ function fonts(): Record<string, FontFaces> {
 }
 
 /** Строка таблицы по позиции: описание многострочное, цена и сумма справа. */
-function positionRow(position: KpPosition): Content[] {
+function positionRow(position: KpLine): Content[] {
   return [
     { text: position.number, alignment: 'center' },
     { text: position.description },
@@ -167,7 +168,7 @@ export function renderKpPdf(doc: KpDocument): Promise<Buffer> {
             { text: 'Цена, руб.', bold: true, alignment: 'center' },
             { text: 'Сумма, руб.', bold: true, alignment: 'center' },
           ],
-          ...doc.positions.map(positionRow),
+          ...tableLines(doc).map(positionRow),
           [
             { text: 'Общая сумма:', bold: true, alignment: 'right', colSpan: 5 },
             {},

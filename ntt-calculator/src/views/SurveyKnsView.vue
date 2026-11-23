@@ -402,6 +402,63 @@
 
 
 
+        <!-- 6. Доставка: город — из тарифов закупок, стоимость считается по
+             таблице ограничений погрузки (engines/delivery.ts); своя
+             стоимость перекрывает расчётную. -->
+        <section :id="'sec-6'" class="ol-sec" data-testid="delivery-section">
+          <h2 class="ol-h">6 · Доставка</h2>
+          <div class="ol-grid">
+            <label class="fld fld--6 dl-city"><span v-hint="H.deliveryCity">Город доставки</span>
+              <select :value="d.rate.value?.id ?? ''" :disabled="d.loading.value" @change="d.selectRate(($event.target as HTMLSelectElement).value)">
+                <option value="">{{ d.loading.value ? 'загрузка тарифов…' : '— не выбран —' }}</option>
+                <option v-for="o in d.options.value" :key="o.id" :value="o.id">{{ o.label }}</option>
+              </select>
+            </label>
+            <label class="fld fld--6"><span v-hint="H.deliveryCost">Стоимость доставки, ₽</span>
+              <input
+                v-model="form.deliveryCost"
+                class="num"
+                :placeholder="d.calcRub.value != null ? fmtInt(d.calcRub.value) : 'введите вручную'"
+              />
+              <span class="ol-pick" :class="{ 'ol-pick--warn': deliveryWarn }">{{ deliveryHint }}</span>
+            </label>
+          </div>
+          <!-- Своя стоимость — значит, и адрес свой: поле активно только при
+               ней. В КП доставка пишется «до <адрес>», без него — до города. -->
+          <div class="ol-grid">
+            <label class="fld fld--12"><span v-hint="H.deliveryAddress">Адрес доставки</span>
+              <input
+                v-model="form.deliveryAddress"
+                :disabled="d.manualRub.value == null"
+                :placeholder="d.manualRub.value == null ? 'доступен при своей стоимости доставки' : 'введите адрес доставки — он пойдёт в КП'"
+              />
+            </label>
+          </div>
+          <div class="ol-explain" data-testid="delivery-kp-line">В КП: {{ deliveryKpLine }}</div>
+          <div v-if="d.error.value" class="ol-pick ol-pick--warn">{{ d.error.value }}</div>
+          <div v-if="d.lostCity.value" class="ol-pick ol-pick--warn">
+            Маршрута «{{ d.lostCity.value }}» больше нет в тарифах — выберите город заново.
+          </div>
+
+          <div v-if="d.result.value" class="ol-card" data-testid="delivery-breakdown">
+            <div class="ol-card-h">
+              Машин: {{ d.result.value.plan.total }}
+              <span v-if="d.result.value.plan.oversize" class="f-mark">негабарит</span>
+            </div>
+            <table class="dl-t">
+              <tbody>
+                <tr v-for="l in d.result.value.lines" :key="l.column">
+                  <td>{{ l.label }}</td>
+                  <td class="num">{{ l.trucks }} × {{ l.rateRub != null ? fmtInt(l.rateRub) : 'нет ставки' }}</td>
+                  <td class="num">{{ l.sumRub != null ? `${fmtInt(l.sumRub)} ₽` : '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="ol-explain">{{ deliveryExplain }}</div>
+            <div v-if="d.rate.value?.note" class="ol-explain">Примечание маршрута: {{ d.rate.value.note }}</div>
+          </div>
+        </section>
+
         <div class="ol-tail" />
       </main>
 
@@ -457,6 +514,16 @@
               <span class="ol-live-lbl">Цена продажи</span>
               <strong>{{ sync.salePriceRub.value != null ? `${fmtInt(sync.salePriceRub.value)} ₽` : '—' }}</strong>
             </div>
+            <template v-if="d.costRub.value != null">
+              <div class="ol-live-row" data-testid="delivery-cost">
+                <span class="ol-live-lbl">Доставка{{ form.deliveryCity ? ` · ${form.deliveryCity}` : '' }}</span>
+                <span>{{ fmtInt(d.costRub.value) }} ₽</span>
+              </div>
+              <div class="ol-live-price" data-testid="price-with-delivery">
+                <span class="ol-live-lbl">С доставкой</span>
+                <strong>{{ sync.salePriceRub.value != null ? `${fmtInt(sync.salePriceRub.value + d.costRub.value)} ₽` : '—' }}</strong>
+              </div>
+            </template>
             <RouterLink class="ol-create ol-create--link" :to="{ name: 'calculator', params: { id: estimateId } }">
               Открыть расчёт →
             </RouterLink>
@@ -511,6 +578,8 @@ import ToastHost from '@/components/ui/ToastHost.vue'
 import { useKnsSurvey } from '@/composables/useKnsSurvey'
 import { legacySnManual, snManualLabel, snManualOptions } from '@/composables/usePipeOverride'
 import { usePumpSelection } from '@/composables/usePumpSelection'
+import { useDelivery } from '@/composables/useDelivery'
+import { deliveryPlace } from '@/engines/delivery'
 import { useSurveySync } from '@/composables/useSurveySync'
 import { useCalcTreeStore } from '@/stores/calcTree'
 import { pipeLengthM } from '@/engines/formulas'
@@ -570,6 +639,53 @@ const H = { ...COMMON_HINTS, ...KNS_HINTS }
 const s = useKnsSurvey(form)
 /** Подбор насоса и диаметра напорного — считает сервер (`/api/pump-station`). */
 const p = usePumpSelection(form)
+/**
+ * Доставка: корпус едет лёжа, поэтому длина изделия — полная высота КНС
+ * (подземная часть + возвышение).
+ */
+const d = useDelivery(form, {
+  dnMm: () => tryEvalExpr(form.value.dn),
+  lengthMm: () => s.fullHeightMm.value,
+})
+
+const deliveryWarn = computed(
+  () => Boolean(form.value.deliveryCity) && d.manualRub.value == null && d.calcRub.value == null,
+)
+const deliveryHint = computed(() => {
+  if (d.manualRub.value != null) {
+    return d.calcRub.value != null ? `своя стоимость · по тарифам ${fmtInt(d.calcRub.value)} ₽` : 'своя стоимость'
+  }
+  if (!form.value.deliveryCity) return 'выберите город — стоимость посчитается по тарифам'
+  if (s.fullHeightMm.value == null) return 'посчитается, когда станет известна высота корпуса'
+  if (d.calcRub.value != null) return 'расчётная по тарифам доставки'
+  const missing = d.result.value?.missing ?? []
+  return missing.length
+    ? `по маршруту нет ставки «${missing.join('», «')}» — введите стоимость вручную`
+    : 'введите стоимость вручную'
+})
+/**
+ * Как доставка прозвучит в пункте 1 условий КП — та же логика, что у
+ * сервера (backend/utils/kp-terms.ts, deliveryFromSurvey).
+ */
+const deliveryKpLine = computed(() => {
+  const address = form.value.deliveryAddress.trim()
+  const city = form.value.deliveryCity ? deliveryPlace(form.value.deliveryCity) : ''
+  if (d.manualRub.value != null) return `стоимость включает доставку со склада до ${address || city || 'объекта'}`
+  if (city && d.calcRub.value != null) return `стоимость включает доставку со склада до ${city}`
+  return 'доставка в стоимость не входит — рассчитывается отдельно по запросу'
+})
+
+const deliveryExplain = computed(() => {
+  const r = d.result.value
+  if (!r) return ''
+  const parts = [`корпус: ${r.plan.productTrucks}`]
+  if (r.plan.extraLengthTrucks) parts.push(`длина больше 12 м: +${r.plan.extraLengthTrucks}`)
+  if (r.plan.componentsTrucks) parts.push(`комплектующие: +${r.plan.componentsTrucks} габаритная`)
+  const tail = r.plan.oversize
+    ? r.permitRequired ? ' · DN больше 2400 — негабарит, по маршруту только с разрешением' : ' · DN больше 2400 — негабарит'
+    : ''
+  return `Машин ${parts.join(', ')}${tail}.`
+})
 
 // ── Расчёт следует за ОЛ ────────────────────────────────────────────────────
 
@@ -682,6 +798,7 @@ const SECTIONS = [
   { n: 3, title: 'Насосное' },
   { n: 4, title: 'Патрубки' },
   { n: 5, title: 'Автоматика' },
+  { n: 6, title: 'Доставка' },
 ]
 
 const NS_TYPES = ['Канализационная', 'Ливневая', 'Дренажная', 'Водопроводная'] as const
@@ -778,6 +895,9 @@ function secDone(n: number): boolean {
       return has(f.podvLotok)
     case 5:
       return true // в автоматике обязательных полей нет
+    case 6:
+      // Доставка необязательна; начатая — заполнена, когда есть итог.
+      return !has(f.deliveryCity) || d.costRub.value != null
     default:
       return true
   }
@@ -894,6 +1014,18 @@ function surveyPayload() {
       pumpModel: p.pumpModel.value,
       /** Стояк насоса по гидравлике, ⌀ мм — справочно, DN берётся из поля ОЛ. */
       dischargePipeDiameterMm: p.piping.value?.riser.diameterMm ?? null,
+    },
+    // Доставка: что выбрано и сколько стоит — для КП и отчётов. Расчётная
+    // стоимость фиксируется на момент записи: тарифы закупка правит отдельно.
+    delivery: {
+      city: form.value.deliveryCity || null,
+      trucks: d.result.value?.plan.total ?? null,
+      oversize: d.result.value?.plan.oversize ?? null,
+      calcRub: d.calcRub.value,
+      manualRub: d.manualRub.value,
+      costRub: d.costRub.value,
+      // Адрес — только при своей стоимости: иначе в КП доставка до города.
+      address: d.manualRub.value != null ? form.value.deliveryAddress.trim() || null : null,
     },
   }
 }
@@ -1015,6 +1147,15 @@ async function createEstimate() {
 .ol-live-price { display: flex; justify-content: space-between; align-items: baseline;
   border-top: 1px solid var(--line); padding-top: 8px; }
 .ol-live-price strong { font-size: 18px; }
+
+/* Доставка: список маршрутов не растягивает сетку по самому длинному названию */
+.dl-city { min-width: 0; }
+.dl-city select { width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+
+/* Доставка: расклад по столбцам тарифа */
+.dl-t { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 4px 0 6px; }
+.dl-t td { padding: 3px 0; border-bottom: 1px solid var(--line); }
+.dl-t td.num { text-align: right; white-space: nowrap; padding-left: 12px; font-variant-numeric: tabular-nums; }
 
 /* Модал */
 

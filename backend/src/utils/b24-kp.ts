@@ -97,7 +97,8 @@ export async function sendKpToDeal(userId: string, estimateId: string, version: 
       version: snapshot.version,
       estimateTitle: estimate.title,
       projectTitle: estimate.project?.title ?? null,
-      totalRub: snapshot.totalRub,
+      // Сумма — та же, что в приложенном PDF: с доставкой, если она в КП.
+      totalRub: doc.totalRub,
       authorName: sender?.name ?? null,
     })
     const commentId = await client.call<unknown>(userId, 'crm.timeline.comment.add', {
