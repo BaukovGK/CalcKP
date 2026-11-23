@@ -15,7 +15,7 @@ const estimate = {
     tree: {
       deviceType: 'KNS', survey: { pipePrice: 9000 }, rates: { fot: 800 }, lostEdits: [{ section: '1' }],
       sections: [{ id: 's1', components: [{ id: 'c1', rows: [
-        row('Насосы'),
+        row('Насосы', { markupK: 1.05 }),
         row('ФОТ'),
         row('Покупное', { kind: 'ОПЕРАЦИЯ' }),
       ] }] }],
@@ -47,6 +47,24 @@ describe('расчёт глазами снабженца', () => {
     expect(rows[0]).toMatchObject({ priceCatalog: 100, priceManual: null, qtyCalc: 2 })
     expect(rows[1]).toMatchObject({ priceCatalog: null, priceManual: null })
     expect(rows[2]).toMatchObject({ priceCatalog: null, priceManual: null })
+  })
+
+  it('коэффициенты наценки строк снабженцу не отдаются', () => {
+    expect(rows.every((r) => !('markupK' in r))).toBe(true)
+  })
+
+  it('markupK убран у строк любых категорий и вложенности, остальные поля целы', () => {
+    const src = {
+      surveyData: { tree: { sections: [{ components: [{ rows: [
+        row('Насосы', { markupK: 1.05 }), row('ФОТ', { markupK: 2.1 }), row('Работы', { markupK: 0 }), row('Метизы'),
+      ] }] }] } },
+    }
+    const out = purchaseEstimateView(src).surveyData as { tree: { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> } }
+    const rs = out.tree.sections[0].components[0].rows
+    expect(rs.every((r) => !('markupK' in r))).toBe(true)
+    expect(rs[0]).toMatchObject({ id: 'Насосы', qtyCalc: 2, priceCatalog: 100, priceManual: null })
+    expect(JSON.stringify(out)).not.toContain('markupK')
+    expect((src.surveyData.tree.sections[0].components[0].rows[0] as Record<string, unknown>).markupK).toBe(1.05)
   })
 
   it('исходный расчёт не меняется', () => {

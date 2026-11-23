@@ -97,6 +97,11 @@ describe('сверка итога КП', () => {
     expect(verifyKpTotal(surveyData(c), total)).toEqual({ ok: true, serverTotal: total, clientTotal: total })
   })
 
+  it('коэффициенты наценки строк на итог КП не влияют', () => {
+    const withK = { ...c, rows: c.rows.map((r, i) => ({ ...r, markupK: 1 + i })) } as Case
+    expect(verifyKpTotal(surveyData(withK), total)).toEqual({ ok: true, serverTotal: total, clientTotal: total })
+  })
+
   it('присланный итог занижен — не сходится', () => {
     expect(verifyKpTotal(surveyData(c), 1000)).toEqual({ ok: false, serverTotal: total, clientTotal: 1000 })
   })

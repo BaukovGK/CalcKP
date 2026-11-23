@@ -249,3 +249,116 @@ describe('строка со сменившимся наименованием', 
     expect(w.findAll('button').some((b) => b.text() === 'Принять новое')).toBe(true)
   })
 })
+
+describe('CalcTableRow — коэффициент наценки', () => {
+  const mountK = (markupK: number, over: Partial<Record<string, unknown>> = {}) => {
+    const row = makeRow(over)
+    return mount(CalcTableRow, {
+      props: { row: row as never, res: computeRow(row as never), conflict: false, prevCalc: null, fotK: null, disabled: false, markupK },
+    })
+  }
+  const kCell = (w: ReturnType<typeof mountK>) => w.find('[aria-label^="Коэффициент наценки"]')
+
+  it('показывает коэффициент строки', () => {
+    expect(value(kCell(mountK(1.43)).element)).toBe('1,43')
+  })
+
+  it('ввод — число через запятую, пусто — к общей наценке', async () => {
+    const w = mountK(1.43)
+    await kCell(w).setValue('1,2')
+    await kCell(w).setValue('')
+    expect(w.emitted('markupK')).toEqual([['r1', 1.2], ['r1', null]])
+  })
+
+  it('мусор и минус не принимаются', async () => {
+    const w = mountK(1.43)
+    await kCell(w).setValue('abc')
+    await kCell(w).setValue('-1')
+    expect(w.emitted('markupK')).toBeUndefined()
+  })
+
+  it('ошибка ввода снимается и корректным вводом, и сменой значения извне', async () => {
+    const w = mountK(1.43)
+    await kCell(w).setValue('abc')
+    expect(kCell(w).classes()).toContain('is-bad')
+    await kCell(w).setValue('1,3')
+    expect(kCell(w).classes()).not.toContain('is-bad')
+    await kCell(w).setValue('-1')
+    expect(kCell(w).classes()).toContain('is-bad')
+    await w.setProps({ markupK: 2.19 })
+    expect(kCell(w).classes()).not.toContain('is-bad')
+  })
+
+  it('k < 1 не принимается, ровно 1 — принимается', async () => {
+    const w = mountK(1.43)
+    await kCell(w).setValue('0,9')
+    expect(kCell(w).classes()).toContain('is-bad')
+    expect(w.emitted('markupK')).toBeUndefined()
+    await kCell(w).setValue('1')
+    expect(w.emitted('markupK')).toEqual([['r1', 1]])
+  })
+
+  it('показ округлён до трёх знаков', () => {
+    expect(value(kCell(mountK(1 + 0.43255)).element)).toBe('1,433')
+  })
+
+    it('заданный вручную — синий, с ↺', async () => {
+    const w = mountK(1.05, { markupK: 1.05 })
+    expect(kCell(w).classes()).toContain('is-ovr')
+    await w.find('[aria-label="Вернуть коэффициент от общей наценки"]').trigger('click')
+    expect(w.emitted('markupK')).toEqual([['r1', null]])
+  })
+
+  const mountRO = (over: Partial<Record<string, unknown>>, readonly: boolean) => {
+    const row = makeRow(over)
+    return mount(CalcTableRow, {
+      props: { row: row as never, res: computeRow(row as never), conflict: false, prevCalc: null, fotK: null, disabled: false, markupK: 1.2, readonly },
+    })
+  }
+
+  it('наблюдатель: ячейка недоступна, ↺ скрыт, значение видно', () => {
+    const w = mountRO({ markupK: 1.2 }, true)
+    expect((kCell(w as never).element as HTMLInputElement).disabled).toBe(true)
+    expect(value(kCell(w as never).element)).toBe('1,20')
+    expect(w.find('[aria-label="Вернуть коэффициент от общей наценки"]').exists()).toBe(false)
+  })
+
+  it('не наблюдатель: ячейка доступна, ↺ виден у заданного вручную', () => {
+    const w = mountRO({ markupK: 1.2 }, false)
+    expect((kCell(w as never).element as HTMLInputElement).disabled).toBe(false)
+    expect(w.find('[aria-label="Вернуть коэффициент от общей наценки"]').exists()).toBe(true)
+  })
+
+  it('не заданный вручную коэффициент — без ↺ и не синий', () => {
+    const w = mountRO({}, false)
+    expect(w.find('[aria-label="Вернуть коэффициент от общей наценки"]').exists()).toBe(false)
+    expect(kCell(w as never).classes()).not.toContain('is-ovr')
+  })
+
+  it('ноль не принимается, арифметика допускается', async () => {
+    const w = mountK(1.43)
+    await kCell(w).setValue('0')
+    await kCell(w).setValue('1+0,2')
+    expect(w.emitted('markupK')).toEqual([['r1', 1.2]])
+  })
+})
+
+describe('CalcTableRow — сумма с коэффициентом наценки', () => {
+  const mountK = (markupK?: number) => {
+    const row = makeRow()
+    return mount(CalcTableRow, {
+      props: { row: row as never, res: computeRow(row as never), conflict: false, prevCalc: null, fotK: null, disabled: false, markupK },
+    })
+  }
+  const sum = (w: ReturnType<typeof mountK>) => w.find('.c-sum').text().replace(/\s/g, '')
+
+  it('сумма = кол-во × цена × k', () => {
+    // 6 × 100 = 600 себестоимости, × 1,43 = 858
+    expect(sum(mountK(1.43))).toBe('858')
+    expect(sum(mountK(2.5))).toBe('1500')
+  })
+
+  it('без коэффициента — себестоимость строки', () => {
+    expect(sum(mountK())).toBe('600')
+  })
+})

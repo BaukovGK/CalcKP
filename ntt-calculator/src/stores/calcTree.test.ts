@@ -398,6 +398,26 @@ describe('стор calcTree: пересчёт из ОЛ и связанные ц
     expect(saved?.qtyCalcPrev).toBe(3)
   })
 
+  it('коэффициент наценки строки переживает пересборку, у новых строк — от общей', async () => {
+    const est = freshEstimate()
+    estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
+    echoPatch(est)
+    const store = useCalcTreeStore()
+    await store.applySurvey('e1', { form: kns(), kns: kns(), derived, surveyRev: 2 })
+    const pump = store.rows.find((r) => r.category === 'Насосы, АТМ')!
+    store.setMarkupK(pump.id, 1.2)
+    const before = new Set(store.rows.map((r) => r.id))
+
+    await store.applySurvey('e1', { form: kns({ nRab: '3' }), kns: kns({ nRab: '3' }), derived, surveyRev: 3 })
+
+    expect(store.rows.find((r) => r.category === 'Насосы, АТМ')!.markupK).toBe(1.2)
+    const others = store.rows.filter((r) => r.category !== 'Насосы, АТМ')
+    expect(others.every((r) => r.markupK === undefined)).toBe(true)
+    const fresh = store.rows.find((r) => !before.has(r.id))
+    expect(fresh).toBeDefined()
+    expect(store.markupKs.get(fresh!.id)).toBe(1 + store.markup)
+  })
+
   it('«оставить моё» гасит конфликт, не трогая ручную цифру', async () => {
     const est = freshEstimate()
     estimatesGet.mockResolvedValue(JSON.parse(JSON.stringify(est)))
@@ -1841,5 +1861,212 @@ describe('стор calcTree: запись поверх чужой правки',
       response: { status: 409 },
     })
     expect(patchSurvey).toHaveBeenCalledTimes(2)
+  })
+})
+
+// Коэффициенты наценки строк — справочные (engines/row-markup.ts): на цену
+// продажи и себестоимость не влияют, но сохраняются вместе с деревом.
+describe('стор calcTree: коэффициенты наценки строк', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    priceVersion.mockResolvedValue({ version: 1, label: 'НН v1', createdAt: null })
+  })
+
+  /** Закупка 1 000 000 ₽ (насос с ручной ценой), производство 500 000 ₽ (обечайка 300 000 + работы 200 000). */
+  function markupEstimate() {
+    const est = savedEstimate({ markup: 0.43, tirage: 1 })
+    est.surveyData.tree.sections = [
+      {
+        id: 's1', code: '1', title: 'Корпус', enabled: true,
+        components: [
+          {
+            id: 'c1', title: 'Узел', enabled: true,
+            rows: [
+              { id: 'buy', kind: 'МАТЕРИАЛ', category: 'Насосы, АТМ', name: 'Насос', unit: 'шт',
+                qtyCalc: 1, qtyManual: null, priceCatalog: null, priceManual: 1_000_000 },
+              { id: 'own', kind: 'МАТЕРИАЛ', category: 'Собственное производство', name: 'Обечайка', unit: 'шт',
+                qtyCalc: 1, qtyManual: null, priceCatalog: 300_000, priceManual: null },
+              { id: 'work', kind: 'ОПЕРАЦИЯ', category: 'Работы', name: 'Сборка', unit: 'шт',
+                qtyCalc: 1, qtyManual: null, priceCatalog: 200_000, priceManual: null },
+              { id: 'nop', kind: 'МАТЕРИАЛ', category: 'Метизы', name: 'Без цены', unit: 'шт',
+                qtyCalc: 1, qtyManual: null, priceCatalog: null, priceManual: null },
+            ],
+          },
+        ],
+      },
+    ]
+    return est
+  }
+
+  async function loaded() {
+    const est = markupEstimate()
+    estimatesGet.mockResolvedValue(est)
+    patchSurvey.mockResolvedValue(est)
+    const store = useCalcTreeStore()
+    await store.load('e1')
+    return store
+  }
+
+  it('по умолчанию у всех 1 + наценка, наценка по строкам равна общей', async () => {
+    const store = await loaded()
+    expect([...store.markupKs.values()].every((k) => k === 1.43)).toBe(true)
+    expect(store.rowsMarkup).toBeCloseTo(0.43, 12)
+    expect(store.hasMarkupK).toBe(false)
+  })
+
+  it('setMarkupK: число ставит, null убирает поле, мусор игнорируется', async () => {
+    const store = await loaded()
+    store.setMarkupK('own', 1.2)
+    expect(store.rows.find((r) => r.id === 'own')!.markupK).toBe(1.2)
+    expect(store.hasMarkupK).toBe(true)
+    for (const bad of [-1, 0, 0.99, Number.NaN, Number.POSITIVE_INFINITY]) store.setMarkupK('own', bad)
+    expect(store.rows.find((r) => r.id === 'own')!.markupK).toBe(1.2)
+    store.setMarkupK('own', null)
+    expect('markupK' in store.rows.find((r) => r.id === 'own')!).toBe(false)
+  })
+
+  it('optimizeMarkup: закупка с ручной ценой — 1,05, Работы — как производство, без цены — k группы', async () => {
+    const store = await loaded()
+    const res = store.optimizeMarkup()
+    expect(res).toEqual({ overwritten: 0, kOwn: 2.19 })
+    expect(store.markupKs.get('buy')).toBe(1.05)
+    expect(store.markupKs.get('own')).toBe(2.19)
+    expect(store.markupKs.get('work')).toBe(2.19)
+    expect(store.markupKs.get('nop')).toBe(1.05)
+    expect(store.rowsMarkup!).toBeLessThanOrEqual(0.43 + 1e-9)
+    // Повтор без изменений ничего «ручного» не перезаписывает.
+    expect(store.optimizeMarkup().overwritten).toBe(0)
+  })
+
+  it('optimizeMarkup считает перезаписанные ручные коэффициенты', async () => {
+    const store = await loaded()
+    store.setMarkupK('buy', 1.3)
+    store.setMarkupK('own', 1.6)
+    expect(store.optimizeMarkup().overwritten).toBe(2)
+  })
+
+  it('тираж не меняет коэффициенты и наценку по строкам', async () => {
+    const store = await loaded()
+    store.optimizeMarkup()
+    const ks = [...store.markupKs]
+    const w = store.rowsMarkup
+    store.tirage = 3
+    expect([...store.markupKs]).toEqual(ks)
+    expect(store.rowsMarkup).toBeCloseTo(w!, 12)
+  })
+
+  it('смена наценки после оптимизации — наценка по строкам выше общей', async () => {
+    const store = await loaded()
+    store.optimizeMarkup()
+    store.markup = 0.3
+    expect(store.rowsMarkup!).toBeGreaterThan(0.3 + 1e-9)
+    store.optimizeMarkup()
+    expect(store.rowsMarkup!).toBeLessThanOrEqual(0.3 + 1e-9)
+  })
+
+  it('resetMarkupK убирает все коэффициенты', async () => {
+    const store = await loaded()
+    store.optimizeMarkup()
+    store.resetMarkupK()
+    expect(store.rows.some((r) => 'markupK' in r)).toBe(false)
+    expect(store.hasMarkupK).toBe(false)
+  })
+
+  it('нецелая наценка 0,43255: k без округления, наценка по строкам не выше общей', async () => {
+    const store = await loaded()
+    store.markup = 0.43255
+    expect([...store.markupKs.values()].every((k) => k === 1 + 0.43255)).toBe(true)
+    expect(store.rowsMarkup!).toBeLessThanOrEqual(0.43255 + 1e-9)
+    store.optimizeMarkup()
+    expect(store.rowsMarkup!).toBeLessThanOrEqual(0.43255 + 1e-9)
+  })
+
+  it('наценка не выше 5 % или нет производства с суммой — всем 1 + наценка', async () => {
+    const store = await loaded()
+    store.markup = 0.05
+    store.optimizeMarkup()
+    expect([...store.markupKs.values()].every((k) => k === 1.05)).toBe(true)
+
+    store.resetMarkupK()
+    store.markup = 0.43
+    for (const id of ['own', 'work']) store.rows.find((r) => r.id === id)!.enabled = false
+    const res = store.optimizeMarkup()
+    expect(res.kOwn).toBe(1.43) // производственные строки есть, но суммы нет — группа получает общую
+    expect(store.markupKs.get('buy')).toBe(1.43)
+  })
+
+  it('строка без цены не меняет наценку по строкам', async () => {
+    const store = await loaded()
+    store.optimizeMarkup()
+    const w = store.rowsMarkup
+    store.setMarkupK('nop', 9)
+    expect(store.rowsMarkup).toBe(w)
+  })
+
+  it('оптимизация при тираже 3 даёт те же коэффициенты, что при тираже 1', async () => {
+    const store = await loaded()
+    store.optimizeMarkup()
+    const ks = [...store.markupKs]
+    store.resetMarkupK()
+    store.tirage = 3
+    store.optimizeMarkup()
+    expect([...store.markupKs]).toEqual(ks)
+  })
+
+  it('оптимизация не меняет суммы строк и итоги экономики', async () => {
+    const store = await loaded()
+    const sums = [...store.results].map(([id, r]) => [id, r.sum])
+    const e0 = JSON.stringify(store.economics)
+    store.optimizeMarkup()
+    expect([...store.results].map(([id, r]) => [id, r.sum])).toEqual(sums)
+    expect(JSON.stringify(store.economics)).toBe(e0)
+    expect(store.economics.salePriceRub).toBeGreaterThan(0)
+  })
+
+  it('ручной k после сохранения и загрузки на месте; ↺ убирает поле из сохраняемого дерева', async () => {
+    const store = await loaded()
+    store.setMarkupK('own', 1.2)
+    await store.save()
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: unknown; totals?: unknown }]
+
+    setActivePinia(createPinia())
+    const est = markupEstimate()
+    est.surveyData = { ...est.surveyData, tree: JSON.parse(JSON.stringify(body.tree)) } as never
+    estimatesGet.mockResolvedValue(est)
+    const again = useCalcTreeStore()
+    await again.load('e1')
+    expect(again.rows.find((r) => r.id === 'own')!.markupK).toBe(1.2)
+    expect(again.markupKs.get('own')).toBe(1.2)
+    expect(again.rows.find((r) => r.id === 'buy')!.markupK).toBeUndefined()
+
+    again.setMarkupK('own', null)
+    patchSurvey.mockClear()
+    await again.save()
+    const [, body2] = patchSurvey.mock.calls[0] as [string, { tree: { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> } }]
+    expect('markupK' in body2.tree.sections[0]!.components[0]!.rows.find((r) => r.id === 'own')!).toBe(false)
+  })
+
+  it('коэффициенты не меняют себестоимость и цену продажи', async () => {
+    const store = await loaded()
+    const cost = store.economics.costRub
+    const price = store.economics.salePriceRub
+    store.optimizeMarkup()
+    store.setMarkupK('own', 5)
+    expect(store.economics.costRub).toBe(cost)
+    expect(store.economics.salePriceRub).toBe(price)
+  })
+
+  it('коэффициент меняет подпись и уходит в сохраняемое дерево', async () => {
+    const store = await loaded()
+    const sig = store.stateSignature()
+    store.setMarkupK('own', 1.2)
+    expect(store.stateSignature()).not.toBe(sig)
+
+    await store.save()
+    const [, body] = patchSurvey.mock.calls[0] as [string, { tree: { sections: Array<{ components: Array<{ rows: Array<Record<string, unknown>> }> }> } }]
+    const rows = body.tree.sections[0]!.components[0]!.rows
+    expect(rows.find((r) => r.id === 'own')!.markupK).toBe(1.2)
+    expect('markupK' in rows.find((r) => r.id === 'buy')!).toBe(false)
   })
 })

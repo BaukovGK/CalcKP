@@ -115,6 +115,12 @@ describe('recalcFotSatellites', () => {
     expect(recalcFotSatellites([orphan])[0]).toEqual(orphan)
   })
 
+  it('коэффициент наценки спутника сохраняется при пересчёте', () => {
+    const rows = recalcFotSatellites([op(), fot({ markupK: 1.7 })])
+    expect(rows[1]!.markupK).toBe(1.7)
+    expect(rows[1]!.qtyCalc).toBeGreaterThan(0)
+  })
+
   it('самостоятельная ФОТ-строка (без parentId) не пересчитывается', () => {
     const standalone = fot({ parentId: undefined, qtyCalc: 4.2 })
     expect(recalcFotSatellites([standalone])[0]!.qtyCalc).toBe(4.2)
