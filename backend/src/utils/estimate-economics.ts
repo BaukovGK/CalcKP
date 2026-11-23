@@ -134,7 +134,7 @@ function bucketOf(row: TreeRow): CostBucket {
 }
 
 /** Применённая цена строки: ручная перекрывает каталожную, отрицательная — нет. */
-function priceOf(row: TreeRow): number | null {
+export function priceOf(row: TreeRow): number | null {
   const manual = row.priceManual
   if (typeof manual === 'number' && Number.isFinite(manual) && manual >= 0) return manual
   const catalog = row.priceCatalog ?? (typeof row.price === 'number' ? row.price : null)
@@ -149,7 +149,7 @@ function priceOf(row: TreeRow): number | null {
  * `null` — количество задано выражением, а посчитанного (`qtyResolved`) в
  * дереве нет: угадывать нельзя.
  */
-function qtyOf(row: TreeRow, tirage: number): number | null {
+export function qtyOf(row: TreeRow, tirage: number): number | null {
   if (row.enabled === false) return 0
   const { qty, unresolved } = resolveRowQty(row)
   if (unresolved) return null

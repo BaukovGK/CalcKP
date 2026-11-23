@@ -110,6 +110,20 @@ export interface KpSignature {
   executorEmail: string | null
 }
 
+/**
+ * Подпозиция составного изделия — строка «1.N.M» КП (backend/utils/kp-parts.ts):
+ * корпус с комплектом, корзина, трубопровод, насосы, датчики, шкаф…
+ */
+export interface KpPart {
+  number: string
+  key: string
+  description: string
+  qty: number
+  unit: string
+  priceRub: number
+  totalRub: number
+}
+
 /** Позиция черновика: описание изделия, состав, количество и цена. */
 export interface KpDraftPosition {
   number: string
@@ -118,6 +132,8 @@ export interface KpDraftPosition {
   tu: string | null
   description: string
   kit: KpKitItem[]
+  /** Подпозиции с ценами; null — раскладки нет, позиция печатается одной строкой. */
+  parts?: KpPart[] | null
   qty: number
   unit: string
   priceRub: number
@@ -207,6 +223,11 @@ export const estimatesApi = {
    */
   kpDraft(id: string): Promise<KpDraft> {
     return api.get<KpDraft>(`/estimates/${id}/kp/draft`).then((r) => r.data)
+  },
+
+  /** Подпозиции КП по правленой комплектации — предпросмотр, ничего не сохраняет. */
+  kpParts(id: string, kit: KpKitItem[]): Promise<KpPart[] | null> {
+    return api.post<{ parts: KpPart[] | null }>(`/estimates/${id}/kp/parts`, { kit }).then((r) => r.data.parts)
   },
 
   /**
