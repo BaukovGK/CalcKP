@@ -20,6 +20,16 @@
  *    нет вовсе. Состав собирается из опросного листа (`utils/kp-kit.ts`) и
  *    правится менеджером при выпуске.
  *
+ * 1а. ИЗДЕЛИЕ СОСТАВНОЕ (образец «КП (2).xlsx», 23.11.2026, поз. 1.4 — ДНС).
+ *    Позиция печатается шапкой «1.N» (тип, марка, ТУ, габариты, соответствие)
+ *    и подпозициями «1.N.M»: корпус с комплектом, корзина, вентиляция,
+ *    напорный трубопровод, насосы, датчики, шкаф — каждая со своими
+ *    количеством, ценой и суммой. Цена изделия раскладывается по ним из
+ *    дерева расчёта, сумма подпозиций равна цене изделия (`utils/kp-parts.ts`).
+ *    Шапка несёт цену изделия справочно; «Общая сумма» складывает шапки, а не
+ *    подпозиции. Раскладывать нечем (нет дерева) — позиция печатается прежним
+ *    видом, одной строкой с «В комплекте».
+ *
  * 2. ЦЕНА — НА СТРОКЕ ИЗДЕЛИЯ. В расчёте цена строки — это цена ЗАКУПКИ из
  *    прайса НН (себестоимость), а цена заказчику получается из неё через
  *    наценку (`engines/economics.ts`, salePriceFromCost). Печатать строки с их
@@ -40,6 +50,7 @@
 
 import { tirageOf } from './estimate-tree'
 import { buildProductDraft } from './kp-kit'
+import { buildParts, type KpPart } from './kp-parts'
 import { productDescription, type KitItem, type ProductSpec } from './kp-product'
 import {
   companyFromEnv,
@@ -160,6 +171,11 @@ export interface KpPosition {
   priceRub: number
   /** Сумма по позиции, ₽, с НДС — цена × количество, из снапшота. */
   totalRub: number
+  /**
+   * Подпозиции составного изделия («1.N.M»); `null` — раскладки нет, и
+   * позиция печатается одной строкой с «В комплекте» в наименовании.
+   */
+  parts: KpPart[] | null
   /** Служебное: редакция снапшота и версия прайса. В документ не идут. */
   snapshotVersion: number
   priceListVersion: number
@@ -169,7 +185,15 @@ export interface KpPosition {
  * Строка таблицы КП — то, что печатают все три формата: номер,
  * наименование, количество, единица, цена и сумма.
  */
-export type KpLine = Pick<KpPosition, 'number' | 'description' | 'qty' | 'unit' | 'priceRub' | 'totalRub'>
+export type KpLine = Pick<KpPosition, 'number' | 'description' | 'qty' | 'unit' | 'priceRub' | 'totalRub'> & {
+  /**
+   * Строка-подпозиция составного изделия: в «Общую сумму» не входит (её
+   * сумма уже в шапке изделия), печатается без выделения.
+   */
+  part?: boolean
+  /** Шапка составного изделия: её сумма — сумма подпозиций под ней. */
+  composite?: boolean
+}
 
 /** Единица измерения строки доставки. */
 export const DELIVERY_UNIT = 'усл.'
@@ -223,9 +247,24 @@ function objectLine(project: { title: string; address: string | null } | null): 
   return [project.title, project.address].filter((v) => v && v.trim() !== '').join(', ') || null
 }
 
-/** Строки таблицы в порядке печати: изделия, затем доставка. */
+/**
+ * Строки таблицы в порядке печати: изделие, под ним его подпозиции, затем
+ * доставка.
+ */
 export function tableLines(doc: Pick<KpDocument, 'positions' | 'delivery'>): KpLine[] {
-  return [...doc.positions, ...doc.delivery]
+  const lines: KpLine[] = []
+  for (const p of doc.positions) {
+    const head: KpLine = { number: p.number, description: p.description, qty: p.qty, unit: p.unit, priceRub: p.priceRub, totalRub: p.totalRub }
+    if (p.parts && p.parts.length > 0) {
+      lines.push({ ...head, composite: true })
+      for (const part of p.parts) {
+        lines.push({ number: part.number, description: part.description, qty: part.qty, unit: part.unit, priceRub: part.priceRub, totalRub: part.totalRub, part: true })
+      }
+    } else {
+      lines.push(head)
+    }
+  }
+  return [...lines, ...doc.delivery]
 }
 
 /** Стоимость доставки из опросного листа, ₽; null — не посчитана. */
@@ -277,15 +316,18 @@ function buildPosition(unit: KpUnitInput, index: number): KpPosition {
     tu: over.tu ?? null,
   })
   const kit = over.kit ?? draft.kit
-  const description = over.description?.trim() || productDescription(draft.spec, kit)
 
   const totalRub = Number.isFinite(snapshot.totalRub) && snapshot.totalRub > 0 ? snapshot.totalRub : 0
   // Тираж — количество изделий в заказе; цена снапшота относится ко всему
   // тиражу, поэтому цена за изделие получается делением, а не наоборот.
   const qty = Math.max(1, tirageOf(snapshot.bundlesJson))
+  const number = `1.${index}`
+  const parts = buildParts(number, snapshot.bundlesJson, kit, totalRub, qty)
+  // Составное изделие: комплект — в подпозициях, в шапке его не повторяем.
+  const description = over.description?.trim() || productDescription(draft.spec, parts ? [] : kit)
 
   return {
-    number: `1.${index}`,
+    number,
     estimateId: unit.estimateId,
     title: unit.estimateTitle,
     deviceType: unit.deviceType,
@@ -296,6 +338,7 @@ function buildPosition(unit: KpUnitInput, index: number): KpPosition {
     unit: over.unit?.trim() || PRODUCT_UNIT,
     priceRub: round2(totalRub / qty),
     totalRub,
+    parts,
     snapshotVersion: snapshot.version,
     priceListVersion: snapshot.priceListVersion,
   }
@@ -341,7 +384,8 @@ function assemble(
     .map((u, i) => deliveryLine(parts.terms, u.survey, `2.${i + 1}`, u.title))
     .filter((l): l is KpLine => l != null)
     .map((l, i) => ({ ...l, number: `2.${i + 1}` }))
-  const totalRub = round2(tableLines({ positions, delivery }).reduce((sum, p) => sum + p.totalRub, 0))
+  // Подпозиции в итог не входят: их сумма — цена изделия, она уже в позиции.
+  const totalRub = round2([...positions, ...delivery].reduce((sum, p) => sum + p.totalRub, 0))
 
   return {
     number: input.number?.trim() || null,

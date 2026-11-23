@@ -11,7 +11,10 @@
  *  - Колонки B…G: «№ · Наименование номенклатуры · Кол-во · Ед. изм. ·
  *    Цена, руб. · Сумма, руб.» с шириной 6,1 / 63,3 / 9,7 / 9,9 / 18,1 / 20,4.
  *  - «№» — ТЕКСТ: «1.2» числом не является, иначе Excel покажет «1,2».
- *  - Деньги — «# ##0.00»; итог — формулой `СУММ` по всей колонке сумм.
+ *  - Деньги — «# ##0.00»; итог — формулой `СУММ` по колонке сумм.
+ *  - Составное изделие (образец «КП (2).xlsx», поз. 1.4): шапка «1.N» и
+ *    подпозиции «1.N.M». Сумма шапки — `СУММ` подпозиций под ней, «Общая
+ *    сумма» — `СУММ` шапок и доставки (подпозиции второй раз не входят).
  *  - Печать: A4 книжная, подгонка по ширине, узкие поля, область печати по
  *    последнюю строку подвала. Сетка выключена, цветов нет.
  *
@@ -144,11 +147,31 @@ export function renderKpXlsxWorkbook(doc: KpDocument): ExcelJS.Workbook {
   head.height = 30
   row += 1
 
-  const firstPos = row
+  // Составное изделие: шапка и её подпозиции. Сумма шапки — формулой по
+  // подпозициям, «Общая сумма» — по шапкам и доставке: подпозиции в ней уже
+  // учтены через шапку, второй раз их не складываем.
+  const totalCells: string[] = []
+  let composite: { at: number; firstPart: number | null; value: number } | null = null
+  const closeComposite = () => {
+    if (composite && composite.firstPart != null) {
+      ws.getCell(`${LAST}${composite.at}`).value = {
+        formula: `SUM(${LAST}${composite.firstPart}:${LAST}${row - 1})`,
+        result: composite.value,
+      }
+    }
+    composite = null
+  }
   tableLines(doc).forEach((position) => {
+    if (!position.part) {
+      closeComposite()
+      totalCells.push(`${LAST}${row}`)
+      if (position.composite) composite = { at: row, firstPart: null, value: position.totalRub }
+    } else if (composite && composite.firstPart == null) {
+      composite.firstPart = row
+    }
     row += positionRows(ws, row, position)
   })
-  const lastPos = row - 1
+  closeComposite()
 
   // Итог — формулой: сумма точных значений колонки сходится со снапшотом, а
   // правка суммы в книге пересчитывает общую.
@@ -162,7 +185,7 @@ export function renderKpXlsxWorkbook(doc: KpDocument): ExcelJS.Workbook {
   const totalCell = totalRow.getCell(7)
   totalCell.value =
     tableLines(doc).length > 0
-      ? { formula: `SUM(${LAST}${firstPos}:${LAST}${lastPos})`, result: doc.totalRub }
+      ? { formula: `SUM(${totalCells.join(',')})`, result: doc.totalRub }
       : doc.totalRub
   totalCell.font = { name: FONT, bold: true, size: 11 }
   totalCell.numFmt = MONEY_FMT

@@ -290,6 +290,10 @@ function knsDraft(survey: unknown, extras: ProductExtras): ProductDraft {
     push(kit, 'Направляющие для насосов из нержавеющей стали', pumps, KOMPL)
     push(kit, `Автоматическая трубная муфта${napDn != null ? ` DN ${mm(napDn)}` : ''}`, pumps)
     push(kit, 'Цепь из нержавеющей стали с кольцами для опускания насосов', pumps)
+    // Поплавки — раб + рез + 2, как в расчёте (`floatSwitchCount`); запасные
+    // насосы поплавков не добавляют. Кабель — по высоте станции, в
+    // наименовании расчёта; заказчику достаточно «поплавковый выключатель».
+    push(kit, 'Поплавковый выключатель', count(form, 'nRab') + count(form, 'nRez') + 2)
   }
 
   // Датчик давления — на каждый насос (эталон: два насоса, два датчика).
@@ -304,6 +308,10 @@ function knsDraft(survey: unknown, extras: ProductExtras): ProductDraft {
     const start = SHU_START[str(form, 'shuPusk') ?? '']
     push(kit, `Шкаф управления ${kind} исполнения${start ? `, ${start}` : ''}`, 1, KOMPL)
   }
+  // Оборудование для обслуживания — в расчёте станции есть всегда
+  // (`buildKnsService`): тренога с талью и переносной газоанализатор.
+  push(kit, 'Грузоподъемное устройство (тренога + таль ручная цепная)', 1, KOMPL)
+  push(kit, 'Переносной газоанализатор', 1)
 
   push(kit, ANCHOR_KIT, 1, KOMPL)
   return { spec, kit }
