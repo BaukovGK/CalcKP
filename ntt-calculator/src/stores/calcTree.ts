@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, ref, toRaw } from 'vue'
 import { aggregateRows, computeEconomics, DEFAULT_MARKUP, type RateKey, type TreeRates } from '@/engines/economics'
 import { recalcFotSatellites, resolveFotK } from '@/engines/fot'
-import { computeRow, manualQty, resolveQty } from '@/engines/row'
+import { computeRow, isPurchase, manualQty, resolveQty } from '@/engines/row'
+import { MIN_MARKUP_K, optimizeMarkupK, rowMarkupK, weightedMarkup } from '@/engines/row-markup'
 import {
   flattenRows,
   sectionEnabledFor,
@@ -605,6 +606,7 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     nr.qtyManual = or.qtyManual
     if (!nr.priceBinding) nr.priceManual = or.priceManual
     nr.enabled = or.enabled
+    if (or.markupK != null) nr.markupK = or.markupK
 
     const before = or.qtyCalcPrev ?? or.qtyCalc
     nr.qtyCalcPrev = nr.qtyManual != null && before != null && before !== nr.qtyCalc ? before : undefined
@@ -919,6 +921,66 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
 
   /** Строки с непринятой отметкой «цена прайса изменилась». */
   const priceDeltaIds = computed(() => new Set(rows.value.filter(hasPriceDelta).map((r) => r.id)))
+
+  // ── Коэффициенты наценки строк (engines/row-markup.ts) ─────────────────────
+
+  /** Коэффициент наценки каждой строки: ручной или от общей наценки. */
+  const markupKs = computed<Map<string, number>>(() => {
+    const m = new Map<string, number>()
+    for (const r of rows.value) m.set(r.id, rowMarkupK(r, markup.value))
+    return m
+  })
+
+  /** Средневзвешенная наценка по строкам (доля); `null` — строк с суммой нет. */
+  const rowsMarkup = computed(() =>
+    weightedMarkup(rows.value.map((r) => ({ sum: results.value.get(r.id)?.sum ?? 0, k: markupKs.value.get(r.id)! }))),
+  )
+
+  /** Есть строки с заданным коэффициентом (не от общей наценки). */
+  const hasMarkupK = computed(() => rows.value.some((r) => r.markupK != null))
+
+  /**
+   * Коэффициент строки; `null` — вернуть к общей наценке. Меньше 1 (продажа
+   * дешевле себестоимости), NaN и бесконечность не принимаются.
+   */
+  function setMarkupK(id: string, value: number | null) {
+    if (value != null && !(Number.isFinite(value) && value >= MIN_MARKUP_K)) return
+    const row = rows.value.find((r) => r.id === id)
+    if (!row) return
+    if (value == null) delete row.markupK
+    else row.markupK = value
+  }
+
+  /**
+   * «Оптимизировать наценку»: закупка → 1,05, своё производство — максимум,
+   * при котором наценка по строкам не выше общей. Перезаписывает и заданные
+   * вручную коэффициенты.
+   *
+   * Возвращает для тостов: `overwritten` — сколько заданных коэффициентов
+   * сменили значение; `kOwn` — коэффициент производства (`null` — строк
+   * производства нет).
+   */
+  function optimizeMarkup(): { overwritten: number; kOwn: number | null } {
+    const ks = optimizeMarkupK(
+      rows.value.map((r) => ({ id: r.id, category: r.category, sum: results.value.get(r.id)?.sum ?? 0 })),
+      markup.value,
+    )
+    let overwritten = 0
+    let kOwn: number | null = null
+    for (const r of rows.value) {
+      const k = ks.get(r.id)
+      if (k == null) continue
+      if (r.markupK != null && r.markupK !== k) overwritten++
+      if (kOwn == null && !isPurchase(r.category)) kOwn = k
+      r.markupK = k
+    }
+    return { overwritten, kOwn }
+  }
+
+  /** Все коэффициенты — обратно к общей наценке. */
+  function resetMarkupK() {
+    for (const r of rows.value) delete r.markupK
+  }
 
   // ── Действия ──────────────────────────────────────────────────────────────
 
@@ -1414,6 +1476,8 @@ export const useCalcTreeStore = defineStore('calcTree', () => {
     // Пересчёт из ОЛ и цены прайса для его подсказок.
     applySurvey, ensureContext, catalogPrice,
     setQtyManual, setPriceManual, resetQty, resetPrice,
+    // Коэффициенты наценки строк.
+    markupKs, rowsMarkup, hasMarkupK, setMarkupK, optimizeMarkup, resetMarkupK,
     toggleSection, toggleComponent, keepOverride, dropOverride, fotKOf,
     // Правки, которые пересборка не смогла перенести (План_устранения, 1.1).
     lostEdits, lastLostCount, restoreLostEdit, dismissLostEdit, dismissAllLostEdits,

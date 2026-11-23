@@ -62,6 +62,11 @@ export type AuditAction =
   | 'prices.import'
   /** Выгрузка прайса в xlsx (лист «НН» + «Проверка»). */
   | 'prices.export'
+  /** Тарифы доставки (книга закупок): маршрут добавлен, изменён, удалён, импорт книги. */
+  | 'delivery.create'
+  | 'delivery.update'
+  | 'delivery.delete'
+  | 'delivery.import'
   | 'user.create'
   /** Смена роли, имени или активности пользователя. */
   | 'user.update'

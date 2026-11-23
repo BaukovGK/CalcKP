@@ -57,7 +57,29 @@
     </div>
 
     <!-- Сумма -->
-    <div class="c-sum num">{{ res.missingPrice ? '—' : fmtInt(res.sum) }}</div>
+    <!-- Сумма — с коэффициентом наценки строки (engines/row-markup.ts) -->
+    <div class="c-sum num">{{ res.missingPrice ? '—' : fmtInt(saleSum) }}</div>
+
+    <!-- Коэффициент наценки: не задан — от общей наценки (engines/row-markup.ts) -->
+    <div class="c-k">
+      <button
+        v-if="row.markupK != null && !readonly"
+        v-hint="'↺ вернуть коэффициент от общей наценки'"
+        class="rst"
+        aria-label="Вернуть коэффициент от общей наценки"
+        @click="$emit('markupK', row.id, null)"
+      >↺</button>
+      <input
+        v-hint="kHint"
+        class="cell num"
+        :class="{ 'is-ovr': row.markupK != null, 'is-bad': kError }"
+        :value="kText"
+        :disabled="disabled || readonly"
+        :aria-label="`Коэффициент наценки: ${row.name}`"
+        @focus="onFocus"
+        @change="onK"
+      />
+    </div>
 
     <!-- Примечание / разрешение конфликта -->
     <div class="c-note">
@@ -107,8 +129,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { tryEvalExpr } from '@/engines/expr'
+import { MIN_MARKUP_K } from '@/engines/row-markup'
 import { calcRowHint } from '@/hints/calc'
 import type { CalcRowNode } from '@/engines/template-kns'
 import type { RowResult } from '@/engines/types'
@@ -142,6 +165,8 @@ const props = defineProps<{
    */
   priceDelta?: boolean
   pricePrev?: number | null
+  /** Коэффициент наценки строки (ручной или от общей наценки). */
+  markupK?: number
 }>()
 
 const emit = defineEmits<{
@@ -155,6 +180,7 @@ const emit = defineEmits<{
   keepPrice: [id: string]
   nav: [e: KeyboardEvent, id: string, col: 'qty' | 'price']
   remove: [id: string]
+  markupK: [id: string, value: number | null]
 }>()
 
 const isSatellite = computed(() => props.row.kind === 'ФОТ' && props.row.parentId != null)
@@ -185,6 +211,19 @@ const fmtK = (k: number) => k.toLocaleString('ru-RU', { minimumFractionDigits: 2
 const qtyText = computed(() => {
   if (props.res.qtyIssue && props.row.qtyManual != null) return String(props.row.qtyManual)
   return props.res.qty === 0 && props.disabled ? '0' : fmt(props.res.qty)
+})
+const kText = computed(() => props.markupK == null ? '' : props.markupK.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 3 }))
+const kError = ref(false)
+/** Сумма строки с коэффициентом наценки; без коэффициента — себестоимость строки. */
+const saleSum = computed(() => props.res.sum * (props.markupK ?? 1))
+// Значение сменилось извне (↺, оптимизация, сброс, загрузка) — прежняя ошибка
+// ввода уже не про него.
+watch(() => props.markupK, () => { kError.value = false })
+const kHint = computed(() => {
+  if (kError.value) return `Коэффициент — число не меньше ${MIN_MARKUP_K.toLocaleString('ru-RU')}: продавать дешевле себестоимости нельзя; значение не изменено`
+  if (props.markupK == null) return null
+  const base = props.row.markupK != null ? 'задан вручную или оптимизацией' : 'от общей наценки'
+  return `k = ${kText.value} · ${base}`
 })
 const priceText = computed(() => (props.res.price == null ? '' : fmt(props.res.price)))
 
@@ -218,6 +257,7 @@ const hint = computed(() =>
     priceDelta: props.priceDelta ?? false,
     pricePrev: props.pricePrev ?? null,
     priceInputError: priceError.value,
+    markupK: props.markupK,
   }),
 )
 
@@ -247,6 +287,16 @@ function onQty(e: Event) {
   resync(el, () => qtyText.value)
 }
 
+/** Коэффициент наценки: число ≥ 1 (арифметика принимается); пусто — от общей. */
+function onK(e: Event) {
+  const el = e.target as HTMLInputElement
+  const text = el.value.trim()
+  const value = text === '' ? null : tryEvalExpr(text)
+  kError.value = text !== '' && (value === null || !Number.isFinite(value) || value < MIN_MARKUP_K)
+  if (!kError.value) emit('markupK', props.row.id, value)
+  resync(el, () => kText.value)
+}
+
 function onPrice(e: Event) {
   // Цена принимает арифметику наравне с количеством («1200*2», «=1 200,5»):
   // движок сам разбирает запятую, ведущий «=» и разряды с неразрывным
@@ -271,7 +321,7 @@ function onPrice(e: Event) {
 <style scoped>
 .r {
   display: grid;
-  grid-template-columns: 104px minmax(180px, 1fr) 96px 52px 96px 100px 168px;
+  grid-template-columns: 104px minmax(180px, 1fr) 96px 52px 96px 100px 76px 168px;
   gap: 8px; align-items: center;
   min-height: 32px; padding: 0 8px;
   border-bottom: 1px solid var(--line);
@@ -288,7 +338,7 @@ function onPrice(e: Event) {
 .c-name.is-sat { padding-left: 30px; color: var(--muted); }
 .sat-tag { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
 
-.c-qty, .c-price { display: flex; align-items: center; gap: 2px; }
+.c-qty, .c-price, .c-k { display: flex; align-items: center; gap: 2px; }
 .cell {
   width: 100%; min-width: 0;
   background: var(--cellbg); border: 1px solid transparent; color: var(--text);

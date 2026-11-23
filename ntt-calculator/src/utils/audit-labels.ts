@@ -20,6 +20,7 @@ export const AUDIT_GROUPS: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'estimate', label: 'Расчёты и КП' },
   { key: 'project', label: 'Проекты' },
   { key: 'prices', label: 'Прайс' },
+  { key: 'delivery', label: 'Тарифы доставки' },
   { key: 'purchase', label: 'Заявки на закупку' },
   { key: 'user', label: 'Сотрудники' },
   { key: 'template', label: 'Шаблоны и справочники' },
@@ -56,6 +57,11 @@ export const AUDIT_LABELS: Readonly<Record<string, string>> = {
   'prices.update': 'Правка цены',
   'prices.import': 'Импорт прайса',
   'prices.export': 'Выгрузка прайса',
+
+  'delivery.create': 'Добавлен маршрут доставки',
+  'delivery.update': 'Правка тарифа доставки',
+  'delivery.delete': 'Удалён маршрут доставки',
+  'delivery.import': 'Импорт тарифов доставки',
 
   'user.create': 'Заведена учётная запись',
   'user.update': 'Изменена учётная запись',
@@ -134,6 +140,7 @@ export function entityLabel(entityType: string | null): string | null {
     User: 'сотрудник',
     PriceItem: 'позиция прайса',
     PriceListVersion: 'версия прайса',
+    DeliveryRate: 'тариф доставки',
     NodeDef: 'узел каталога',
     ProductTemplate: 'шаблон изделия',
     Backup: 'дамп',
@@ -193,6 +200,9 @@ const META_LABELS: Readonly<Record<string, string>> = {
   status: 'статус',
   page: 'экран',
   screenshots: 'скриншотов',
+  city: 'маршрут',
+  changes: 'изменения',
+  replaced: 'заменено строк',
 }
 
 /** Значение `meta` строкой: списки — через запятую, объекты — коротким JSON. */

@@ -22,7 +22,7 @@ import {
   tirageOf,
 } from '../utils/estimate-tree'
 import { changeText, surveyChanges, SURVEY_CHANGES_MAX } from '../utils/survey-diff'
-import { documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
+import { deliveryCostOf, documentFileName, PRODUCT_UNIT } from '../utils/kp-document'
 import { renderKpDocx } from '../utils/kp-docx'
 import { renderKpPdf } from '../utils/kp-pdf'
 import { renderKpXlsx } from '../utils/kp-xlsx'
@@ -32,7 +32,7 @@ import { estimateKpDocument } from '../utils/kp-estimate-doc'
 import { sendKpToDeal } from '../utils/b24-kp'
 import { productDescription } from '../utils/kp-product'
 import { formatKpNumber, headerToJson, isSuggestedNumber, kpIssueSchema, type KpStoredHeader } from '../utils/kp-payload'
-import { defaultSignature, defaultTerms } from '../utils/kp-terms'
+import { defaultSignature, defaultTerms, deliveryFromSurvey } from '../utils/kp-terms'
 import { blocksDeletion, isPrintable, PRINTABLE_REASONS, REASON_LABEL } from '../utils/snapshot-reason'
 import type { SnapshotReason } from '@prisma/client'
 
@@ -612,7 +612,11 @@ estimatesRouter.get(
           priceRub: Math.round((totalRub / qty) * 100) / 100,
           totalRub,
         },
-        terms: defaultTerms(issuedAt, { deliveryTo: object }),
+        // Пункт о доставке — по разделу «Доставка» опросного листа.
+        terms: defaultTerms(issuedAt, { deliveryTo: object, delivery: deliveryFromSurvey(survey) }),
+        // Сумма доставки для строки «2.1» — окно выпуска прибавляет её к
+        // сумме КП, пока доставка отмечена «включена в стоимость».
+        deliveryRub: deliveryCostOf(survey),
         signature: defaultSignature(estimate.author ?? {}),
       })
     } catch (e) { next(e) }

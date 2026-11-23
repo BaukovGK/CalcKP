@@ -173,7 +173,8 @@
       <main ref="tableEl" class="tbl" @scroll="onScroll">
         <div class="th">
           <div>Категория</div><div>Наименование</div><div class="num">Кол-во</div><div>ЕИ</div>
-          <div class="num">Цена ₽</div><div class="num">Сумма ₽</div><div>Примечание</div>
+          <div class="num">Цена ₽</div><div v-hint="SUM_HINT" class="num">Сумма ₽</div>
+          <div v-hint="TOTAL_HINTS.markupK" class="num">Коэф. нац.</div><div>Примечание</div>
         </div>
 
         <template v-for="sec in visibleSections" :key="sec.code">
@@ -209,6 +210,8 @@
               :readonly="readOnly"
               :price-delta="st.priceDeltaIds.has(row.id)"
               :price-prev="row.priceCatalogPrev ?? null"
+              :markup-k="st.markupKs.get(row.id)!"
+              @markup-k="st.setMarkupK"
               @qty="st.setQtyManual"
               @price="st.setPriceManual"
               @reset-qty="st.resetQty"
@@ -249,6 +252,17 @@
         <div class="tot-r">
           <span v-hint="TOTAL_HINTS.markup">Наценка {{ readOnly ? '' : '✎' }}</span>
           <input v-model="markupText" class="tot-in num" :disabled="readOnly" @change="onMarkup" />
+        </div>
+
+        <!-- Коэффициенты наценки строк: средневзвешенная наценка и оптимизация
+             (engines/row-markup.ts). -->
+        <div class="tot-r">
+          <span v-hint="TOTAL_HINTS.rowsMarkup">Наценка по строкам</span>
+          <span v-hint="rowsMarkupHint" class="num" :class="{ 'tot-over': rowsMarkupState === 'over', 'tot-under': rowsMarkupState === 'under' }">{{ rowsMarkupText }}</span>
+        </div>
+        <div v-if="!readOnly" class="tot-mk">
+          <button v-hint="TOTAL_HINTS.optimizeMarkup" class="btn" @click="onOptimizeMarkup">Оптимизировать наценку</button>
+          <button v-if="st.hasMarkupK" v-hint="'Вернуть всем строкам коэффициент от общей наценки'" class="fl-clear" @click="st.resetMarkupK()">сбросить</button>
         </div>
 
         <div class="tot-r tot-price">
@@ -589,6 +603,40 @@ const tableEl = ref<HTMLElement | null>(null)
 const filters = reactive({ q: '', missing: false, conflict: false, invalid: false, override: false, repriced: false, ghosts: false, problems: false })
 
 const markupText = ref('0,43')
+
+/**
+ * Наценка по строкам (engines/row-markup.ts) — долей, как поле «Наценка».
+ * Выше общей (запас 1e-9 на погрешность float) — красная; заметно ниже
+ * (> 0,0005) — приглушённая: коэффициенты устарели после смены наценки,
+ * количеств или цен.
+ */
+const rowsMarkupText = computed(() =>
+  st.rowsMarkup == null ? '—' : st.rowsMarkup.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
+)
+const rowsMarkupState = computed<'over' | 'under' | null>(() => {
+  if (st.rowsMarkup == null) return null
+  if (st.rowsMarkup > st.markup + 1e-9) return 'over'
+  if (st.rowsMarkup < st.markup - 0.0005) return 'under'
+  return null
+})
+const rowsMarkupHint = computed(() => {
+  if (st.rowsMarkup == null) return null
+  const pct = `= +${(st.rowsMarkup * 100).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} %`
+  if (rowsMarkupState.value === 'over') return `${pct} — выше общей наценки, нажмите «Оптимизировать»`
+  if (rowsMarkupState.value === 'under') return `${pct} — коэффициенты устарели — нажмите «Оптимизировать»`
+  return pct
+})
+
+/** Коэффициент производства выше этого — предупреждение (верхней границы нет). */
+const OWN_K_WARN = 10
+
+function onOptimizeMarkup() {
+  const { overwritten, kOwn } = st.optimizeMarkup()
+  if (overwritten > 0) toast(`Оптимизация перезаписала ${overwritten} ручных коэффициентов`)
+  if (kOwn != null && kOwn > OWN_K_WARN) {
+    toast(`Коэффициент производства ${kOwn.toLocaleString('ru-RU', { maximumFractionDigits: 3 })} — проверьте суммы закупки и производства`, 'error')
+  }
+}
 const tirageText = ref('1')
 
 const e = computed(() => st.economics)
@@ -680,6 +728,7 @@ const CATALOG_NODE_HINT: Hint = {
   title: 'Узел каталога',
   text: 'Готовый набор строк с формулами от параметров — площадка, комплект, обвязка. Заполните параметры, проверьте строки и добавьте: узел ляжет в раздел целиком, его строки можно править и удалять.',
 }
+const SUM_HINT = 'Сумма строки с коэффициентом наценки: кол-во × цена × k. Суммы узлов и разделов — тоже с наценкой. Итоги справа — себестоимость, без коэффициентов'
 const SECTION_ON_HINT = 'Выключить раздел: его строки не войдут в итог, ручные значения сохранятся'
 const SECTION_OFF_HINT = 'Раздел выключен и в итог не входит. Включить обратно — со всеми ручными значениями'
 
@@ -857,8 +906,12 @@ const shownCount = computed(() =>
   visibleSections.value.reduce((s, sec) => s + sec.components.reduce((n, c) => n + visibleRows(c).length, 0), 0),
 )
 
+/**
+ * Сумма строк с коэффициентами наценки — как столбец «Сумма» (engines/row-markup.ts).
+ * Итоги справа — себестоимость, без коэффициентов.
+ */
 function sumOf(rows: CalcRowNode[]): number {
-  return rows.reduce((s, r) => s + (st.results.get(r.id)?.sum ?? 0), 0)
+  return rows.reduce((s, r) => s + (st.results.get(r.id)?.sum ?? 0) * (st.markupKs.get(r.id) ?? 1), 0)
 }
 function sectionSum(code: string): string {
   const sec = st.tree?.sections.find((s) => s.code === code)
@@ -1375,7 +1428,7 @@ onMounted(() => {
 
 /* Таблица */
 .tbl { flex: 1; overflow: auto; min-width: 0; }
-.th, .gh, .ch { display: grid; grid-template-columns: 104px minmax(180px, 1fr) 96px 52px 96px 100px 168px; gap: 8px; padding: 0 8px; }
+.th, .gh, .ch { display: grid; grid-template-columns: 104px minmax(180px, 1fr) 96px 52px 96px 100px 76px 168px; gap: 8px; padding: 0 8px; }
 .th { position: sticky; top: 0; z-index: 3; height: 25px; align-items: center;
   background: var(--panel2); border-bottom: 1px solid var(--line2);
   font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
@@ -1395,6 +1448,9 @@ onMounted(() => {
 .tot-h { font-size: 12.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
 .tot-r { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13.5px; }
 .tot-r > span:first-child { color: var(--muted); }
+.tot-over { color: var(--acc); font-weight: 600; }
+.tot-under { color: var(--amber); }
+.tot-mk { display: flex; align-items: center; gap: 8px; }
 .tot-cost { border-top: 2px solid var(--line2); padding-top: 5px; margin-top: 3px; font-weight: 700; }
 .tot-cost > span:first-child { color: var(--text); }
 .tot-price { font-size: 18px; font-weight: 700; }

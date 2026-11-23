@@ -42,6 +42,7 @@ export const termsSchema = z
   .object({
     vatRatePct: z.number().min(0).max(100),
     deliveryTo: z.string().trim().max(500).nullish(),
+    deliveryIncluded: z.boolean().nullish(),
     shipmentFrom: z.string().trim().max(500).nullish(),
     // ISO-строка или null: дату шлёт клиент, часовой пояс печати — наш.
     validUntil: z.string().datetime({ offset: true }).nullish(),
