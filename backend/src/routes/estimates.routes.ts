@@ -31,6 +31,7 @@ import { shellWallMm } from '../utils/kp-lookup'
 import { estimateKpDocument } from '../utils/kp-estimate-doc'
 import { sendKpToDeal } from '../utils/b24-kp'
 import { productDescription } from '../utils/kp-product'
+import { buildParts } from '../utils/kp-parts'
 import { formatKpNumber, headerToJson, isSuggestedNumber, kpIssueSchema, type KpStoredHeader } from '../utils/kp-payload'
 import { defaultSignature, defaultTerms, deliveryFromSurvey } from '../utils/kp-terms'
 import { blocksDeletion, isPrintable, PRINTABLE_REASONS, REASON_LABEL } from '../utils/snapshot-reason'
@@ -595,6 +596,9 @@ estimatesRouter.get(
         .filter((v) => v && v.trim() !== '')
         .join(', ') || null
 
+      // Составное изделие: подпозиции с ценами — из текущего дерева расчёта.
+      const parts = buildParts('1.1', survey, draft.kit, totalRub, qty)
+
       res.json({
         number: formatKpNumber((counter?.last ?? 0) + 1),
         issuedAt,
@@ -605,8 +609,9 @@ estimatesRouter.get(
           tag: null,
           mark: null,
           tu: draft.spec.tu,
-          description: productDescription(draft.spec, draft.kit),
+          description: productDescription(draft.spec, parts ? [] : draft.kit),
           kit: draft.kit,
+          parts,
           qty,
           unit: PRODUCT_UNIT,
           priceRub: Math.round((totalRub / qty) * 100) / 100,
@@ -619,6 +624,35 @@ estimatesRouter.get(
         deliveryRub: deliveryCostOf(survey),
         signature: defaultSignature(estimate.author ?? {}),
       })
+    } catch (e) { next(e) }
+  },
+)
+
+/**
+ * POST /api/estimates/:id/kp/parts — подпозиции составного изделия по
+ * правленой комплектации: окно выпуска показывает таблицу КП так, как она
+ * будет напечатана, и пересчитывает её при каждой правке состава. Ничего не
+ * сохраняет; цены — из текущего дерева расчёта (`utils/kp-parts.ts`).
+ */
+const kpPartsSchema = z.object({
+  kit: z.array(z.object({ name: z.string().max(2000), qty: z.number().finite().min(0), unit: z.string().max(40) })).max(200),
+})
+estimatesRouter.post(
+  '/:id/kp/parts',
+  requireRole('ADMIN', 'MANAGER', 'ENGINEER'),
+  validate(kpPartsSchema),
+  async (req, res: Response, next: NextFunction) => {
+    try {
+      const auth = req as AuthRequest
+      const estimate = await prisma.estimate.findUnique({ where: { id: String(req.params.id) } })
+      if (!estimate) { res.status(404).json({ message: 'Расчёт не найден' }); return }
+      if (!canAccessEstimate(auth.userRole, estimate.authorId, auth.userId)) {
+        res.status(403).json({ message: 'Нет доступа' }); return
+      }
+      const survey = estimate.surveyData
+      const qty = Math.max(1, tirageOf(survey))
+      const { kit } = req.body as z.infer<typeof kpPartsSchema>
+      res.json({ parts: buildParts('1.1', survey, kit, estimate.totalRub ?? 0, qty) })
     } catch (e) { next(e) }
   },
 )

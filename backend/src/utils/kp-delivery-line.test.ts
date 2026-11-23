@@ -86,6 +86,7 @@ describe('КП: строка доставки', () => {
     ws.eachRow((row) => { if (row.getCell(2).value === 'Общая сумма:') total = row.getCell(7).value as ExcelJS.CellFormulaValue })
     expect(total).not.toBeNull()
     expect(total!.result).toBe(6_569_600 + 287_900)
-    expect(total!.formula.endsWith(`:G${deliveryRow})`)).toBe(true)
+    // Итог складывает шапки изделий и доставку — доставка последней ячейкой.
+    expect(total!.formula.endsWith(`G${deliveryRow})`)).toBe(true)
   })
 })

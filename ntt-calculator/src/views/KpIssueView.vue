@@ -146,6 +146,34 @@
           </h3>
           <textarea v-if="manualDescription" v-model="description" class="kpv-text" rows="16"></textarea>
           <pre v-else class="kpv-prev">{{ preview }}</pre>
+
+          <!-- Составное изделие: подпозиции так, как они уйдут в таблицу КП.
+               Состав правится на вкладке «Комплектация», цены пересчитываются. -->
+          <template v-if="parts && parts.length">
+            <h3 class="sec-h kpv-h">
+              Подпозиции изделия
+              <span class="kpv-h-cnt">{{ parts.length }}</span>
+            </h3>
+            <table class="kpv-parts">
+              <thead>
+                <tr><th>№</th><th>Наименование</th><th>Кол-во</th><th>Ед.</th><th>Цена, ₽</th><th>Сумма, ₽</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in parts" :key="p.number">
+                  <td class="kpv-p-n">{{ p.number }}</td>
+                  <td class="kpv-p-d">{{ p.description }}</td>
+                  <td class="kpv-p-x">{{ p.qty }}</td>
+                  <td class="kpv-p-u">{{ p.unit }}</td>
+                  <td class="kpv-p-x">{{ fmtMoney(p.priceRub) }}</td>
+                  <td class="kpv-p-x">{{ fmtMoney(p.totalRub) }}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr><td colspan="5">Итого по изделию</td><td class="kpv-p-x">{{ fmtMoney(partsTotal) }}</td></tr>
+              </tfoot>
+            </table>
+            <p class="kpv-note">{{ H.parts }}</p>
+          </template>
         </section>
 
         <!-- ── Комплектация ── -->
@@ -319,7 +347,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
 import BugReportButton from '@/components/ui/BugReportButton.vue'
-import { estimatesApi, type KpDraft, type KpIssuePayload, type KpKitItem, type KpResult } from '@/api/estimates'
+import { estimatesApi, type KpDraft, type KpIssuePayload, type KpKitItem, type KpPart, type KpResult } from '@/api/estimates'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { apiErrorMessage } from '@/utils/api-error'
 import { serverBlock, type KpBlock } from '@/utils/kp-gate'
@@ -356,7 +384,10 @@ const H = {
   kitName: 'Узел так, как его прочтёт заказчик: корпус, шахта, лестница, гильза, насос, шкаф',
   kitQty: 'Количество узлов на весь заказ',
   kitUnit: 'шт. или компл.',
-  kitDrop: 'Убрать узел из состава. На цену это не влияет — она посчитана в расчёте; из документа пропадёт только строка',
+  kitDrop: 'Убрать узел из состава. На цену это не влияет — она посчитана в расчёте; из документа пропадёт только строка, а её стоимость перейдёт в корпус',
+  parts:
+    'Цена изделия разложена по узлам расчёта с коэффициентами наценки строк; остаток (ПЗР, накладные, округление) — на корпус. ' +
+    'Сумма подпозиций равна цене изделия. Узлы без своей подпозиции печатаются в комплекте корпуса.',
   vat: 'Ставка НДС для пункта условий и справочной строки. Налог уже в цене, сверху не начисляется',
   valid: 'До какой даты предложение действительно. По умолчанию — две недели от выпуска',
   prepay: 'Доля предоплаты; остаток печатается автоматически',
@@ -452,12 +483,45 @@ const fmtMoney = (v: number) => v.toLocaleString('ru-RU', { minimumFractionDigit
  * Сервер собирает то же самое заново, поэтому здесь достаточно склейки:
  * править состав и не видеть результата было бы хуже, чем небольшой повтор.
  */
+/**
+ * Подпозиции составного изделия («1.N.M») — пересчитываются сервером при
+ * правке комплектации (POST /kp/parts): группировка и раскладка цены живут
+ * в одном месте, в backend/utils/kp-parts.ts.
+ */
+const parts = ref<KpPart[] | null>(null)
+const partsTotal = computed(() => (parts.value ?? []).reduce((s, p) => s + p.totalRub, 0))
+let partsTimer: ReturnType<typeof setTimeout> | null = null
+let partsSeq = 0
+watch(
+  kit,
+  () => {
+    if (!draft.value) return
+    if (partsTimer) clearTimeout(partsTimer)
+    partsTimer = setTimeout(async () => {
+      const seq = ++partsSeq
+      try {
+        const list = kit.value.filter((i) => i.name.trim() !== '' && i.qty > 0)
+        const next = await estimatesApi.kpParts(estimateId.value, list)
+        if (seq === partsSeq) parts.value = next
+      } catch {
+        // Предпросмотр — не помеха выпуску: остаётся прежняя раскладка.
+      }
+    }, 400)
+  },
+  { deep: true },
+)
+
 const preview = ref('')
 watch(
-  [() => draft.value?.position.description, kit],
+  [() => draft.value?.position.description, kit, parts],
   () => {
     const full = draft.value?.position.description ?? ''
     const head = full.split('\nВ комплекте:')[0] ?? full
+    // Составное изделие: состав — в подпозициях, в шапке его нет.
+    if (parts.value && parts.value.length) {
+      preview.value = head
+      return
+    }
     const lines = kit.value.map((i) => `- ${i.name} - ${i.qty} ${i.unit};`)
     preview.value = lines.length ? `${head}\nВ комплекте:\n${lines.join('\n')}` : head
   },
@@ -486,6 +550,7 @@ async function load() {
     description.value = d.position.description
     manualDescription.value = false
     kit.value = d.position.kit.map((i) => ({ ...i }))
+    parts.value = d.position.parts ?? null
     terms.vatRatePct = d.terms.vatRatePct
     terms.prepaymentPct = d.terms.prepaymentPct
     terms.paymentDays = d.terms.paymentDays
@@ -695,6 +760,16 @@ watch(estimateId, (id) => { if (id) void load() }, { immediate: true })
 /* Состав — во весь экран: строк два десятка, и прокручивать их в полосе нельзя. */
 .kpv-prev { margin: 0; padding: 8px 10px; background: var(--bg3); border: 1px solid var(--bd);
   font: inherit; font-size: 12.5px; white-space: pre-wrap; max-height: 420px; overflow: auto; }
+
+/* Подпозиции составного изделия — как в таблице КП. */
+.kpv-parts { width: 100%; max-width: 1100px; border-collapse: collapse; font-size: 12.5px; }
+.kpv-parts th, .kpv-parts td { border: 1px solid var(--bd); padding: 4px 6px; vertical-align: top; }
+.kpv-parts th { background: var(--bg3); font-weight: 600; text-align: center; }
+.kpv-parts tfoot td { font-weight: 700; text-align: right; }
+.kpv-p-n { white-space: nowrap; color: var(--tx3); font-variant-numeric: tabular-nums; }
+.kpv-p-d { white-space: pre-wrap; }
+.kpv-p-x { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kpv-p-u { text-align: center; white-space: nowrap; }
 
 /* Таблица состава — во всю ширину: узлы КНС длинные, обрезать их нельзя. */
 

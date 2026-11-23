@@ -151,13 +151,14 @@ describe('печать КП', () => {
     expect(cells.getCell(7).numFmt).toBe('# ##0.00')
   })
 
-  it('итог — формулой СУММ по колонке сумм, и она сходится со снапшотом', async () => {
+  it('итог — формулой СУММ по строкам изделий (не подпозиций), и она сходится со снапшотом', async () => {
     const ws = await sheetOf(doc)
     const at = rowWith(ws, 'Общая сумма:')
     const cells = ws.getRow(at)
 
     const total = cells.getCell(7).value as { formula: string; result: number }
-    expect(total.formula).toMatch(/^SUM\(G\d+:G\d+\)$/)
+    // Шапки изделий и доставка — списком ячеек: подпозиции уже в шапке.
+    expect(total.formula).toMatch(/^SUM\(G\d+(,G\d+)*\)$/)
     // Значение в ячейке — точная сумма снапшота, а не произведение округлённой
     // цены на количество.
     expect(total.result).toBe(doc.totalRub)
